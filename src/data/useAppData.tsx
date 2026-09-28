@@ -5,10 +5,14 @@ import { changeAppData } from './repository';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime } from '@/src/domain/settings';
+import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
 
 type AppDataValue = {
   data: AppData | null;
   error: string;
+  addEvent: (input: EventInput) => Promise<void>;
+  editEvent: (key: string, input: EventInput, expectedUpdatedAt?: string) => Promise<void>;
+  archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
   addTask: (input: TaskInput) => Promise<Task>;
   editTask: (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
@@ -54,7 +58,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (key === 'rolloverTime' && !isRolloverTime(String(value))) throw new Error('Use HH:MM in 24-hour time, for example 00:00.');
     await commit(current => rolloverAppData({ ...current, settings: { ...current.settings, [key]: value } }, new Date()));
   };
-  return <AppDataContext.Provider value={{ data, error, addTask, editTask, updateSetting }}>{children}</AppDataContext.Provider>;
+  const addEvent = async (input: EventInput) => {
+    const event = createEvent(input);
+    await commit(current => insertEvent(current, event));
+  };
+  const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
+  const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
+  return <AppDataContext.Provider value={{ data, error, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
 }
 
 export function useAppData() {

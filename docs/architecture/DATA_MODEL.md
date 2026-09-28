@@ -7,12 +7,39 @@ LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lif
 - **Section**: stable ID, display name, color, and ordering. The seed contains Work, Army, Family, Home, Health, Finance, Projects, Personal, and Pets/Fosters.
 - **Task**: title, optional description, section/project references, lifecycle status, priority, due/original due dates, completion timestamps, owner, story points, rollover and manual-defer counters, and timestamps. Status includes `overdue`, retained when a missed task is moved forward. Today is derived from due date and incomplete state; there is no stored Today status. A passed due date also qualifies an active task as overdue, even when automatic rollover is off.
 - **Project**: name/description, optional section, lifecycle status, completion switches, default task points, backlog inclusion, and timestamps.
-- **CalendarEvent**: local date/time, source (work, personal, Army, or family), and optional location/notes.
-- **FamilyEvent**: date/time, creator, optional location/notes, category, and display color. It is a distinct event type so family attribution is not lost.
+- **CalendarEvent**: local date/time, source (`work`, `personal`, or `army`), optional location/notes, and audit/archive timestamps.
+- **FamilyEvent**: distinct `family` source with local date/time, attribution, category, family color, optional location/notes, and audit/archive timestamps. Stored separately in `familyEvents` so future shared-account attribution has its own boundary.
 - **AppSettings**: appearance preference (`system`, `light`, `dark`), rollover time and behavior toggles below, default story points, and ambient display toggle.
 - **RolloverSummary**: optional `AppData.lastRolloverSummary` stores the ending day (`rolloverDate`), execution timestamp (`performedAt`), and deduplicated `movedTaskIds`. Today shows it on the local execution day, including after reload. A run that moves no tasks does not erase the previous summary.
 
-## Scheduling fields
+## Calendar and family event fields (Slice 4)
+
+`LocalEvent` is the discriminated union of `CalendarEvent` and `FamilyEvent`. Both collections stay in the existing `AppData` snapshot; tasks never become events.
+
+| Field | Meaning / validation |
+| --- | --- |
+| `id` | Stable local identifier, generated at creation; retained through edits |
+| `title` | Required; trimmed and nonempty |
+| `date` | Required real local calendar date, `YYYY-MM-DD`; not a UTC date |
+| `startTime` | Optional local 24-hour `HH:MM` |
+| `endTime` | Optional `HH:MM`; requires a start and must be later on the same date |
+| `location`, `notes` | Optional trimmed text; empty values become absent |
+| `source` | Local events: `work`, `personal`, `army`; family events: literal `family` |
+| `createdAt`, `updatedAt` | ISO timestamps on new events; creation time retained on edit. Legacy/seed events may lack timestamps because their audit history is unknown |
+| `archivedAt` | Optional ISO timestamp; archived events remain stored but disappear from all active views |
+| `addedBy` | Family only; required `Max` or `Kellyn`. Local attribution, not an authenticated account or permission |
+| `category` | Family only; required `Appointment`, `School`, `Pet/Foster`, `Errand`, `Family Plan`, or `Other` |
+| `color` | Family only; canonical teal `#31A3A0` |
+
+Leaving both times blank means all day; there is no separate all-day flag. Start-only events are allowed. Overnight/multi-day events and recurrence are not modeled in this slice. All dates/times follow the device's local calendar with no stored timezone. Audit timestamps are absolute instants.
+
+`src/domain/events.ts` centralizes validation, creation, editing, archiving, source colors, sorting, grouping, and selectors. Work is blue `#3978C5`, Personal green `#5E9C70`, Army gold `#C7952D`, and Family teal `#31A3A0`. Rows also display source text so color is not the only distinction. Family creation defaults in the editor to Max / Other. Changing an event's source to/from family moves it between collections in one queued snapshot write and requires family metadata when applicable. Source conversion intentionally removes family-only fields when changing to a local source.
+
+Editor route keys qualify IDs as `local:<id>` or `family:<id>` to avoid legacy cross-collection collisions. Edits/archives compare the original `updatedAt` with the latest queued snapshot, reject stale changes, and support reloading. New edit timestamps increase even for rapid same-millisecond edits. Archiving is the removal action; there is no permanent deletion or archive-restore UI yet.
+
+Normalization adds `source: family` to old family records and applies the canonical family color. Legacy `calendarEvents` carrying `source: family` move into `familyEvents` with Max / Other defaults where the old model had no attribution/category; conflicting IDs receive a `legacy-family-` prefix until unique. Existing family attribution/category remain intact. This migration is idempotent and does not fabricate creation timestamps. Snapshot storage key and repository write queue remain unchanged.
+
+## Task scheduling fields
 
 | Task field | Default / meaning |
 | --- | --- |
@@ -46,7 +73,11 @@ Task edits, settings edits, and automatic rollover share a serialized read/modif
 
 ## Derived views
 
-Today filters incomplete, non-archived tasks by due date and includes dated overdue incomplete items; tasks without a due date stay in their section backlog. Project simple progress counts completed tasks over included project tasks; weighted progress compares completed story points with all included project task points. Project backlog inclusion follows `includeBacklogTasks`. Calendar agenda combines regular and family events, with source-specific colors.
+Today filters incomplete, non-archived tasks by due date and includes dated overdue incomplete items; tasks without a due date stay in their section backlog. Project simple progress counts completed tasks over included project tasks; weighted progress compares completed story points with all included project task points. Project backlog inclusion follows `includeBacklogTasks`.
+
+Calendar agenda groups local/family events and active dated tasks by date in separate event/task lists. All-day events sort first, followed by start time and title. Agenda initially covers 30 days from the selected date and can expand in 30-day increments; Previous/Next changes the displayed range. Day includes an empty state; Week runs Monday through Sunday with seven summary rows that open Day view. Completed, archived, undated, and out-of-range tasks are excluded; event records are never generated for tasks.
+
+Today uses exact local-date filtering for events, with local and family cards separate from tasks. Next event means the next timed start at or after the current local minute, including future dates; all-day and already-started events remain in their day's list but do not occupy Next event. Ambient shares these selectors, includes overdue active tasks consistently with Today, and shows tomorrow's event/task/high-priority counts when viewport height is at least 650. A foreground clock refreshes every 15 seconds and on app activation; static web rendering waits for the client clock. Calendar date arithmetic uses calendar days across month/year/DST boundaries.
 
 ## Seed data
 

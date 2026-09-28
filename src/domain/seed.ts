@@ -24,6 +24,6 @@ export const seedData: AppData = {
     { id: 'e2', title: 'ACFT prep', date: day(0), startTime: '16:00', source: 'army' },
     { id: 'e3', title: 'Focus block', date: day(1), startTime: '09:00', source: 'personal' },
   ],
-  familyEvents: [{ id: 'f1', title: 'Isa school pickup', date: day(0), startTime: '15:00', addedBy: 'Kellyn', category: 'School', color: '#31A3A0' }],
+  familyEvents: [{ id: 'f1', title: 'Isa school pickup', source: 'family', date: day(0), startTime: '15:00', addedBy: 'Kellyn', category: 'School', color: '#31A3A0' }],
   settings: { ...defaultSettings },
 };

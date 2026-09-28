@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { FormError, TaskForm, blankTaskDraft } from '@/src/components/TaskForm';
 import { Page } from '@/src/components/ui';
 import { useAppData } from '@/src/data/useAppData';
@@ -23,5 +23,5 @@ export default function CaptureScreen() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save task.'); }
     finally { setSaving(false); }
   };
-  return <Page title="Capture" subtitle="Add a task to a section backlog or schedule it for a day."><TaskForm draft={draft} onChange={setDraft} sections={data.sections} projects={data.projects} />{error ? <FormError>{error}</FormError> : null}<Pressable disabled={saving} onPress={() => void save()} style={{ backgroundColor: colors.accent, padding: 15, alignItems: 'center', borderRadius: 12 }}><Text style={{ color: '#fff', fontWeight: '700' }}>{saving ? 'Saving…' : 'Save task'}</Text></Pressable></Page>;
+  return <Page title="Capture" subtitle="Add a task to a section backlog or schedule it for a day."><Link href="/event/new" style={{ color: colors.accent, paddingVertical: 12 }}>Add a calendar or family event</Link><TaskForm draft={draft} onChange={setDraft} sections={data.sections} projects={data.projects} />{error ? <FormError>{error}</FormError> : null}<Pressable disabled={saving} onPress={() => void save()} style={{ backgroundColor: colors.accent, padding: 15, alignItems: 'center', borderRadius: 12 }}><Text style={{ color: '#fff', fontWeight: '700' }}>{saving ? 'Saving…' : 'Save task'}</Text></Pressable></Page>;
 }

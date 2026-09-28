@@ -1,5 +1,6 @@
 import type { AppData, Section, SectionName } from './models';
 import { localDateKey } from './dates';
+import { defaultSettings } from './settings';
 const today = new Date();
 const day = (offset: number) => { const d = new Date(today); d.setDate(d.getDate() + offset); return localDateKey(d); };
 const names: SectionName[] = ['Work', 'Army', 'Family', 'Home', 'Health', 'Finance', 'Projects', 'Personal', 'Pets/Fosters'];
@@ -24,5 +25,5 @@ export const seedData: AppData = {
     { id: 'e3', title: 'Focus block', date: day(1), startTime: '09:00', source: 'personal' },
   ],
   familyEvents: [{ id: 'f1', title: 'Isa school pickup', date: day(0), startTime: '15:00', addedBy: 'Kellyn', category: 'School', color: '#31A3A0' }],
-  settings: { appearance: 'system', rolloverTime: '00:00', autoRollover: true, defaultStoryPoints: 1, ambientDisplayEnabled: false },
+  settings: { ...defaultSettings },
 };

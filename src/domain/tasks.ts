@@ -1,4 +1,4 @@
-import type { AppData, Priority, Task, TaskOwner, TaskStatus } from './models';
+import type { AppData, AppSettings, Priority, Task, TaskOwner, TaskStatus } from './models';
 import { localDateKey } from './dates';
 
 export type TaskInput = Pick<Task, 'title' | 'sectionId'> & Partial<Omit<Task, 'id' | 'title' | 'sectionId' | 'createdAt' | 'updatedAt'>>;
@@ -23,16 +23,19 @@ export function createTask(input: TaskInput, now = new Date()): Task {
 }
 
 export function updateTask(task: Task, changes: TaskChanges, now = new Date()): Task {
-  const merged = { ...task, ...changes, title: changes.title?.trim() ?? task.title, description: changes.description?.trim() || undefined, projectId: changes.projectId || undefined, updatedAt: now.toISOString() };
+  const merged = { ...task, ...changes, title: changes.title?.trim() ?? task.title, updatedAt: now.toISOString() };
+  if ('description' in changes) merged.description = changes.description?.trim() || undefined;
+  if ('projectId' in changes) merged.projectId = changes.projectId || undefined;
   if (!merged.title) throw new Error('Title is required.');
   if (!merged.sectionId) throw new Error('Section is required.');
   if (!Number.isFinite(merged.storyPoints) || merged.storyPoints <= 0) throw new Error('Story points must be positive.');
   validateDueDate(merged.dueDate);
   if (changes.dueDate !== undefined) {
     merged.dueDate = changes.dueDate || undefined;
-    if (!merged.dueDate && task.dueDate && merged.status !== 'complete') merged.status = 'backlog';
+    if (!merged.dueDate && merged.status !== 'complete' && merged.status !== 'archived') merged.status = 'backlog';
     else if (merged.dueDate && merged.status === 'backlog') merged.status = 'scheduled';
   }
+  if (changes.status === 'backlog') { merged.dueDate = undefined; merged.status = 'backlog'; }
   if (changes.status === 'complete') merged.completedAt = task.status === 'complete' ? task.completedAt : now.toISOString();
   else if (changes.status) merged.completedAt = undefined;
   return merged;
@@ -52,6 +55,36 @@ export function calculateProjectProgress(tasks: Task[], projectId: string, inclu
   const totalPoints = included.reduce((sum, task) => sum + task.storyPoints, 0);
   const donePoints = complete.reduce((sum, task) => sum + task.storyPoints, 0);
   return { total: included.length, complete: complete.length, totalPoints, donePoints, simple: included.length ? Math.round(complete.length / included.length * 100) : 0, weighted: totalPoints ? Math.round(donePoints / totalPoints * 100) : 0 };
+}
+
+export type PushbackChoice = 'clean' | 'overdue' | 'backlog';
+
+export function needsPushbackChoice(task: Task, dueDate: string | undefined, now = new Date()): boolean {
+  return task.status !== 'complete' && task.status !== 'archived' && !!task.dueDate
+    && (task.dueDate <= localDateKey(now) || task.status === 'overdue')
+    && (!dueDate || dueDate > task.dueDate);
+}
+
+export function updateTaskSchedule(task: Task, changes: TaskChanges, settings: AppSettings, choice?: PushbackChoice, now = new Date()): Task {
+  const dueDate = changes.status === 'backlog' ? '' : changes.dueDate;
+  const relevant = dueDate !== undefined && needsPushbackChoice(task, dueDate, now)
+    && changes.status !== 'complete' && changes.status !== 'archived';
+  if (relevant && !choice) throw new Error('Choose how to push back this task.');
+  if (!relevant) return updateTask(task, changes, now);
+  if (choice === 'backlog') return updateTask(task, { ...changes, dueDate: '', status: 'backlog' }, now);
+  if (!dueDate) throw new Error('Choose a later due date or Move to Backlog.');
+  const next = updateTask(task, { ...changes, dueDate, status: choice === 'clean' ? 'scheduled' : 'overdue' }, now);
+  if (choice === 'overdue') return {
+    ...next,
+    priority: settings.raiseMissedTasksToHigh ? 'high' : next.priority,
+    originalDueDate: task.originalDueDate || (settings.preserveOriginalDueDate ? task.dueDate : undefined),
+    manuallyDeferredCount: task.manuallyDeferredCount + 1,
+  };
+  return next;
+}
+
+export function isTaskOverdue(task: Task, date = localDateKey(new Date())): boolean {
+  return task.status !== 'complete' && task.status !== 'archived' && (task.status === 'overdue' || (!!task.dueDate && task.dueDate < date));
 }
 
 export type { Priority, TaskOwner, TaskStatus };

@@ -1,11 +1,12 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type { Priority, Project, Section, Task, TaskOwner, TaskStatus } from '@/src/domain/models';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
-import { Card, Label, Muted } from './ui';
+import { Card, Muted } from './ui';
+import { DateEntry } from './DateEntry';
 
 const priorities: Priority[] = ['low', 'normal', 'high'];
 const owners: TaskOwner[] = ['me', 'kellyn', 'shared', 'system'];
-const statuses: TaskStatus[] = ['backlog', 'scheduled', 'deferred', 'complete', 'archived'];
+const statuses: TaskStatus[] = ['backlog', 'scheduled', 'overdue', 'deferred', 'complete', 'archived'];
 
 export type TaskDraft = { title: string; description: string; sectionId: string; projectId: string; priority: Priority; dueDate: string; owner: TaskOwner; storyPoints: string; status: TaskStatus };
 export const blankTaskDraft = (sectionId = ''): TaskDraft => ({ title: '', description: '', sectionId, projectId: '', priority: 'normal', dueDate: '', owner: 'me', storyPoints: '1', status: 'backlog' });
@@ -22,7 +23,7 @@ export function TaskForm({ draft, onChange, sections, projects, showStatus = fal
     {select('Project · optional', 'projectId', [{ value: '', label: 'None' }, ...projects.map(p => ({ value: p.id, label: p.name }))])}
     {select('Priority', 'priority', priorities.map(value => ({ value, label: value })))}
     {select('Owner', 'owner', owners.map(value => ({ value, label: value === 'kellyn' ? 'Kellyn' : value[0].toUpperCase() + value.slice(1) })))}
-    <View style={{ gap: 7 }}><Muted>Due date · YYYY-MM-DD · leave blank for section backlog</Muted><TextInput value={draft.dueDate} onChangeText={dueDate => onChange({ ...draft, dueDate, status: dueDate ? 'scheduled' : 'backlog' })} placeholder="2026-09-28" placeholderTextColor={colors.muted} style={inputStyle} /></View>
+    <DateEntry value={draft.dueDate} onChange={dueDate => onChange({ ...draft, dueDate, status: draft.status === 'complete' || draft.status === 'archived' ? draft.status : !dueDate ? 'backlog' : draft.status === 'backlog' ? 'scheduled' : draft.status })} />
     <View style={{ gap: 7 }}><Muted>Story points · positive number</Muted><TextInput value={draft.storyPoints} onChangeText={storyPoints => onChange({ ...draft, storyPoints })} keyboardType="number-pad" style={inputStyle} /></View>
     {showStatus ? select('Status', 'status', statuses.map(value => ({ value, label: value }))) : null}
   </Card>;

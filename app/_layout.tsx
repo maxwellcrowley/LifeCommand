@@ -44,5 +44,5 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  return <ThemeProvider><AppDataProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /></Stack></AppDataProvider></ThemeProvider>;
+  return <AppDataProvider><ThemeProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /></Stack></ThemeProvider></AppDataProvider>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import { router } from 'expo-router';
 import { FormError, TaskForm, blankTaskDraft } from '@/src/components/TaskForm';
@@ -9,10 +9,10 @@ import { useAppTheme } from '@/src/theme/ThemeProvider';
 export default function CaptureScreen() {
   const { data, addTask } = useAppData();
   const { colors } = useAppTheme();
-  const [draft, setDraft] = useState(blankTaskDraft(data?.sections[0]?.id ?? ''));
+  const [rawDraft, setDraft] = useState(blankTaskDraft());
+  const draft = { ...rawDraft, sectionId: rawDraft.sectionId || data?.sections[0]?.id || '' };
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (data?.sections[0] && !draft.sectionId) setDraft(current => ({ ...current, sectionId: data.sections[0].id })); }, [data, draft.sectionId]);
   if (!data) return <Page title="Capture" subtitle="Loading your local task list…" />;
   const save = async () => {
     setError(''); setSaving(true);

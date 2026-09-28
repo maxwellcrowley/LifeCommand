@@ -1,5 +1,46 @@
-import { Pressable, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { Link } from 'expo-router';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
+import { FormError } from '@/src/components/TaskForm';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
-export default function SettingsScreen() { const { colors, settings, updateSetting } = useAppTheme(); const appearances = ['system', 'light', 'dark'] as const; return <Page title="Settings" subtitle="Shape how LifeCommand fits your day."><Card title="Appearance"><View style={{ flexDirection: 'row', gap: 8 }}>{appearances.map(mode => <Pressable key={mode} onPress={() => updateSetting('appearance', mode)} style={{ flex: 1, padding: 11, borderRadius: 10, alignItems: 'center', backgroundColor: settings.appearance === mode ? colors.soft : colors.background }}><Text style={{ color: colors.text, textTransform: 'capitalize' }}>{mode}</Text></Pressable>)}</View></Card><Card title="Daily workflow"><Row><View><Label>Rollover time</Label><Muted>When unfinished work moves forward</Muted></View><Pressable onPress={() => updateSetting('rolloverTime', settings.rolloverTime === '00:00' ? '22:00' : '00:00')}><Label>{settings.rolloverTime}  ›</Label></Pressable></Row><Row><Label>Auto-rollover</Label><Switch value={settings.autoRollover} onValueChange={value => updateSetting('autoRollover', value)} trackColor={{ true: colors.accent }} /></Row></Card><Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable onPress={() => updateSetting('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable onPress={() => updateSetting('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card><Card title="Ambient display"><Row><View><Label>Enable ambient display</Label><Muted>Read-only household view</Muted></View><Switch value={settings.ambientDisplayEnabled} onValueChange={value => updateSetting('ambientDisplayEnabled', value)} trackColor={{ true: colors.accent }} /></Row><Link href="/ambient" asChild><Pressable><Label>Open ambient display  →</Label></Pressable></Link></Card></Page>; }
+import { useAppData } from '@/src/data/useAppData';
+import type { AppSettings } from '@/src/domain/models';
+
+const toggles = [
+  ['autoRollover', 'Auto-rollover'],
+  ['raiseMissedTasksToHigh', 'Raise missed tasks to High'],
+  ['preserveOriginalDueDate', 'Preserve original due date'],
+  ['addRolloverCount', 'Count rollovers'],
+  ['moveIncompleteTasksToNextDay', 'Move incomplete tasks to next day'],
+] as const;
+
+export default function SettingsScreen() {
+  const { colors, settings, updateSetting, ready } = useAppTheme();
+  const { error: storageError } = useAppData();
+  const [timeDraft, setTime] = useState<string>();
+  const time = timeDraft ?? settings.rolloverTime;
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const save = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setSaving(true); setError('');
+    try { await updateSetting(key, value); if (key === 'rolloverTime') setTime(undefined); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save settings.'); }
+    finally { setSaving(false); }
+  };
+  const appearances = ['system', 'light', 'dark'] as const;
+  if (!ready) return <Page title="Settings" subtitle={storageError || 'Loading settings…'} />;
+  return <Page title="Settings" subtitle="Shape how LifeCommand fits your day.">
+    {error || storageError ? <FormError>{error || storageError}</FormError> : null}
+    <Card title="Appearance"><View style={{ flexDirection: 'row', gap: 8 }}>{appearances.map(mode => <Pressable key={mode} disabled={saving} onPress={() => void save('appearance', mode)} style={{ flex: 1, padding: 12, borderRadius: 10, alignItems: 'center', backgroundColor: settings.appearance === mode ? colors.soft : colors.background }}><Text style={{ color: colors.text, textTransform: 'capitalize' }}>{mode}</Text></Pressable>)}</View></Card>
+    <Card title="Daily rollover">
+      <Muted>At this local time, unfinished work from the previous day moves forward. If the app is closed, it catches up when you return.</Muted>
+      <Label>Rollover time · 24-hour HH:MM</Label>
+      <Row><TextInput accessibilityLabel="Rollover time, 24-hour HH:MM" value={time} onChangeText={setTime} placeholder="00:00" placeholderTextColor={colors.muted} maxLength={5} autoCorrect={false} style={{ flex: 1, color: colors.text, backgroundColor: colors.background, padding: 12, borderRadius: 10 }} /><Pressable disabled={saving} accessibilityRole="button" onPress={() => void save('rolloverTime', time.trim())} style={{ padding: 12 }}><Label>{saving ? 'Saving…' : 'Save time'}</Label></Pressable></Row>
+      <Muted>Saved: {settings.rolloverTime === '00:00' ? '12:00 AM (midnight)' : settings.rolloverTime}</Muted>
+      {toggles.map(([key, label]) => <Row key={key}><View style={{ flex: 1 }}><Label>{label}</Label></View><Switch accessibilityLabel={label} disabled={saving} value={settings[key]} onValueChange={value => void save(key, value)} trackColor={{ true: colors.accent }} /></Row>)}
+    </Card>
+    <Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable disabled={saving} accessibilityLabel="Decrease default story points" onPress={() => void save('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable disabled={saving} accessibilityLabel="Increase default story points" onPress={() => void save('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card>
+    <Card title="Ambient display"><Row><View style={{ flex: 1 }}><Label>Enable ambient display</Label><Muted>Read-only household view</Muted></View><Switch accessibilityLabel="Enable ambient display" disabled={saving} value={settings.ambientDisplayEnabled} onValueChange={value => void save('ambientDisplayEnabled', value)} trackColor={{ true: colors.accent }} /></Row><Link href="/ambient" asChild><Pressable><Label>Open ambient display →</Label></Pressable></Link></Card>
+  </Page>;
+}

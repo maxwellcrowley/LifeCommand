@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
+import { AppDataProvider } from '@/src/data/useAppData';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -43,5 +44,5 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  return <ThemeProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /></Stack></ThemeProvider>;
+  return <ThemeProvider><AppDataProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /></Stack></AppDataProvider></ThemeProvider>;
 }

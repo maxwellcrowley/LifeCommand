@@ -17,7 +17,7 @@ AsyncStorage is an asynchronous, unencrypted key/value store and suits this prot
 
 ## Derived views
 
-Today filters incomplete tasks by local calendar date and includes overdue incomplete items. Project simple progress counts completed tasks over active project tasks; weighted progress compares completed story points with all included active task points. Calendar agenda combines regular and family events, with source-specific colors.
+Today filters incomplete, non-archived tasks by due date and includes dated overdue incomplete items; tasks without a due date stay in their section backlog. Project simple progress counts completed tasks over included project tasks; weighted progress compares completed story points with all included project task points. Project backlog inclusion follows `includeBacklogTasks`. Calendar agenda combines regular and family events, with source-specific colors.
 
 ## Seed data
 

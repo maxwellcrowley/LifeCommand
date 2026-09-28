@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
-export function Page({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+export function Page({ title, subtitle, children }: { title: string; subtitle?: string; children?: ReactNode }) {
   const { colors } = useAppTheme();
   return <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={styles.page}><Text style={[styles.kicker, { color: colors.accent }]}>LIFECOMMAND</Text><Text style={[styles.title, { color: colors.text }]}>{title}</Text>{subtitle ? <Text style={[styles.subtitle, { color: colors.muted }]}>{subtitle}</Text> : null}{children}</ScrollView>;
 }

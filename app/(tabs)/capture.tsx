@@ -1,5 +1,27 @@
-import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { Card, Label, Muted, Page } from '@/src/components/ui';
+import { useEffect, useState } from 'react';
+import { Pressable, Text } from 'react-native';
+import { router } from 'expo-router';
+import { FormError, TaskForm, blankTaskDraft } from '@/src/components/TaskForm';
+import { Page } from '@/src/components/ui';
+import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
-export default function CaptureScreen() { const { colors } = useAppTheme(); const [title, setTitle] = useState(''); const [saved, setSaved] = useState(false); return <Page title="Capture" subtitle="Get it out of your head. Sort it later."><Card title="New task"><TextInput value={title} onChangeText={value => { setTitle(value); setSaved(false); }} placeholder="What needs doing?" placeholderTextColor={colors.muted} style={{ color: colors.text, backgroundColor: colors.background, borderRadius: 12, padding: 14, fontSize: 16 }} /><Muted>New captures start in your inbox. Add a section, date, priority, and project when you’re ready.</Muted><Pressable onPress={() => { if (title.trim()) setSaved(true); }} style={{ backgroundColor: colors.accent, padding: 14, alignItems: 'center', borderRadius: 12 }}><Text style={{ color: '#fff', fontWeight: '700' }}>Save task</Text></Pressable>{saved ? <Label>Captured locally. Task creation is connected in Slice 2.</Label> : null}</Card><Card title="Other capture types"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{['Event', 'Reminder', 'Project idea', 'Note', 'Backlog item'].map(item => <Text key={item} style={{ color: colors.accent, backgroundColor: colors.soft, padding: 9, borderRadius: 10 }}>{item}</Text>)}</View></Card></Page>; }
+
+export default function CaptureScreen() {
+  const { data, addTask } = useAppData();
+  const { colors } = useAppTheme();
+  const [draft, setDraft] = useState(blankTaskDraft(data?.sections[0]?.id ?? ''));
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (data?.sections[0] && !draft.sectionId) setDraft(current => ({ ...current, sectionId: data.sections[0].id })); }, [data, draft.sectionId]);
+  if (!data) return <Page title="Capture" subtitle="Loading your local task list…" />;
+  const save = async () => {
+    setError(''); setSaving(true);
+    try {
+      await addTask({ title: draft.title, description: draft.description, sectionId: draft.sectionId, projectId: draft.projectId || undefined, priority: draft.priority, dueDate: draft.dueDate.trim() || undefined, owner: draft.owner, storyPoints: Number(draft.storyPoints) });
+      setDraft(blankTaskDraft(data.sections[0]?.id ?? ''));
+      router.push('/(tabs)/review');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save task.'); }
+    finally { setSaving(false); }
+  };
+  return <Page title="Capture" subtitle="Add a task to a section backlog or schedule it for a day."><TaskForm draft={draft} onChange={setDraft} sections={data.sections} projects={data.projects} />{error ? <FormError>{error}</FormError> : null}<Pressable disabled={saving} onPress={() => void save()} style={{ backgroundColor: colors.accent, padding: 15, alignItems: 'center', borderRadius: 12 }}><Text style={{ color: '#fff', fontWeight: '700' }}>{saving ? 'Saving…' : 'Save task'}</Text></Pressable></Page>;
+}

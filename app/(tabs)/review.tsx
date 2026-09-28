@@ -1,2 +1,15 @@
-import { Card, Label, Muted, Page } from '@/src/components/ui';
-export default function ReviewScreen() { return <Page title="Review" subtitle="Close the loop and make the next day easier."><Card title="Daily review"><Label>What did you complete today?</Label><Muted>Completed tasks will appear here.</Muted><Label>What is still open?</Label><Muted>Review scheduled work and decide what rolls over or returns to backlog.</Muted><Label>Tomorrow’s top priority</Label><Muted>Choose one clear starting point for the morning.</Muted></Card><Card title="Weekly planning"><Label>Section backlogs</Label><Muted>Pull the right tasks into the coming week.</Muted><Label>Capacity and overdue work</Label><Muted>Spot overloaded days and reset priorities.</Muted><Label>Project progress</Label><Muted>Review active projects and story points.</Muted></Card></Page>; }
+import { Link } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
+import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
+import { useAppData } from '@/src/data/useAppData';
+import { useAppTheme } from '@/src/theme/ThemeProvider';
+import { getBacklogBySection } from '@/src/domain/tasks';
+import { localDateKey } from '@/src/domain/dates';
+export default function ReviewScreen() {
+  const { data } = useAppData();
+  const { colors } = useAppTheme();
+  if (!data) return <Page title="Review" subtitle="Loading sections…" />;
+  const groups = getBacklogBySection(data);
+  const futureGroups = data.sections.map(section => ({ section, tasks: data.tasks.filter(task => task.sectionId === section.id && !!task.dueDate && task.dueDate > localDateKey(new Date()) && task.status !== 'complete' && task.status !== 'archived') })).sort((a, b) => a.section.order - b.section.order);
+  return <Page title="Review" subtitle="Section backlogs keep undated work organized."><Card title="Section backlogs"><Muted>Backlog tasks stay off Today until they have a due date.</Muted>{groups.map(({ section, tasks }) => <View key={section.id} style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}><Row><Label style={{ color: section.color }}>{section.name}</Label><Muted>{tasks.length}</Muted></Row>{tasks.length ? tasks.map(task => <Link key={task.id} href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild><Pressable style={{ backgroundColor: colors.background, borderRadius: 10, padding: 11 }}><Label>{task.title}</Label><Muted>{task.priority} · {task.storyPoints} point{task.storyPoints === 1 ? '' : 's'}{task.projectId ? ` · ${data.projects.find(project => project.id === task.projectId)?.name ?? ''}` : ''}</Muted></Pressable></Link>) : <Muted>No backlog tasks.</Muted>}</View>)}</Card><Card title="Scheduled later">{futureGroups.map(({ section, tasks }) => <View key={section.id} style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}><Row><Label style={{ color: section.color }}>{section.name}</Label><Muted>{tasks.length}</Muted></Row>{tasks.map(task => <Link key={task.id} href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild><Pressable style={{ backgroundColor: colors.background, borderRadius: 10, padding: 11 }}><Row><Label>{task.title}</Label><Muted>{task.dueDate}</Muted></Row></Pressable></Link>)}</View>)}{futureGroups.every(group => group.tasks.length === 0) ? <Muted>No future scheduled tasks.</Muted> : null}</Card></Page>;
+}

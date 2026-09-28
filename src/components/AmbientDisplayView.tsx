@@ -11,7 +11,7 @@ import { useLocalClock } from '@/src/hooks/useLocalClock';
 import type { LocalEvent, Task } from '@/src/domain/models';
 
 export function AmbientDisplayView() {
-  const { data, error } = useAppData();
+  const { data, error, recoveryNotice, retry } = useAppData();
   const { colors, settings } = useAppTheme();
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -33,7 +33,7 @@ export function AmbientDisplayView() {
   const muted = { color: colors.muted };
   const contentStyle = { gap, paddingTop: padding + insets.top, paddingBottom: padding + insets.bottom, paddingLeft: padding + insets.left, paddingRight: padding + insets.right };
   if (!data || !now || !settings.ambientDisplayEnabled) return <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={[styles.page, contentStyle]}>
-    {exit}<Text style={[styles.title, text]}>{error || (!data || !now ? 'Loading your day…' : 'Ambient display is off')}</Text>
+    {exit}{error ? <Pressable accessibilityRole="button" onPress={() => void retry().catch(() => undefined)} style={{ minHeight: 44 }}><Text style={{ color: colors.accent }}>Retry local data</Text></Pressable> : null}<Text accessibilityRole="header" style={[styles.title, text]}>{error || (!data || !now ? 'Loading your day…' : 'Ambient display is off')}</Text>
     {data && !settings.ambientDisplayEnabled ? <Text style={[styles.meta, muted]}>Enable ambient display in Settings to show your day here.</Text> : null}
   </ScrollView>;
 
@@ -62,11 +62,12 @@ export function AmbientDisplayView() {
   const clock = formatAmbientTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, settings.ambientClockFormat);
   return <ScrollView testID="ambient-display" style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={[styles.page, contentStyle]}>
     <View onLayout={event => measure('header', event.nativeEvent.layout.height)} style={{ gap }}>
-    <View style={styles.toolbar}><Text style={[styles.mode, { color: colors.accent }]}>{ambientModeLabels[settings.ambientMode]}</Text>{exit}</View>
+    <View style={styles.toolbar}><Text accessibilityRole="header" style={[styles.mode, { color: colors.accent }]}>{ambientModeLabels[settings.ambientMode]}</Text>{exit}</View>
     <View style={[styles.header, { flexDirection: layout.columns ? 'row' : 'column', alignItems: layout.columns ? 'center' : 'flex-start' }]}>
       <Text style={[styles.date, text, { fontSize: layout.wide ? 32 : 24 }]}>{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
       <Text accessibilityLabel={`Current time ${clock}`} style={[styles.clock, { color: colors.accent, fontSize: layout.wide ? 88 : layout.columns ? 64 : 48 }]}>{clock}</Text>
     </View>
+    {recoveryNotice ? <Text style={muted}>{recoveryNotice}</Text> : null}
     </View>
     {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
     <View onLayout={event => measure('next', event.nativeEvent.layout.height)} style={[styles.panel, surface]}>

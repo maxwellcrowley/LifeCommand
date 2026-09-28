@@ -26,7 +26,7 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
     <Muted>{label}</Muted>
     <TextInput accessibilityLabel={label} editable={!saving} value={draft[key]} onChangeText={value => setDraft(current => ({ ...current, [key]: value }))} placeholder={placeholder} placeholderTextColor={colors.muted} multiline={key === 'notes'} autoCorrect={key !== 'startTime' && key !== 'endTime'} autoCapitalize={key === 'startTime' || key === 'endTime' ? 'none' : 'sentences'} style={{ color: colors.text, backgroundColor: colors.background, padding: 12, borderRadius: 10, minHeight: key === 'notes' ? 90 : 44, textAlignVertical: 'top' }} />
   </View>;
-  const choices = <K extends 'source' | 'addedBy' | 'category'>(key: K, values: readonly Draft[K][]) => <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{values.map(value => <Pressable key={value} disabled={saving} accessibilityRole="radio" accessibilityState={{ checked: draft[key] === value }} onPress={() => setDraft(current => ({ ...current, [key]: value }))} style={{ borderRadius: 10, padding: 12, minHeight: 44, backgroundColor: draft[key] === value ? colors.soft : colors.background, borderBottomWidth: key === 'source' ? 3 : 0, borderBottomColor: key === 'source' ? sourceColors[value as EventSource] : undefined }}><Label>{key === 'source' ? sourceLabels[value as EventSource] : value}</Label></Pressable>)}</View>;
+  const choices = <K extends 'source' | 'addedBy' | 'category'>(key: K, values: readonly Draft[K][]) => <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{values.map(value => <Pressable key={value} disabled={saving} accessibilityRole="radio" aria-checked={draft[key] === value} accessibilityState={{ checked: draft[key] === value }} onPress={() => setDraft(current => ({ ...current, [key]: value }))} style={{ borderRadius: 10, padding: 12, minHeight: 44, backgroundColor: draft[key] === value ? colors.soft : colors.background, borderBottomWidth: key === 'source' ? 3 : 0, borderBottomColor: key === 'source' ? sourceColors[value as EventSource] : undefined }}><Label>{key === 'source' ? sourceLabels[value as EventSource] : value}</Label></Pressable>)}</View>;
   const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/calendar'); };
   const save = async (archive = false) => {
     if (busy.current) return;
@@ -43,7 +43,7 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save event.'); }
     finally { busy.current = false; setSaving(false); }
   };
-  return <Page title={event ? 'Edit event' : 'New event'} subtitle="Plan a local calendar or family event.">
+  return <Page hasHeader title={event ? 'Edit event' : 'New event'} subtitle="Plan a local calendar or family event.">
     <Card title="Event details">
       {field('title', 'Title · required', 'What is happening?')}
       <DateEntry required value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} />

@@ -5,13 +5,15 @@ import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { getBacklogBySection, isTaskOverdue } from '@/src/domain/tasks';
 import { localDateKey } from '@/src/domain/dates';
+import { useLocalClock } from '@/src/hooks/useLocalClock';
 import type { Task } from '@/src/domain/models';
 
 export default function ReviewScreen() {
   const { data, error } = useAppData();
   const { colors } = useAppTheme();
-  if (!data) return <Page title="Review" subtitle={error || 'Loading sections…'} />;
-  const today = localDateKey(new Date());
+  const now = useLocalClock();
+  if (!data || !now) return <Page title="Review" subtitle={error || 'Loading sections…'} />;
+  const today = localDateKey(now);
   const active = data.tasks.filter(task => task.status !== 'complete' && task.status !== 'archived');
   const overdue = active.filter(task => isTaskOverdue(task, today));
   const rolled = active.filter(task => !!task.lastRolledOverAt || task.rolloverCount > 0);
@@ -22,7 +24,7 @@ export default function ReviewScreen() {
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
     <Card title={`Overdue · ${overdue.length}`}>{overdue.length ? overdue.map(renderTask) : <Muted>No overdue tasks.</Muted>}</Card>
     <Card title={`Rolled over · ${rolled.length}`}>{rolled.length ? rolled.map(renderTask) : <Muted>No rolled-over tasks to review.</Muted>}</Card>
-    <Card title="Section backlogs"><Muted>Backlog tasks stay off Today until they have a due date.</Muted>{groups.map(({ section, tasks }) => <View key={section.id} style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}><Row><Label style={{ color: section.color }}>{section.name}</Label><Muted>{tasks.length}</Muted></Row>{tasks.length ? tasks.map(renderTask) : <Muted>No backlog tasks.</Muted>}</View>)}</Card>
+    <Card title="Section backlogs"><Muted>Backlog tasks stay off Today until they have a due date.</Muted>{groups.map(({ section, tasks }) => <View key={section.id} style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}><Row><Label style={{ color: colors.text }}>{section.name}</Label><Muted>{tasks.length}</Muted></Row>{tasks.length ? tasks.map(renderTask) : <Muted>No backlog tasks.</Muted>}</View>)}</Card>
     <Card title="Scheduled later">{futureGroups.filter(group => group.tasks.length > 0).map(({ section, tasks }) => <View key={section.id} style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}><Row><Label style={{ color: section.color }}>{section.name}</Label><Muted>{tasks.length}</Muted></Row>{tasks.map(renderTask)}</View>)}{futureGroups.every(group => group.tasks.length === 0) ? <Muted>No future scheduled tasks.</Muted> : null}</Card>
   </Page>;
 }

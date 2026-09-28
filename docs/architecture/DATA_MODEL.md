@@ -37,7 +37,7 @@ Leaving both times blank means all day; there is no separate all-day flag. Start
 
 Editor route keys qualify IDs as `local:<id>` or `family:<id>` to avoid legacy cross-collection collisions. Edits/archives compare the original `updatedAt` with the latest queued snapshot, reject stale changes, and support reloading. New edit timestamps increase even for rapid same-millisecond edits. Archiving is the removal action; there is no permanent deletion or archive-restore UI yet.
 
-Normalization adds `source: family` to old family records and applies the canonical family color. Legacy `calendarEvents` carrying `source: family` move into `familyEvents` with Max / Other defaults where the old model had no attribution/category; conflicting IDs receive a `legacy-family-` prefix until unique. Existing family attribution/category remain intact. This migration is idempotent and does not fabricate creation timestamps. Snapshot storage key and repository write queue remain unchanged.
+Normalization adds `source: family` to old family records and applies the canonical family color. Legacy `calendarEvents` carrying `source: family` move into `familyEvents` with Max / Other defaults where the old model had no attribution/category; conflicting IDs receive a `recovered-` prefix until unique. Existing family attribution/category remain intact. This migration is idempotent and does not fabricate creation timestamps. Snapshot storage key and repository write queue remain unchanged.
 
 ## Task scheduling fields
 
@@ -81,7 +81,7 @@ Ambient preferences are flat fields on the existing `AppSettings` snapshot, repr
 | `ambientMaxTasks` | `6` | Integer 1–20; upper bound on task list rows, further limited by viewport space |
 | `ambientMaxEvents` | `6` | Integer 1–20; upper bound on today's event list rows, further limited by viewport space; separate Next event remains visible |
 
-`normalizeSettings` fills absent fields and replaces invalid ambient options, booleans, or out-of-range/non-integer limits with defaults, preserving valid preferences. This normalization is idempotent. The provider rejects invalid new ambient writes before persistence. Normalized settings persist on the next snapshot write.
+`normalizeSettings` fills absent fields and replaces invalid ambient options, booleans, or out-of-range/non-integer limits with defaults, preserving valid preferences. This normalization is idempotent. The provider rejects invalid new ambient writes before persistence. Normalized settings persist during load after an exact raw-snapshot backup succeeds.
 
 `src/domain/ambient.ts` provides pure selection, ordering, formatting, and viewport-capacity helpers. Display modes derive their content without changing stored tasks or events:
 
@@ -96,9 +96,25 @@ The layout uses width and font scale for columns (800 effective pixels) and larg
 
 ## Persistence and evolution
 
-AsyncStorage is an asynchronous, unencrypted key/value store and suits this prototype's device-local data. Repository reads seed and persist a first-run snapshot only when storage is empty. Read or parse failures propagate instead of overwriting stored data. Writes serialize the complete `AppData` aggregate. Additive normalization fills missing rollover settings and counters in older snapshots, preserving saved preferences; normalized values persist on the next write. Invalid legacy rollover times fall back to midnight.
+AsyncStorage is an asynchronous, unencrypted key/value store for device-local data. The active key remains `lifecommand:data:v1`; no collection or schema-version field was added. `src/data/storage.ts` implements the serialized repository with an injectable get/set boundary; `repository.ts` binds it to AsyncStorage. All public loads, saves, resets and read/modify/write operations share one runtime queue. A failed operation does not poison later retries.
 
-Task edits, settings edits, and automatic rollover share a serialized read/modify/write queue within one app runtime. ThemeProvider reads settings from AppDataProvider, so appearance changes cannot overwrite concurrent task changes. Rollover task changes and their summary are saved in the same snapshot. Editors check the saved task's `updatedAt` before applying changes and offer reload if rollover changed it while editing. This is not a transaction across browser tabs or devices. Full schema versioning, validation, recovery/export, and cross-tab coordination remain follow-up work.
+### Validation and recovery (Slice 6)
+
+Disk contents enter `normalizeAppData` as unknown values. Collections and individual records are validated independently; one bad record does not reset its healthy neighbors. Normalization is deterministic and idempotent.
+
+- Settings validate every known field's runtime type, all enums, real rollover time, finite positive default points, and ambient limits. Valid false preferences survive; invalid or absent fields receive defaults.
+- Task/project objects retain valid identity, title, notes, dates, lifecycle state and audit history. Missing titles receive Untitled placeholders; missing/duplicate IDs receive deterministic recovered IDs. Invalid task dates become undated backlog-visible work; unknown status derives from the valid due date. Invalid priorities/owners use normal/me; invalid counters become zero; invalid points use defaults. Tags retain string entries. Missing required audit timestamps use the Unix epoch as an unknown-history sentinel, never the current time. Missing completion timestamps stay absent.
+- Sections fall back to standard section definitions only if none are usable. A missing referenced section is retained by ID as a Personal section, making recovered tasks reachable in Review. Missing project links are cleared; the original link remains in the backup.
+- Events with a usable date survive with field-level repairs; impossible/missing dates cannot be guessed and their records remain only in the backup. Invalid times become absent, invalid end ranges are cleared, unknown local sources become Personal, and family metadata defaults to Max/Other. Family migration and canonical teal remain. Invalid nonempty archive timestamps use the epoch so archived events do not reappear. Optional event audit timestamps are not invented.
+- Rollover markers accept valid dates/timestamps only. Valid summary dates/timestamps and deduplicated IDs of retained tasks survive; malformed summaries are omitted. Valid rollover history remains idempotent after reload.
+
+Only a missing storage key seeds demo tasks/events. Empty saved collections stay empty. Invalid JSON, non-object roots, and wholly unusable collections recover to empty user collections plus default sections/settings, without inserting demonstration work.
+
+Before replacing any changed snapshot (including additive legacy upgrades), the repository writes its exact original text to a unique `lifecommand:data:v1:recovery:<timestamp>` key, adding a suffix on collision. Only after that backup succeeds does it persist normalized data. Semantic comparison ignores object property order; ordinary valid writes and subsequent normalized loads do not create backups. Backups are never automatically overwritten or pruned. They are local storage copies, not cloud backups; clearing app/browser storage removes them too.
+
+Read failures propagate without writes. Backup-write failures leave the active original untouched. Repair-write failures retain the original and backup. The app exposes a retry action for I/O failures and a recovery notice for the current runtime. No automatic destructive reset occurs. Backup inspection/restoration currently requires developer tools; there is no recovery export/restore UI.
+
+Task edits, settings edits, and automatic rollover use the same queue. ThemeProvider reads AppDataProvider; appearance edits cannot overwrite concurrent task changes. Rollover changes and summary persist in one snapshot. Editors reject stale saved timestamps and offer reload. The queue is not a transaction across browser tabs or devices. Cross-tab coordination, versioned schema migration, backup management/export and archive restoration remain follow-up work.
 
 ## Derived views
 

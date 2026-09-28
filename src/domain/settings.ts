@@ -24,8 +24,15 @@ export function isRolloverTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
-export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
-  const normalized = { ...defaultSettings, ...settings, rolloverTime: isRolloverTime(settings.rolloverTime ?? '') ? settings.rolloverTime! : '00:00' };
+export function normalizeSettings(value: unknown): AppSettings {
+  const settings = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const normalized = { ...defaultSettings };
+  for (const key of Object.keys(defaultSettings) as (keyof AppSettings)[]) {
+    if (typeof settings[key] === typeof defaultSettings[key]) Object.assign(normalized, { [key]: settings[key] });
+  }
+  normalized.rolloverTime = isRolloverTime(normalized.rolloverTime) ? normalized.rolloverTime : '00:00';
+  if (!['system', 'light', 'dark'].includes(normalized.appearance)) normalized.appearance = 'system';
+  if (!Number.isFinite(normalized.defaultStoryPoints) || normalized.defaultStoryPoints <= 0) normalized.defaultStoryPoints = 1;
   for (const key of Object.keys(ambientChoices) as (keyof typeof ambientChoices)[]) {
     if (!(ambientChoices[key] as readonly unknown[]).includes(normalized[key])) Object.assign(normalized, { [key]: defaultSettings[key] });
   }

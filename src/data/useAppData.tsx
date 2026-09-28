@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { AppData, AppSettings, Task } from '@/src/domain/models';
-import { changeAppData } from './repository';
+import { changeAppData, getRecoveryNotice } from './repository';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
@@ -10,6 +10,8 @@ import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/do
 type AppDataValue = {
   data: AppData | null;
   error: string;
+  recoveryNotice: string;
+  retry: () => Promise<void>;
   addEvent: (input: EventInput) => Promise<void>;
   editEvent: (key: string, input: EventInput, expectedUpdatedAt?: string) => Promise<void>;
   archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
@@ -22,10 +24,12 @@ const AppDataContext = createContext<AppDataValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData | null>(null);
   const [error, setError] = useState('');
+  const [recoveryNotice, setRecoveryNotice] = useState('');
   const commit = useCallback(async (change: (current: AppData) => AppData) => {
     try {
       const next = await changeAppData(change);
       setData(next);
+      setRecoveryNotice(getRecoveryNotice());
       setError('');
     } catch (cause) {
       setError('Could not save or load your local data. Please try again.');
@@ -65,7 +69,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   };
   const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
-  return <AppDataContext.Provider value={{ data, error, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
+  const retry = () => commit(current => rolloverAppData(current, new Date()));
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
 }
 
 export function useAppData() {

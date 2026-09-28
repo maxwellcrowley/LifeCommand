@@ -11,6 +11,19 @@ export interface EventFields { id: string; title: string; date: string; startTim
 export interface CalendarEvent extends EventFields { source: Exclude<EventSource, 'family'> }
 export interface FamilyEvent extends EventFields { source: 'family'; addedBy: 'Max' | 'Kellyn'; category: FamilyCategory; color: string }
 export type LocalEvent = CalendarEvent | FamilyEvent;
-export interface AppSettings { appearance: 'system' | 'light' | 'dark'; rolloverTime: string; autoRollover: boolean; raiseMissedTasksToHigh: boolean; preserveOriginalDueDate: boolean; addRolloverCount: boolean; moveIncompleteTasksToNextDay: boolean; defaultStoryPoints: number; ambientDisplayEnabled: boolean }
+export type AmbientMode = 'today' | 'focus' | 'family' | 'minimal';
+export type DisplayDensity = 'comfortable' | 'compact';
+export type ClockFormat = '12-hour' | '24-hour';
+export interface AmbientSettings {
+  ambientMode: AmbientMode;
+  ambientClockFormat: ClockFormat;
+  ambientShowTomorrow: boolean;
+  ambientShowCompleted: boolean;
+  ambientTaskDensity: DisplayDensity;
+  ambientEventDensity: DisplayDensity;
+  ambientMaxTasks: number;
+  ambientMaxEvents: number;
+}
+export interface AppSettings extends AmbientSettings { appearance: 'system' | 'light' | 'dark'; rolloverTime: string; autoRollover: boolean; raiseMissedTasksToHigh: boolean; preserveOriginalDueDate: boolean; addRolloverCount: boolean; moveIncompleteTasksToNextDay: boolean; defaultStoryPoints: number; ambientDisplayEnabled: boolean }
 export interface RolloverSummary { rolloverDate: string; performedAt: string; movedTaskIds: string[] }
 export interface AppData { sections: Section[]; tasks: Task[]; projects: Project[]; calendarEvents: CalendarEvent[]; familyEvents: FamilyEvent[]; settings: AppSettings; lastRolloverSummary?: RolloverSummary }

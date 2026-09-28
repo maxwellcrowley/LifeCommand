@@ -10,6 +10,14 @@ export const defaultSettings: AppSettings = {
   moveIncompleteTasksToNextDay: true,
   defaultStoryPoints: 1,
   ambientDisplayEnabled: false,
+  ambientMode: 'today',
+  ambientClockFormat: '12-hour',
+  ambientShowTomorrow: true,
+  ambientShowCompleted: false,
+  ambientTaskDensity: 'comfortable',
+  ambientEventDensity: 'comfortable',
+  ambientMaxTasks: 6,
+  ambientMaxEvents: 6,
 };
 
 export function isRolloverTime(value: string): boolean {
@@ -17,5 +25,32 @@ export function isRolloverTime(value: string): boolean {
 }
 
 export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
-  return { ...defaultSettings, ...settings, rolloverTime: isRolloverTime(settings.rolloverTime ?? '') ? settings.rolloverTime! : '00:00' };
+  const normalized = { ...defaultSettings, ...settings, rolloverTime: isRolloverTime(settings.rolloverTime ?? '') ? settings.rolloverTime! : '00:00' };
+  for (const key of Object.keys(ambientChoices) as (keyof typeof ambientChoices)[]) {
+    if (!(ambientChoices[key] as readonly unknown[]).includes(normalized[key])) Object.assign(normalized, { [key]: defaultSettings[key] });
+  }
+  for (const key of ['ambientShowTomorrow', 'ambientShowCompleted', 'ambientDisplayEnabled'] as const) {
+    if (typeof normalized[key] !== 'boolean') normalized[key] = defaultSettings[key];
+  }
+  for (const key of ['ambientMaxTasks', 'ambientMaxEvents'] as const) {
+    if (!isAmbientLimit(normalized[key])) normalized[key] = defaultSettings[key];
+  }
+  return normalized;
+}
+
+export const ambientChoices = {
+  ambientMode: ['today', 'focus', 'family', 'minimal'],
+  ambientClockFormat: ['12-hour', '24-hour'],
+  ambientTaskDensity: ['comfortable', 'compact'],
+  ambientEventDensity: ['comfortable', 'compact'],
+} as const;
+
+export function isAmbientLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 20;
+}
+
+export function validateAmbientSetting(key: keyof AppSettings, value: unknown): void {
+  if ((key === 'ambientMaxTasks' || key === 'ambientMaxEvents') && !isAmbientLimit(value)) throw new Error('Display limits must be whole numbers from 1 to 20.');
+  if (key in ambientChoices && !(ambientChoices[key as keyof typeof ambientChoices] as readonly unknown[]).includes(value)) throw new Error('Choose a valid display option.');
+  if (['ambientShowTomorrow', 'ambientShowCompleted', 'ambientDisplayEnabled'].includes(key) && typeof value !== 'boolean') throw new Error('Display toggles must be on or off.');
 }

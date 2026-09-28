@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Switch, Text, TextInput, View } from 'react-native';
-import { Link } from 'expo-router';
+import { AmbientSettingsCard } from '@/src/components/AmbientSettingsCard';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
 import { FormError } from '@/src/components/TaskForm';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
@@ -41,6 +41,6 @@ export default function SettingsScreen() {
       {toggles.map(([key, label]) => <Row key={key}><View style={{ flex: 1 }}><Label>{label}</Label></View><Switch accessibilityLabel={label} disabled={saving} value={settings[key]} onValueChange={value => void save(key, value)} trackColor={{ true: colors.accent }} /></Row>)}
     </Card>
     <Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable disabled={saving} accessibilityLabel="Decrease default story points" onPress={() => void save('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable disabled={saving} accessibilityLabel="Increase default story points" onPress={() => void save('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card>
-    <Card title="Ambient display"><Row><View style={{ flex: 1 }}><Label>Enable ambient display</Label><Muted>Read-only household view</Muted></View><Switch accessibilityLabel="Enable ambient display" disabled={saving} value={settings.ambientDisplayEnabled} onValueChange={value => void save('ambientDisplayEnabled', value)} trackColor={{ true: colors.accent }} /></Row><Link href="/ambient" asChild><Pressable><Label>Open ambient display →</Label></Pressable></Link></Card>
+    <AmbientSettingsCard settings={settings} saving={saving} save={save} />
   </Page>;
 }

@@ -4,7 +4,7 @@ import type { AppData, AppSettings, Task } from '@/src/domain/models';
 import { changeAppData } from './repository';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { rolloverAppData } from '@/src/domain/rollover';
-import { isRolloverTime } from '@/src/domain/settings';
+import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
 import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
 
 type AppDataValue = {
@@ -56,6 +56,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }));
   const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     if (key === 'rolloverTime' && !isRolloverTime(String(value))) throw new Error('Use HH:MM in 24-hour time, for example 00:00.');
+    validateAmbientSetting(key, value);
     await commit(current => rolloverAppData({ ...current, settings: { ...current.settings, [key]: value } }, new Date()));
   };
   const addEvent = async (input: EventInput) => {

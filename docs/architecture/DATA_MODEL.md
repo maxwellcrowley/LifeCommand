@@ -9,7 +9,7 @@ LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lif
 - **Project**: name/description, optional section, lifecycle status, completion switches, default task points, backlog inclusion, and timestamps.
 - **CalendarEvent**: local date/time, source (`work`, `personal`, or `army`), optional location/notes, and audit/archive timestamps.
 - **FamilyEvent**: distinct `family` source with local date/time, attribution, category, family color, optional location/notes, and audit/archive timestamps. Stored separately in `familyEvents` so future shared-account attribution has its own boundary.
-- **AppSettings**: appearance preference (`system`, `light`, `dark`), rollover time and behavior toggles below, default story points, and ambient display toggle.
+- **AppSettings**: appearance preference (`system`, `light`, `dark`), rollover time and behavior toggles below, default story points, and ambient display settings below.
 - **RolloverSummary**: optional `AppData.lastRolloverSummary` stores the ending day (`rolloverDate`), execution timestamp (`performedAt`), and deduplicated `movedTaskIds`. Today shows it on the local execution day, including after reload. A run that moves no tasks does not erase the previous summary.
 
 ## Calendar and family event fields (Slice 4)
@@ -65,6 +65,35 @@ The provider checks on startup, foreground activation, every 30 seconds while ac
 
 Manual pushback applies when an active task already due today, dated earlier, or marked overdue is moved later or has its date cleared. The domain requires an explicit choice. Reschedule Cleanly sets `scheduled` and adds no penalty; Mark Overdue and Push sets `overdue`, increments the manual counter, and follows the priority/original-date toggles; Move to Backlog removes the due date and sets `backlog`. Existing history survives all choices. Manual pushback does not change automatic rollover markers or counts.
 
+## Ambient display settings (Slice 5)
+
+Ambient preferences are flat fields on the existing `AppSettings` snapshot, represented by the `AmbientSettings` interface. Settings edits use the same serialized repository queue as tasks and rollover; there is no separate display store, storage-key change, or dependency addition.
+
+| Field | Default | Allowed values / behavior |
+| --- | --- | --- |
+| `ambientDisplayEnabled` | `false` | Gates Settings entry and direct `/ambient` entry; disabled view retains an exit to Settings |
+| `ambientMode` | `today` | `today` (Today Board), `focus`, `family`, `minimal` |
+| `ambientClockFormat` | `12-hour` | `12-hour`, `24-hour`; applies to clock, event times, and tomorrow preview |
+| `ambientShowTomorrow` | `true` | Show summary on Today Board / Family Mode |
+| `ambientShowCompleted` | `false` | Include tasks completed on the current local day after active tasks on board modes; include completed count in Minimal; never select completed work for Focus |
+| `ambientTaskDensity` | `comfortable` | `comfortable` (up to two title lines), `compact` (one title line) |
+| `ambientEventDensity` | `comfortable` | Independent event-row density; Next event always has room for up to two title lines |
+| `ambientMaxTasks` | `6` | Integer 1–20; upper bound on task list rows, further limited by viewport space |
+| `ambientMaxEvents` | `6` | Integer 1–20; upper bound on today's event list rows, further limited by viewport space; separate Next event remains visible |
+
+`normalizeSettings` fills absent fields and replaces invalid ambient options, booleans, or out-of-range/non-integer limits with defaults, preserving valid preferences. This normalization is idempotent. The provider rejects invalid new ambient writes before persistence. Normalized settings persist on the next snapshot write.
+
+`src/domain/ambient.ts` provides pure selection, ordering, formatting, and viewport-capacity helpers. Display modes derive their content without changing stored tasks or events:
+
+- **Today Board**: today's events, today's active/overdue tasks, next timed event, optional completed-today tasks, and optional tomorrow summary.
+- **Focus**: first ranked incomplete task due today or earlier, next timed event, and remaining active-task count. There is no in-progress status or focus timer in the model.
+- **Family**: family-source events only; tasks in the section named Family or owned by `shared` / `kellyn`. The same scope applies to Next event, completed tasks, counts, and tomorrow preview. This is a local display filter, not a privacy or authorization boundary.
+- **Minimal**: next timed event and full active/high/overdue task counts, plus optional completed-today count; no task/event lists or tomorrow preview.
+
+Active tasks sort by overdue first, then high/normal/low priority, due date, title, and ID. Completed-today rows follow all active work. Future and undated active tasks, archived tasks, and archived events are excluded from today's lists. Today's next timed event is promoted ahead of all-day/past events before the event limit is applied; the remaining events retain calendar ordering. A future next event remains in the separate spotlight and is not added to today's list. Remaining counts reflect all eligible items minus visible rows. Summary counts use complete tomorrow-date collections, independent of row limits, and never predict rollover.
+
+The layout uses width and font scale for columns (800 effective pixels) and large viewing-distance typography (1200 effective pixels with at least 800 effective pixels of height). Measured header/Next event/tomorrow heights reserve space before calculating row capacity. Lists always retain at least one eligible item; narrow, very short, or enlarged-text views can scroll vertically. Long titles deliberately ellipsize; full task/event titles remain available in accessible labels and the normal app editors. No browser-only fullscreen API, rotation/pagination timer, or keep-awake behavior is stored or invoked.
+
 ## Persistence and evolution
 
 AsyncStorage is an asynchronous, unencrypted key/value store and suits this prototype's device-local data. Repository reads seed and persist a first-run snapshot only when storage is empty. Read or parse failures propagate instead of overwriting stored data. Writes serialize the complete `AppData` aggregate. Additive normalization fills missing rollover settings and counters in older snapshots, preserving saved preferences; normalized values persist on the next write. Invalid legacy rollover times fall back to midnight.
@@ -77,7 +106,7 @@ Today filters incomplete, non-archived tasks by due date and includes dated over
 
 Calendar agenda groups local/family events and active dated tasks by date in separate event/task lists. All-day events sort first, followed by start time and title. Agenda initially covers 30 days from the selected date and can expand in 30-day increments; Previous/Next changes the displayed range. Day includes an empty state; Week runs Monday through Sunday with seven summary rows that open Day view. Completed, archived, undated, and out-of-range tasks are excluded; event records are never generated for tasks.
 
-Today uses exact local-date filtering for events, with local and family cards separate from tasks. Next event means the next timed start at or after the current local minute, including future dates; all-day and already-started events remain in their day's list but do not occupy Next event. Ambient shares these selectors, includes overdue active tasks consistently with Today, and shows tomorrow's event/task/high-priority counts when viewport height is at least 650. A foreground clock refreshes every 15 seconds and on app activation; static web rendering waits for the client clock. Calendar date arithmetic uses calendar days across month/year/DST boundaries.
+Today uses exact local-date filtering for events, with local and family cards separate from tasks. Next event means the next timed start at or after the current local minute, including future dates; all-day and already-started events remain in their day's list but do not occupy Next event. Ambient builds on these selectors using the mode, density, maximum-row, completion, and tomorrow settings described above. Its tomorrow summary follows the toggle on board modes at every viewport size, with vertical scrolling as a small-screen fallback. A foreground clock refreshes every 15 seconds and on app activation; static web rendering waits for the client clock. Calendar date arithmetic uses calendar days across month/year/DST boundaries.
 
 ## Seed data
 

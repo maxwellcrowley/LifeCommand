@@ -46,7 +46,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
         <Page title="Start Fresh?" subtitle="This cannot be undone.">
           <Card>
             <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved settings, including test and sample data. Local recovery copies and rollover history are also removed.</Muted>
-            <Muted>Default sections and settings will be restored. Tasks, events, and projects will be empty. Close other LifeCommand tabs before continuing.</Muted>
+            <Muted>Default sections and settings will be restored. Tasks, events, and projects will be empty. Other open tabs will pause saving and ask you to reload. Reloading discards their unsaved drafts.</Muted>
           </Card>
           {error ? <FormError>{error}</FormError> : null}
           <View style={{ gap: 12 }}>

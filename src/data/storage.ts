@@ -1,5 +1,6 @@
 import type { AppData } from '../domain/models';
 import { normalizeAppData } from '../domain/normalize';
+import { migrateSnapshot, persistedSnapshot, snapshotData, snapshotRevision, snapshotVersion } from '../domain/migrations';
 import { seedData } from '../domain/seed';
 import { createDefaultAppData } from '../domain/defaults';
 import { createExport, parseTransferJSON, validateImport, validateSnapshot, type ImportPreview } from '../domain/transfer';
@@ -20,6 +21,10 @@ export interface SnapshotStorage {
   removeItem(key: string): Promise<void>;
 }
 
+export class ExternalDataChangeError extends Error {
+  constructor() { super('Local data changed in another tab. Reload local data before saving; unsaved drafts will be discarded.'); }
+}
+
 export class ResetCleanupError extends Error {
   constructor(public readonly data: AppData) {
     super('Your active data was reset, but local recovery copies could not all be removed. Try Start Fresh again to finish.');
@@ -32,15 +37,33 @@ function canonical(value: unknown): string {
 }
 
 // Inject only the I/O boundary so tests exercise the same queue/recovery as devices.
-export function createRepository(storage: SnapshotStorage) {
+export function createRepository(storage: SnapshotStorage, exclusive: <T>(operation: () => Promise<T>) => Promise<T> = operation => operation()) {
   let pending: Promise<unknown> = Promise.resolve();
   let recoveryNotice = '';
+  let observedRaw: string | null | undefined;
+  let revision = 0;
   function enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    const result = pending.then(operation);
+    const result = pending.then(() => exclusive(operation));
     pending = result.catch(() => undefined);
     return result;
   }
-  const write = (data: AppData) => storage.setItem(STORAGE_KEY, JSON.stringify(data));
+  function parse(raw: string | null): unknown {
+    try { return raw === null ? null : JSON.parse(raw); } catch { return null; }
+  }
+  async function assertCurrent() {
+    const raw = await storage.getItem(STORAGE_KEY);
+    if (observedRaw !== undefined && observedRaw !== raw) throw new ExternalDataChangeError();
+    // Even explicit destructive actions must not overwrite a newer schema.
+    snapshotVersion(parse(raw));
+    revision = snapshotRevision(parse(raw));
+  }
+  const write = async (data: AppData) => {
+    await assertCurrent();
+    const raw = JSON.stringify(persistedSnapshot(data, revision + 1));
+    await storage.setItem(STORAGE_KEY, raw);
+    observedRaw = raw;
+    revision += 1;
+  };
   async function backup(raw: string, reason: 'before-import' | 'before-restore') {
     const createdAt = new Date().toISOString();
     let key = `${RECOVERY_PREFIX}${Date.now()}`;
@@ -53,12 +76,13 @@ export function createRepository(storage: SnapshotStorage) {
       const record = parsed as Record<string, unknown>;
       if (record.schemaVersion !== 1) throw Error('Unsupported recovery data version.');
       if (typeof record.raw !== 'string') throw Error('Recovery snapshot text is missing.');
-      return validateSnapshot(parseTransferJSON(record.raw));
+      return validateSnapshot(snapshotData(parseTransferJSON(record.raw)));
     }
     // Pre-slice-9 copies are exact unversioned v1 snapshots. Do not run lossy repair.
-    return validateSnapshot(parsed);
+    return validateSnapshot(snapshotData(parsed));
   }
   async function replace(data: AppData, reason: 'before-import' | 'before-restore') {
+    await assertCurrent();
     const raw = await storage.getItem(STORAGE_KEY);
     if (raw === null) throw Error('Current local data is missing. Reload LifeCommand before trying again.');
     try { await backup(raw, reason); }
@@ -77,8 +101,10 @@ export function createRepository(storage: SnapshotStorage) {
     }
     let parsed: unknown;
     try { parsed = JSON.parse(raw); } catch { parsed = null; }
-    const data = normalizeAppData(parsed);
-    if (canonical(parsed) !== canonical(data)) {
+    const data = migrateSnapshot(parsed);
+    revision = snapshotRevision(parsed);
+    observedRaw = raw;
+    if (snapshotVersion(parsed) === 0 || canonical(snapshotData(parsed)) !== canonical(data)) {
       // Never replace the only copy, even if backup storage is full/unavailable.
       let key = `${RECOVERY_PREFIX}${Date.now()}`;
       while (await storage.getItem(key) !== null) key += '-1';
@@ -89,7 +115,8 @@ export function createRepository(storage: SnapshotStorage) {
     return data;
   }
   return {
-    exportAppData: () => enqueue(async () => JSON.stringify(createExport(await read()), null, 2)),
+    exportAppData: () => enqueue(async () => { await assertCurrent(); return JSON.stringify(createExport(await read()), null, 2); }),
+    hasExternalChange: () => enqueue(async () => observedRaw !== undefined && observedRaw !== await storage.getItem(STORAGE_KEY)),
     importAppData: (raw: string) => enqueue(() => replace(validateImport(raw).data, 'before-import')),
     listRecoveryBackups: () => enqueue(async (): Promise<RecoveryBackup[]> => {
       const keys = (await storage.getAllKeys()).filter(key => key.startsWith(RECOVERY_PREFIX)).sort().reverse();
@@ -123,9 +150,15 @@ export function createRepository(storage: SnapshotStorage) {
       if (raw === null || raw !== expectedRaw) throw Error('This backup changed or was removed. Preview it again before restoring.');
       return replace(decodeBackup(raw).data, 'before-restore');
     }),
-    loadAppData: () => enqueue(read),
+    loadAppData: () => enqueue(async () => {
+      // Explicit reconciliation is the only operation that accepts external data.
+      const previous = observedRaw;
+      observedRaw = undefined;
+      try { return await read(); } catch (cause) { observedRaw = previous; throw cause; }
+    }),
     saveAppData: (data: AppData) => enqueue(() => write(data)),
     resetAppData: () => enqueue(async () => {
+      await assertCurrent();
       // Enumerate first: failure here leaves all data untouched. Never clear shared storage.
       const backups = (await storage.getAllKeys()).filter(key => key.startsWith(RECOVERY_PREFIX));
       const data = createDefaultAppData();
@@ -142,6 +175,7 @@ export function createRepository(storage: SnapshotStorage) {
     }),
     getRecoveryNotice: () => recoveryNotice,
     changeAppData: (change: (current: AppData) => AppData) => enqueue(async () => {
+      await assertCurrent();
       const current = await read();
       const next = change(current);
       if (next !== current) await write(next);

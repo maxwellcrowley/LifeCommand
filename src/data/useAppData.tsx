@@ -1,8 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { AppData, AppSettings, Task } from '@/src/domain/models';
-import { changeAppData, getRecoveryNotice, resetAppData, importAppData, restoreRecoveryBackup } from './repository';
-import { ResetCleanupError } from './storage';
+import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, resetAppData, importAppData, restoreRecoveryBackup } from './repository';
+import { subscribeToStorageChanges } from './coordination';
+import { LocalDataChanged } from '../components/LocalDataChanged';
+import { ExternalDataChangeError, ResetCleanupError } from './storage';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
@@ -34,8 +36,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const [recoveryNotice, setRecoveryNotice] = useState('');
   const [resetVersion, setResetVersion] = useState(0);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const resetting = useRef(false);
+  const stale = useRef(false);
+  const [externalChange, setExternalChange] = useState(false);
+  const markStale = useCallback(() => { stale.current = true; setExternalChange(true); }, []);
   const commit = useCallback(async (change: (current: AppData) => AppData) => {
+    if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Data replacement is in progress. Please wait.');
     try {
       const next = await changeAppData(change);
@@ -43,24 +50,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setRecoveryNotice(getRecoveryNotice());
       setError('');
     } catch (cause) {
-      setError('Could not save or load your local data. Please try again.');
+      if (cause instanceof ExternalDataChangeError) markStale();
+      setError(cause instanceof Error ? cause.message : 'Could not save or load your local data. Please try again.');
       throw cause;
     }
-  }, []);
+  }, [markStale]);
 
   const replaceData = async (operation: () => Promise<AppData>) => {
+    if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Data replacement is already in progress.');
     resetting.current = true;
     try {
       const next = await operation();
       setData(next); setError(''); setRecoveryNotice('');
       setResetVersion(version => version + 1);
+    } catch (cause) {
+      if (cause instanceof ExternalDataChangeError) markStale();
+      throw cause;
     } finally { resetting.current = false; }
   };
   const importData = (raw: string) => replaceData(() => importAppData(raw));
   const restoreBackup = (key: string, raw: string) => replaceData(() => restoreRecoveryBackup(key, raw));
 
   const startFresh = async () => {
+    if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Start Fresh is already in progress.');
     resetting.current = true;
     const publishReset = (next: AppData) => {
@@ -72,12 +85,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       publishReset(await resetAppData());
     } catch (cause) {
+      if (cause instanceof ExternalDataChangeError) markStale();
       if (cause instanceof ResetCleanupError) publishReset(cause.data);
       throw cause;
     } finally {
       resetting.current = false;
     }
   };
+
+  useEffect(() => subscribeToStorageChanges(() => {
+    void hasExternalChange().then(changed => { if (changed) markStale(); }).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not check local data.'));
+  }), [markStale]);
 
   useEffect(() => {
     const check = () => { void commit(current => rolloverAppData(current, new Date())).catch(() => undefined); };
@@ -122,8 +140,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const editProject = async (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => commit(current => changeProject(current, id, changes, expectedUpdatedAt));
   const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
-  const retry = () => commit(current => rolloverAppData(current, new Date()));
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
+  const retry = async () => {
+    if (resetting.current) return;
+    resetting.current = true;
+    try {
+      const next = await loadAppData();
+      setData(next); setRecoveryNotice(getRecoveryNotice()); setError('');
+      setResetVersion(version => version + 1);
+      setReloadVersion(version => version + 1);
+      stale.current = false; setExternalChange(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
+    finally { resetting.current = false; }
+  };
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

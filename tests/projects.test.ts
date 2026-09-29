@@ -1,3 +1,4 @@
+import { persistedSnapshot } from '../src/domain/migrations';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { createDefaultAppData } from '../src/domain/defaults';
@@ -127,7 +128,7 @@ test('backlog exclusion retains dated open tasks and undated completed tasks', (
 });
 
 test('queued project CRUD survives restart, preserves concurrent tasks, and recovers from failed writes', async () => {
-  let raw = JSON.stringify(createDefaultAppData());
+  let raw = JSON.stringify(persistedSnapshot(createDefaultAppData(), 1));
   let fail = false;
   const storage: SnapshotStorage = { getItem: async () => raw, setItem: async (key, value) => { if (fail) throw Error('I/O'); assert.equal(key, STORAGE_KEY); raw = value; }, getAllKeys: async () => [STORAGE_KEY], removeItem: async () => {} };
   const repo = createRepository(storage);

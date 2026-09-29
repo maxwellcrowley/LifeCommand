@@ -1,3 +1,4 @@
+import { persistedSnapshot } from '../src/domain/migrations';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { createRepository, RECOVERY_PREFIX, STORAGE_KEY, type SnapshotStorage } from '../src/data/storage';
@@ -103,7 +104,7 @@ test('partial snapshot preserves healthy collections and backs up malformed ones
 });
 
 test('read failures never seed or write and the queue accepts a successful retry', async () => {
-  const mem = memory(JSON.stringify(empty()));
+  const mem = memory(JSON.stringify(persistedSnapshot(empty(), 1)));
   let fail = true;
   const repo = createRepository({ ...mem.storage, getItem: async key => { if (fail) throw Error('unavailable'); return mem.storage.getItem(key); } });
   await assert.rejects(repo.loadAppData(), /unavailable/);
@@ -134,7 +135,7 @@ test('repair write failure retains both original and backup; later retry recover
 });
 
 test('task and event create/edit/archive persist through real repository serialization and fresh instances', async () => {
-  const mem = memory(JSON.stringify(empty()));
+  const mem = memory(JSON.stringify(persistedSnapshot(empty(), 1)));
   const repo = createRepository(mem.storage);
   const task = createTask({ title: 'Persist me', sectionId: 'work', description: 'Notes', dueDate: '2026-09-29' }, now);
   const event = createEvent({ title: 'School', date: '2026-09-29', source: 'family', addedBy: 'Kellyn', category: 'School' }, now);
@@ -158,7 +159,7 @@ test('task and event create/edit/archive persist through real repository seriali
 });
 
 test('failed mutation/save does not poison subsequent writes or replace saved user data', async () => {
-  const mem = memory(JSON.stringify(empty()));
+  const mem = memory(JSON.stringify(persistedSnapshot(empty(), 1)));
   let fail = true;
   const repo = createRepository({ ...mem.storage, setItem: async (key, value) => { if (fail) throw Error('full'); await mem.storage.setItem(key, value); } });
   await assert.rejects(repo.changeAppData(() => { throw Error('invalid'); }), /invalid/);

@@ -39,7 +39,7 @@ async function main() {
     assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button exists: ' + text);
     await pause(150);
   };
-  const read = () => evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))');
+  const read = async () => { const { schemaVersion, revision, ...data } = await evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))'); assert.equal(schemaVersion, 1); assert.ok(revision >= 1); return data; };
 
   const fixture = require('../.test-build/src/domain/normalize.js').normalizeAppData(seedData);
   fixture.settings.autoRollover = false;
@@ -63,7 +63,7 @@ async function main() {
     await pause(200);
   };
   await navigate();
-  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(fixture))}); localStorage.setItem('unrelated-transfer-test','keep')`);
+  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify({ ...fixture, schemaVersion: 1, revision: 1 }))}); localStorage.setItem('unrelated-transfer-test','keep')`);
   await navigate();
   const original = await read();
   await evaluate(`window.__originalURL = URL.createObjectURL; URL.createObjectURL = blob => { blob.text().then(text => window.__exported = text); return window.__originalURL(blob); }`);
@@ -117,7 +117,9 @@ async function main() {
   const afterImport = await backupKeys();
   assert.equal(afterImport.length, 1);
   const recovery = await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(afterImport[0])}))`);
-  assert.deepEqual(JSON.parse(recovery.raw), original);
+  const { schemaVersion, revision, ...backupData } = JSON.parse(recovery.raw);
+  assert.equal(schemaVersion, 1); assert.equal(revision, 1);
+  assert.deepEqual(backupData, original);
   const writes = await evaluate('window.__writes');
   assert.deepEqual(writes, [afterImport[0], key]);
   console.log('PASS backup failure/retry, duplicate confirmation, exact backup-before-import ordering and live replacement');
@@ -135,11 +137,13 @@ async function main() {
   assert.equal((await backupKeys()).length, 2);
   await navigate();
   assert.deepEqual(await read(), original);
+  await ready('View recovery backups (2)');
   await click('View recovery backups (2)');
   await ready('Before restore');
   await click('Cancel');
   console.log('PASS preview/cancel/restore, backup-before-restore and restart persistence');
   await evaluate(`localStorage.setItem(${JSON.stringify(prefix + '1000')}, '{broken')`);
+  await ready('View recovery backups (2)');
   await click('View recovery backups (2)');
   await ready('Cannot restore:');
   assert.ok(await evaluate(`document.body.innerText.includes('not valid JSON')`));

@@ -1,3 +1,4 @@
+import { persistedSnapshot } from '../src/domain/migrations';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { createExport, validateImport, validateSnapshot, MAX_TRANSFER_BYTES } from '../src/domain/transfer';
@@ -17,7 +18,7 @@ const fixture = () => {
 };
 const json = (value: unknown) => JSON.stringify(value);
 const input = () => json(createExport(fixture()));
-function memory(raw = json(createDefaultAppData())) {
+function memory(raw = json(persistedSnapshot(createDefaultAppData(), 1))) {
   const values = new Map([[STORAGE_KEY, raw], ['unrelated', 'keep']]);
   const writes: string[] = [];
   const storage: SnapshotStorage = {
@@ -207,5 +208,5 @@ test('corrupt current text is preserved exactly before valid import; missing act
   assert.equal(JSON.parse(mem.values.get(mem.writes[0])!).raw, '{broken');
   assert.ok((await mem.repo.listRecoveryBackups())[0].error);
   mem.values.delete(STORAGE_KEY);
-  await assert.rejects(mem.repo.importAppData(input()), /missing/);
+  await assert.rejects(mem.repo.importAppData(input()), /changed in another tab/);
 });

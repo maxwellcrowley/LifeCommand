@@ -71,7 +71,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
             </Card>
             <Card title="Replace all current data?">
               <Muted>This replaces your current tasks, projects, sections, events, settings and rollover history. It does not merge them. Unsaved drafts will be discarded. A recovery backup of the current data must succeed before replacement.</Muted>
-              <Muted>Close other LifeCommand tabs first. Recovery copies stay on this device and are lost if storage is cleared or Start Fresh is used. Automatic rollover resumes after replacement.</Muted>
+              <Muted>Other open tabs will pause saving and ask you to reload. Reloading discards their unsaved drafts. Recovery copies stay on this device and are lost if storage is cleared or Start Fresh is used. Automatic rollover resumes after replacement.</Muted>
             </Card>
             <Action label={selection.kind === 'import' ? 'Confirm import and replace data' : 'Confirm restore and replace data'} disabled={busy} onPress={() => void confirm()} />
           </> : screen === 'import' ? <Card>

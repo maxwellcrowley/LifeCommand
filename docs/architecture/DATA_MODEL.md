@@ -1,4 +1,6 @@
-# Initial Local Data Model
+# Local Data Model
+
+Slice 10 adds persisted schema metadata, migrations and cross-tab coordination. The final section defines the current persistence contract; earlier slice descriptions retain their historical context.
 
 LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
 
@@ -110,7 +112,7 @@ The layout uses width and font scale for columns (800 effective pixels) and larg
 
 ## Persistence and evolution
 
-AsyncStorage is an asynchronous, unencrypted key/value store for device-local data. The active key remains `lifecommand:data:v1`; no collection or schema-version field was added. `src/data/storage.ts` implements the serialized repository with an injectable get/set/enumerate/remove boundary; `repository.ts` binds it to AsyncStorage. All public loads, saves, resets and read/modify/write operations share one runtime queue. A failed operation does not poison later retries.
+AsyncStorage is an asynchronous, unencrypted key/value store for device-local data. The active key remains `lifecommand:data:v1`. Slice 10 adds top-level `schemaVersion` and `revision` metadata without changing collections. `src/data/storage.ts` implements the serialized repository with an injectable get/set/enumerate/remove boundary; `repository.ts` binds it to AsyncStorage. All public loads, saves, resets and read/modify/write operations share one runtime queue. A failed operation does not poison later retries.
 
 ### Validation and recovery (Slice 6)
 
@@ -142,7 +144,7 @@ Keeping a valid empty snapshot prevents samples from returning on reload. Missin
 
 The provider replaces live app state only after the active write succeeds, clears stale recovery/error messages, and advances a reset version so mounted Capture drafts are discarded. Settings also clears its unsaved rollover-time draft. Theme, rollover defaults, and all data views immediately use the new snapshot without a process restart. New provider mutations are rejected while resetting; already queued writes finish before reset, and later rollover checks read the empty snapshot.
 
-Enumeration/write failures reject without publishing an empty state or deleting recovery copies. Cleanup is not a cross-key transaction: if deleting a recovery copy fails after the active write, `ResetCleanupError` carries the durable empty state to the provider, and confirmation reports that active data was reset but recovery copies remain. Retrying Start Fresh completes cleanup. An interruption during cleanup may likewise leave recovery copies; a subsequent confirmed reset removes them. The queue remains limited to one runtime, so the confirmation asks web users to close other LifeCommand tabs.
+Enumeration/write failures reject without publishing an empty state or deleting recovery copies. Cleanup is not a cross-key transaction: if deleting a recovery copy fails after the active write, `ResetCleanupError` carries the durable empty state to the provider, and confirmation reports that active data was reset but recovery copies remain. Retrying Start Fresh completes cleanup. An interruption during cleanup may likewise leave recovery copies; a subsequent confirmed reset removes them. Slice 10 adds a shared browser lock and stale-snapshot checks; other tabs now prompt for reload instead of requiring manual closure.
 
 ## Derived views
 
@@ -158,7 +160,7 @@ Seed values use relative dates so the dashboard remains populated when first ope
 
 ## Export, import and recovery restoration (Slice 9)
 
-`src/domain/transfer.ts` defines the portable format and strict validation; repository operations in `src/data/storage.ts` use the existing serialized queue and AsyncStorage adapter. The active snapshot remains an unwrapped `AppData` under `lifecommand:data:v1`. No data-key migration or dependency is needed.
+`src/domain/transfer.ts` defines the portable format and strict validation; repository operations in `src/data/storage.ts` use the existing serialized queue and AsyncStorage adapter. The active snapshot remains under `lifecommand:data:v1`; Slice 10 adds persistence metadata alongside the domain fields. No data-key migration or dependency is needed.
 
 ### Portable JSON format
 
@@ -202,6 +204,33 @@ Existing normalization/repair copies retain their exact raw text and timestamp-b
 
 Import validates again inside the queue, reads the latest active raw snapshot, awaits its recovery write, then writes the validated replacement. Restore re-reads the selected key, requires the exact bytes shown in its preview, validates through the same `validateSnapshot` path, and performs the same backup-before-replacement sequence. Missing/changed backups require a fresh preview. A missing current active key requires reload before replacement. Read or backup failures prevent replacement; active-write failure preserves the recovery copy and allows retry. Retries may create additional copies; none are pruned or overwritten. Snapshot replacement is one active-key write, but AsyncStorage does not provide a multi-key transaction or protection against another browser runtime.
 
-Settings previews collection counts (including archived items), appearance and rollover preferences, and export time for imported files. Explicit confirmation warns about full replacement, unsaved drafts, local backup retention, and closing other tabs. The provider blocks new mutations during replacement, publishes state only after the write succeeds, and increments the existing reset version to clear Capture and mounted task/event/project drafts; Settings clears its time draft. Automatic rollover resumes through the normal timer/foreground/startup checks.
+Settings previews collection counts (including archived items), appearance and rollover preferences, and export time for imported files. Explicit confirmation warns about full replacement, unsaved drafts, local backup retention, and reloading other tabs when prompted (Slice 10). The provider blocks new mutations during replacement, publishes state only after the write succeeds, and increments the existing reset version to clear Capture and mounted task/event/project drafts; Settings clears its time draft. Automatic rollover resumes through the normal timer/foreground/startup checks.
 
 Recovery copies remain on the same browser/device, unencrypted. Clearing app/browser storage or Start Fresh removes them; only an exported file saved outside that storage survives. There is no backup deletion/pruning, cloud sync, cross-tab locking, authentication, external calendar integration, or notification work in this slice.
+
+
+## Versioned persistence and cross-tab coordination (Slice 10)
+
+### Schema and migrations
+
+`src/domain/migrations.ts` defines `CURRENT_SCHEMA_VERSION = 1`. A saved snapshot contains the existing AppData fields plus top-level `schemaVersion: 1` and `revision: <positive safe integer>`. The storage key stays `lifecommand:data:v1`. Metadata never enters AppData, editor drafts or derived views. Portable export and recovery envelope version 1 remain compatible with Story 009; export data excludes local metadata, and import/restore assigns the destination's next revision.
+
+The pure `migrateSnapshot(unknown)` dispatches by local schema version:
+
+- Missing version or explicit `0`: historical local data. The 0-to-1 migration applies existing deterministic normalization/repair, then the shared strict validator. Healthy records, valid preferences and audit/rollover history survive. Missing fields receive defaults; impossible events remain in the raw backup. Invalid JSON enters legacy recovery as an unusable root. Recovery does not insert demo records.
+- Version `1`: validates revision and supplied domain fields strictly. Malformed supplied values reject rather than undergoing lossy repair. Absent optional defaults may still be filled. Validation failures retain active text and show an error with retry.
+- Invalid version types, negative/noninteger versions and future versions reject before any backup or active write. Future-version errors identify the saved and supported versions and ask for an app update. Save/import/reset also refuse to overwrite unsupported future data.
+
+Every legacy upgrade, including a metadata-only upgrade, backs up the exact original bytes before persisting. Backup failure leaves the original untouched; migration-write failure retains original and backup. Canonical current data loads without writes/backups; migrated reloads are idempotent. A missing key on first launch still seeds once. New schema versions require an explicit pure migration step and tests before raising the constant. Recovery preview/restore remains strict: no silently lossy repair of legacy backups is introduced.
+
+### Revision and commit protocol
+
+The revision increases on every successful active write: seed, migration/default upgrade, task/project/event/settings batches, changed rollover, import, restore and Start Fresh. No-op batches and failed writes leave it unchanged. Reset never rewinds it; integer exhaustion blocks writes. Clearing storage ends the local revision history.
+
+Domain data and revision are serialized in one active-key write, so there is no separately written marker to become inconsistent. Each repository remembers the exact snapshot it loaded or wrote. Before mutations it compares storage with that snapshot, including revision. Exact-byte comparison also detects old clients/manual changes that omit revision updates. A mismatch raises `ExternalDataChangeError` before the mutation callback executes. Only explicit `loadAppData` reconciliation accepts external changes; background rollover and export cannot silently adopt them.
+
+The web adapter holds one exclusive Web Lock (`lifecommand:data:v1:write`) across repository operations, including reading, validation, backup, active write and reset cleanup. Two participating tabs cannot both pass their checks and race a write. Native keeps the existing runtime queue with no browser APIs or new dependency. Web requires Web Locks over HTTPS or localhost. Unavailable support fails closed with an actionable error rather than permitting unsafe writes.
+
+Storage events for the active key (including storage clear), focus, visibility and the existing periodic/foreground check detect external changes. A global scrollable prompt pauses writes and offers **Reload local data**, explaining that unsaved drafts will be discarded. Save-time checks work even if an event is missed. Reload validates the saved snapshot and remounts the screens, clearing Capture/task/event/project/Settings drafts and import/reset previews. Failed reload leaves saving blocked and displays the error. Ordinary writes also prompt for reload; no automatic draft merge is attempted. Other tabs can remain open.
+
+Guarantees cover cooperating tabs on the same origin, not other devices. Old deployed builds/extensions/manual edits do not honor Web Locks: changed bytes are detected, but those writers can still overwrite outside the protocol. Refresh old builds once when deploying this slice. Reset cleanup is still a non-atomic multi-key operation with the existing partial-cleanup error/retry behavior. No cloud sync, auth, notifications or calendar integration is added.

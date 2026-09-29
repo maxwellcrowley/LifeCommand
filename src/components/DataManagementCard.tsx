@@ -35,7 +35,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
   const buttonStyle = { minHeight: 48, padding: 14, borderRadius: 12, borderWidth: 1, justifyContent: 'center' as const, alignItems: 'center' as const };
   return <Card title="Data Management">
     <DataTransferControls disabled={saving || busy || confirming} onReplace={() => { onReset(); setDone(false); }} />
-    <Muted>Clear local data and begin again with default sections and settings.</Muted>
+    <Muted>Clear local data and begin again with default sections and app settings. Device notification preferences and system permission stay on this device. Pending alerts will be canceled.</Muted>
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => { setError(''); setDone(false); setConfirming(true); }} style={{ ...buttonStyle, borderColor: colors.danger }}>
       <Text style={{ color: colors.danger, fontWeight: '700' }}>Start Fresh</Text>
     </Pressable>
@@ -45,7 +45,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
         <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
         <Page title="Start Fresh?" subtitle="This cannot be undone.">
           <Card>
-            <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved settings, including test and sample data. Local recovery copies and rollover history are also removed.</Muted>
+            <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved app settings, including test and sample data. Local recovery copies and rollover history are also removed. Device notification preferences and OS permission remain; pending reminders and test alerts are canceled when the notification queue refreshes.</Muted>
             <Muted>Default sections and settings will be restored. Tasks, events, and projects will be empty. Other open tabs will pause saving and ask you to reload. Reloading discards their unsaved drafts.</Muted>
           </Card>
           {error ? <FormError>{error}</FormError> : null}

@@ -1,6 +1,6 @@
 # Local Data Model
 
-Slice 12 adds reminder acknowledgement, snooze and quiet hours and advances local/portable data to schema 3. The final section defines the current reminder and persistence contract; earlier slice descriptions retain their historical context.
+Slice 13 adds installation-local native notification preferences and OS scheduling. Local/portable app data stays at schema 3. The final sections define the current reminder and notification contracts; earlier slice descriptions retain their historical context.
 
 LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
 
@@ -277,7 +277,7 @@ All reminder/default edits use the existing provider/repository queue, Web Lock,
 Native delivery is deferred. SDK 57 provides local notification APIs, but this repository has no `expo-notifications` dependency, config plugin or tested native delivery adapter. A future adapter should request permission only after opt-in, reconcile the future descriptors with OS requests, update content when titles change, cancel removed/completed/archived/disabled occurrences, and reconcile after edits, rollover, timezone changes, reload, reset/import/restore and foreground activation. Due reminders should stay in-app rather than replaying an unbounded missed-alert backlog. Delivery identifiers/permission state belong to the installation, not portable exports. Test Android channels/permissions and iOS authorization, scheduling limits, force-close/reboot and deep links in development builds. See Story 011 for verification and remaining work.
 
 
-## Reminder acknowledgement, snooze and quiet hours (Slice 12, current contract)
+## Reminder acknowledgement, snooze and quiet hours (Slice 12)
 
 This section supersedes Slice 11's occurrence identity, dismissal and quiet-hours behavior. Local snapshots and portable exports use **schema 3**. The storage key, positive revision, backup ordering and Web Lock protocol are unchanged. Imports accept export versions 1, 2 and 3. Recovery envelopes remain version 1; payloads support historical versions through schema 3. Future versions still block before writes.
 
@@ -323,3 +323,26 @@ Quiet end uses a local calendar clock across DST. Nonexistent clocks resolve for
 ### Migration and verification
 
 Schema 2 to 3 uses strict additive normalization: preserve existing reminders, records and settings; supply disabled quiet hours and valid default clocks; leave new item state absent. Version 1 also receives Slice 11 reminder defaults. Version 0 retains its established repair path. Exact old bytes are backed up before the upgraded active write; revision advances once; repeated loads are idempotent. Schema-3 export/import retains acknowledgement and snooze state. See [Story 012](../stories/STORY-012_REMINDER_SNOOZE_AND_QUIET_HOURS.md) for exact verification commands, browser coverage and remaining work.
+
+## Native notification delivery (Slice 13, current contract)
+
+`src/notifications/service.ts` consumes the existing pure reminder descriptors. No notification fields are added to tasks, events, `AppSettings`, snapshots, exports, or recovery envelopes. Local/portable schema remains **3**; prior migrations are unchanged.
+
+Native installations separately persist `lifecommand:notifications:v1` in AsyncStorage:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Explicit opt-in on this installation; enabling does not itself prompt for permission |
+| `respectQuietHours` | `true` | Use `notificationReadyAt`; false uses effective `reminderAt` without changing in-app/domain settings |
+
+Missing or malformed preferences safely default off; storage I/O errors surface and retry without overwriting preferences. Web never reads/writes this key or requests browser notification permission. These preferences are excluded from export/import/recovery and survive Start Fresh, as does OS permission. Start Fresh cancels pending owned reminder/test requests through reconciliation against empty data. Import/restore preserve this installation's opt-in and reconcile the replacement's reminder and quiet-hour settings. Data Management explains this distinction.
+
+Permissions are read from the OS, never persisted as authority. Android channel `lifecommand-reminders` is created before an explicit permission request or scheduling. Denied application/channel permission suppresses scheduling. iOS authorized/provisional/ephemeral states permit delivery; provisional delivery can be quiet. Foreground notifications have banner/list/sound handling and never increment a badge. No push tokens, remote notification tasks, cloud service, auth or calendar integration are used.
+
+The OS queue is the persisted identifier ledger. Reminder identifiers are `lifecommand:reminder:` plus the URI-encoded collection-qualified domain key. Request data carries a fingerprint of occurrence, actual delivery instant, title and body. Refresh reads the queue, retains exact matches, cancels obsolete/changed requests before scheduling replacements, and touches only owned IDs. A single `lifecommand:test` ID bounds manual tests. No second AsyncStorage identifier map can become inconsistent with OS requests after process termination. OS scheduling success is not a delivery receipt; there is no delivered-history claim.
+
+The queue takes the earliest **48** strictly future delivery times within **30 elapsed days**, ordered by instant then ID. This is an app budget with headroom for a test request, not a promise of OS capacity. Past times are never replayed; an already-due in-app reminder with a future quiet-hour deferral is eligible. Completed/archived/disabled/deleted/acknowledged items disappear via domain selection. Snooze, title/date/time edits, rollover and quiet-hour changes replace requests. A per-installation serialized queue coalesces stale snapshots and handles a newer replacement arriving during an in-flight OS call. Partial failures remain visible in Notifications and retry on foreground, periodic refresh or manual refresh.
+
+`NotificationProvider` observes every durable provider snapshot (including initial normalized/migrated load, successful mutations, import, restore, reset and partial reset cleanup). It also refreshes on foreground and every 30 seconds while active, re-reading permission and deriving dates in the current timezone. Replacement clears pending test alerts. Changed quiet-hour settings/device preferences clear pending tests so an old test cannot bypass the new interval. No JS background scheduler replenishes the queue while terminated. Opening the app refreshes the bounded window; timezone/clock changes while closed can leave previously scheduled absolute dates until next foreground. Android inexact delivery, Focus/DND and OS power management may delay/silence alerts, including beyond their planned quiet-hour boundary.
+
+Notification operations are separate from app-data writes: an OS failure never rolls back a successful save or breaks Today. Reconciliation is asynchronous; a process killed immediately after a save can retain an old OS request until next launch. Already delivered tray entries are not retracted. Changing quiet-hour policy can make the same occurrence eligible at a new future delivery time; without OS delivery receipts the service cannot infer that an earlier request was seen. Tapping an alert opens the app using platform default behavior; item deep links and notification action buttons are future work. See [Story 013](../stories/STORY-013_NATIVE_NOTIFICATIONS.md) for setup, verification and device limitations.

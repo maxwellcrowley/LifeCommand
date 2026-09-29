@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
 import { AppDataProvider } from '@/src/data/useAppData';
+import { NotificationProvider } from '@/src/notifications/NotificationProvider';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -44,5 +45,5 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  return <AppDataProvider><ThemeProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /><Stack.Screen name="project/new" options={{ title: 'New project', presentation: 'modal' }} /><Stack.Screen name="project/[id]" options={{ title: 'Edit project', presentation: 'modal' }} /><Stack.Screen name="event/new" options={{ title: 'New event', presentation: 'modal' }} /><Stack.Screen name="event/[id]" options={{ title: 'Edit event', presentation: 'modal' }} /></Stack></ThemeProvider></AppDataProvider>;
+  return <AppDataProvider><NotificationProvider><ThemeProvider><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /><Stack.Screen name="project/new" options={{ title: 'New project', presentation: 'modal' }} /><Stack.Screen name="project/[id]" options={{ title: 'Edit project', presentation: 'modal' }} /><Stack.Screen name="event/new" options={{ title: 'New event', presentation: 'modal' }} /><Stack.Screen name="event/[id]" options={{ title: 'Edit event', presentation: 'modal' }} /></Stack></ThemeProvider></NotificationProvider></AppDataProvider>;
 }

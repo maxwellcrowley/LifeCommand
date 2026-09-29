@@ -16,11 +16,11 @@ export function ReminderSettingsCard({ settings, saving, save }: { settings: App
         {reminderDefaults.map(value => <Pressable key={value} disabled={saving} accessibilityRole="radio" accessibilityLabel={`${key === 'defaultTaskReminder' ? 'Default task reminder' : 'Default event reminder'}: ${value === 'off' ? 'Off' : reminderLabels[value]}`} aria-checked={settings[key] === value} accessibilityState={{ checked: settings[key] === value }} onPress={() => void save(key, value)} style={{ minHeight: 44, maxWidth: '100%', borderRadius: 10, padding: 12, backgroundColor: settings[key] === value ? colors.soft : colors.background }}><Label>{value === 'off' ? 'Off' : reminderLabels[value]}</Label></Pressable>)}
       </View>
     </View>)}
-    <Muted>Task and all-day timing starts at 09:00. Device notifications are not available yet.</Muted>
+    <Muted>Task and all-day timing starts at 09:00. Enable device alerts in Notifications above.</Muted>
   </Card>
   <Card title="Quiet hours">
     <Row><Label>Quiet hours enabled</Label><Switch accessibilityLabel="Quiet hours enabled" value={settings.quietHoursEnabled} disabled={saving} onValueChange={value => void save('quietHoursEnabled', value)} /></Row>
-    <Muted>Reminders still appear in Today during quiet hours. Notification-ready times move to the end of quiet hours; no device notifications are sent yet. Times use this device’s local clock. Matching start and end times mean no quiet interval.</Muted>
+    <Muted>Reminders still appear in Today during quiet hours. Device alerts move to the end of quiet hours when Respect quiet hours is on. Times use this device’s local clock. Matching start and end times mean no quiet interval.</Muted>
     {(['quietHoursStart', 'quietHoursEnd'] as const).map(key => {
       const label = key === 'quietHoursStart' ? 'Quiet hours start' : 'Quiet hours end';
       return <View key={key} style={{ gap: 8 }}>

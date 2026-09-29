@@ -18,6 +18,6 @@ export function ReminderEditor({ draft, onChange, disabled = false }: { draft: R
         <TextInput accessibilityLabel="Reminder time, HH:MM" editable={!disabled} value={draft.reminderClock} onChangeText={reminderClock => onChange({ ...draft, reminderClock })} placeholder="09:00" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} style={inputStyle} />
       </> : <Muted>Follows the scheduled date. Tasks and all-day events use 09:00. Undated tasks wait for a due date; choose custom to remind independently.</Muted>}
     </> : null}
-    <Muted>Reminders appear in Today. Device notifications are not available yet.</Muted>
+    <Muted>Reminders appear in Today. Enable device alerts in Settings → Notifications.</Muted>
   </View>;
 }

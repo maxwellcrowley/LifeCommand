@@ -1,5 +1,7 @@
 # STORY-013: Native Local Notifications
 
+Historical Slice 13 record. [Story 014](STORY-014_NOTIFICATION_TAP_ROUTING_AND_DEVICE_QA.md) adds item tap routing, renames the manual action to **Refresh notification schedule**, and supplies the current [native device QA runbook](../qa/NATIVE_NOTIFICATION_DEVICE_QA.md). Its tap behavior supersedes the platform-default limitation below.
+
 ## Implementation and Max's workflow
 
 On a compatible Android/iOS build, open **Settings → Notifications**, switch on **Enable native notifications**, then tap **Request permission**. Enabling alone does not prompt. Permission status is read from the OS and refreshes on return to the app. If denied, allow LifeCommand (and its Android reminder channel) in system Settings, return, and tap **Refresh notifications** if needed. Provisional iOS permission is labeled and may deliver quietly. In-app reminders always remain available.

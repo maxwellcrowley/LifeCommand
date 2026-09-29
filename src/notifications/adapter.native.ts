@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import type { NotificationAdapter, Permission } from './service';
+import type { NotificationResponseSource, NotificationTap } from './routing';
 
 const CHANNEL = 'lifecommand-reminders';
 // Lazy loading lets a build missing the native module report an actionable error
@@ -42,7 +43,23 @@ export const notificationAdapter: NotificationAdapter = {
     const api = await notifications();
     if (Platform.OS === 'android') await api.setNotificationChannelAsync(CHANNEL, { name: 'LifeCommand reminders', importance: api.AndroidImportance.DEFAULT, sound: 'default' });
     await api.scheduleNotificationAsync({ identifier: request.id,
-      content: { title: request.title, body: request.body, sound: 'default', data: { fingerprint: request.fingerprint } },
+      content: { title: request.title, body: request.body, sound: 'default', data: { ...request.data, fingerprint: request.fingerprint } },
       trigger: { type: api.SchedulableTriggerInputTypes.DATE, date: new Date(request.at), channelId: CHANNEL } });
   },
 };
+
+export async function loadNotificationResponses(): Promise<NotificationResponseSource | null> {
+  if (!notificationAdapter.available) return null;
+  const api = await notifications();
+  const tap = (response: import('expo-notifications').NotificationResponse): NotificationTap => ({
+    id: response.notification.request.identifier,
+    deliveredAt: response.notification.date,
+    defaultAction: response.actionIdentifier === api.DEFAULT_ACTION_IDENTIFIER,
+    data: response.notification.request.content.data,
+  });
+  return {
+    listen(listener) { const subscription = api.addNotificationResponseReceivedListener(response => listener(tap(response))); return () => subscription.remove(); },
+    last() { const response = api.getLastNotificationResponse(); return response ? tap(response) : null; },
+    clear() { api.clearLastNotificationResponse(); },
+  };
+}

@@ -1,5 +1,6 @@
 import type { AppData } from '../domain/models';
 import { deferForQuietHours, scheduleReminders } from '../domain/reminders';
+import type { NotificationPayload } from './routing';
 
 export const NOTIFICATION_SETTINGS_KEY = 'lifecommand:notifications:v1';
 export const NOTIFICATION_PREFIX = 'lifecommand:reminder:';
@@ -9,7 +10,7 @@ export const HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
 export type Permission = 'unavailable' | 'undetermined' | 'denied' | 'granted' | 'provisional' | 'ephemeral';
 export interface DevicePreferences { enabled: boolean; respectQuietHours: boolean }
 export const defaultPreferences: DevicePreferences = { enabled: false, respectQuietHours: true };
-export interface NotificationRequest { id: string; title: string; body: string; at: string; fingerprint: string }
+export interface NotificationRequest { id: string; title: string; body: string; at: string; fingerprint: string; data?: NotificationPayload }
 export interface PendingNotification { id: string; fingerprint?: string }
 export interface NotificationAdapter {
   available: boolean;
@@ -27,8 +28,9 @@ export function notificationPlan(data: AppData, preferences: DevicePreferences, 
   return scheduleReminders(data).map(reminder => {
     const at = preferences.respectQuietHours ? reminder.notificationReadyAt : reminder.reminderAt;
     const body = reminder.kind === 'task' ? 'Task reminder · Open LifeCommand to view or snooze.' : 'Event reminder · Open LifeCommand to view or snooze.';
-    return { id: NOTIFICATION_PREFIX + encodeURIComponent(reminder.key), title: reminder.title, body, at,
-      fingerprint: JSON.stringify([reminder.occurrenceId, at, reminder.title, body]) };
+    const payload: NotificationPayload = { version: 1, itemType: reminder.kind, itemId: reminder.itemId };
+    return { id: NOTIFICATION_PREFIX + encodeURIComponent(reminder.key), title: reminder.title, body, at, data: payload,
+      fingerprint: JSON.stringify([reminder.occurrenceId, at, reminder.title, body, payload]) };
   }).filter(request => Date.parse(request.at) > now.getTime() && Date.parse(request.at) <= now.getTime() + HORIZON_MS)
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id)).slice(0, MAX_PENDING);
 }

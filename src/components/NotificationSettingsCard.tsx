@@ -36,6 +36,6 @@ export function NotificationSettingsCard() {
     {notifications.available ? <Muted>{notifications.pending} upcoming reminders queued. Up to 48 reminders within 30 days; open LifeCommand regularly to refresh the queue.</Muted> : null}
     {notifications.testAt ? <Muted>Test scheduled: {new Date(notifications.testAt).toLocaleString()}</Muted> : null}
     {notifications.error ? <FormError>{`${notifications.error} In-app reminders are still available.`}</FormError> : null}
-    {button('Refresh notifications', notifications.refresh, false, false)}
+    {button('Refresh notification schedule', notifications.refresh, false, false)}
   </Card>;
 }

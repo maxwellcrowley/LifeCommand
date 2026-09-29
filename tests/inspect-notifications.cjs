@@ -50,7 +50,7 @@ async function main() {
     for (const label of ['Enable native notifications', 'Respect quiet hours']) {
       assert.equal(await evaluate(`(() => { const e=document.querySelector('[aria-label="${label}"]'); const r=e.getBoundingClientRect(); return (e.disabled || e.getAttribute('aria-disabled')==='true') && r.left >= 0 && r.right <= innerWidth; })()`), true);
     }
-    assert.equal(await evaluate(`[...document.querySelectorAll('[role=button]')].filter(e=>['Request permission','Test notification','Refresh notifications'].includes(e.innerText)).every(e=>e.getAttribute('aria-disabled')==='true' && e.getBoundingClientRect().height>=44)`), true);
+    assert.equal(await evaluate(`(() => { const buttons = [...document.querySelectorAll('[role=button]')].filter(e=>['Request permission','Test notification','Refresh notification schedule'].includes(e.innerText)); return buttons.length === 3 && buttons.every(e=>e.getAttribute('aria-disabled')==='true' && e.getBoundingClientRect().height>=44); })()`), true);
   }
   await evaluate(`document.querySelector('[aria-label="Enable native notifications"]').click(); [...document.querySelectorAll('[role=button]')].find(e=>e.innerText==='Test notification').click()`);
   assert.equal(await evaluate('window.notificationPrompts'), 0);

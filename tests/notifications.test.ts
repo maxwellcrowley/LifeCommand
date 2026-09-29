@@ -9,6 +9,7 @@ import { createExport, validateImport } from '../src/domain/transfer';
 import { persistedSnapshot } from '../src/domain/migrations';
 import { createRepository, STORAGE_KEY } from '../src/data/storage';
 import { NotificationService, notificationPlan, NOTIFICATION_SETTINGS_KEY, NOTIFICATION_PREFIX, TEST_ID, MAX_PENDING, type NotificationAdapter, type NotificationRequest, type Permission } from '../src/notifications/service';
+import { observeNotificationLifecycle } from '../src/notifications/lifecycle';
 
 const now = new Date('2026-09-28T10:00:00');
 const at = (clock: string) => new Date(`2026-09-28T${clock}:00`).toISOString();
@@ -47,9 +48,40 @@ test('task scheduling is idempotent across refresh and service restart with OS q
   const h = harness(); const data = fixture(); await h.service.update(data); await h.service.refresh();
   const request = [...h.pending.values()][0];
   assert.equal(request.title, 'Task alert'); assert.equal(request.at, at('11:00'));
+  assert.deepEqual(request.data, { version: 1, itemType: 'task', itemId: data.tasks[0].id });
   assert.equal(h.calls.filter(call => call.startsWith('schedule')).length, 1);
   await new NotificationService(h.adapter, h.storage, () => now).update(data);
   assert.equal(h.calls.filter(call => call.startsWith('schedule')).length, 1);
+});
+
+test('foreground lifecycle refreshes permissions and bounded queue without duplicate scheduling, and cleans up', async () => {
+  const h = harness(); const data = fixture(); const original = data.tasks[0];
+  data.tasks = Array.from({ length: 60 }, (_, i) => ({ ...original, id: String(i), reminderAt: new Date(now.getTime() + (i + 1) * 60_000).toISOString() }));
+  data.tasks.push({ ...original, id: 'outside-window', reminderAt: '2027-01-01T00:00:00Z' });
+  await h.service.update(data);
+  let listener!: (state: string) => void; let tick!: () => void; let removed = false; let stopped = false;
+  const appState = { currentState: 'background', addEventListener(_type: 'change', callback: (state: string) => void) { listener = callback; return { remove() { removed = true; } }; } };
+  const refreshes: Promise<void>[] = [];
+  const stop = observeNotificationLifecycle(appState, () => { const result = h.service.refresh(); refreshes.push(result); return result; }, {
+    start(callback, ms) { tick = callback; assert.equal(ms, 30_000); return () => { stopped = true; }; },
+  });
+  tick(); listener('inactive'); assert.equal(refreshes.length, 1);
+  appState.currentState = 'active'; listener('active'); listener('active'); tick();
+  await Promise.all(refreshes);
+  assert.equal(h.pending.size, MAX_PENDING); assert.equal(h.calls.filter(call => call.startsWith('schedule:')).length, MAX_PENDING);
+  assert.ok([...h.pending.values()].every(request => request.data?.itemId !== 'outside-window'));
+  h.setPermission('denied'); listener('active'); await Promise.all(refreshes); assert.equal(h.pending.size, 0);
+  assert.equal(h.calls.includes('request'), false);
+  stop(); assert.equal(removed, true); assert.equal(stopped, true);
+});
+
+test('legacy pending payloads upgrade once, then repeated foreground refresh retains new payloads', async () => {
+  const h = harness(); const data = fixture(); await h.service.update(data);
+  const request = [...h.pending.values()][0];
+  h.pending.set(request.id, { ...request, data: undefined, fingerprint: JSON.stringify(JSON.parse(request.fingerprint).slice(0, 4)) });
+  await Promise.all([h.service.refresh(), h.service.refresh(), h.service.refresh()]);
+  assert.equal(h.calls.filter(call => call.startsWith('schedule:')).length, 2);
+  assert.deepEqual(h.pending.get(request.id)?.data, { version: 1, itemType: 'task', itemId: data.tasks[0].id });
 });
 test('timed, all-day and family event reminders have distinct collection-qualified IDs', async () => {
   const h = harness(); const data = createDefaultAppData();

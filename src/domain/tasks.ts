@@ -49,13 +49,7 @@ export function getBacklogBySection(data: AppData) {
   return data.sections.map(section => ({ section, tasks: data.tasks.filter(task => task.sectionId === section.id && !task.dueDate && task.status !== 'complete' && task.status !== 'archived') })).sort((a, b) => a.section.order - b.section.order);
 }
 
-export function calculateProjectProgress(tasks: Task[], projectId: string, includeBacklogTasks = true) {
-  const included = tasks.filter(task => task.projectId === projectId && task.status !== 'archived' && (includeBacklogTasks || !!task.dueDate || task.status === 'complete'));
-  const complete = included.filter(task => task.status === 'complete');
-  const totalPoints = included.reduce((sum, task) => sum + task.storyPoints, 0);
-  const donePoints = complete.reduce((sum, task) => sum + task.storyPoints, 0);
-  return { total: included.length, complete: complete.length, totalPoints, donePoints, simple: included.length ? Math.round(complete.length / included.length * 100) : 0, weighted: totalPoints ? Math.round(donePoints / totalPoints * 100) : 0 };
-}
+export { calculateProjectProgress } from './projects';
 
 export type PushbackChoice = 'clean' | 'overdue' | 'backlog';
 

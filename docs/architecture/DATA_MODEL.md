@@ -39,6 +39,20 @@ Editor route keys qualify IDs as `local:<id>` or `family:<id>` to avoid legacy c
 
 Normalization adds `source: family` to old family records and applies the canonical family color. Legacy `calendarEvents` carrying `source: family` move into `familyEvents` with Max / Other defaults where the old model had no attribution/category; conflicting IDs receive a `recovered-` prefix until unique. Existing family attribution/category remain intact. This migration is idempotent and does not fabricate creation timestamps. Snapshot storage key and repository write queue remain unchanged.
 
+## Project management (Slice 8)
+
+Projects retain the existing `Project` shape and snapshot key; no migration is needed. `src/domain/projects.ts` owns creation, validated edits, lifecycle changes, active-project selection, task-link validation and progress. The provider runs project writes and task-link validation inside the existing serialized snapshot queue.
+
+- Name is required and trimmed. Description is optional text stored as a trimmed string (empty is allowed). Section is optional and must reference a current section when set; clearing it stores no section reference.
+- Status is `active`, `paused`, `complete`, or `archived`. New projects default to Active, tracking on, weighted progress off, default task points 1, and backlog inclusion on. Points must be finite and positive; fractions are allowed.
+- Editing preserves ID and creation timestamp. Update timestamps increase even within the same millisecond. Edits, archive and unarchive compare the expected saved timestamp inside the queue and reject stale or missing projects.
+- Archive sets status to Archived without changing tasks, links, points or settings. Unarchive explicitly restores Active; prior status is not stored. Marking a project Complete does not complete its tasks, and reaching 100% does not change project status. Project section changes do not move task sections.
+- Capture and task editors offer Active projects plus None. An existing task's inactive project is explicitly shown as its current link and can be retained, removed or replaced. New links to Paused, Complete or Archived projects are rejected at save time, including a project archived while a draft is open. Existing linked tasks remain visible in Today/Review according to their own status and dates.
+- Capture suggests the selected project's default points, falling back to the app default when unlinked. Once Max edits points, project selection preserves that explicit value. Provider creation also supplies project/app defaults when points are omitted. Editing or moving an existing task, or changing project defaults, never rewrites existing task points.
+- Progress is derived from current tasks on render, never persisted. Archived tasks are always excluded. With backlog inclusion off, undated incomplete tasks are excluded while dated tasks and completed tasks (including undated completions) count. Simple progress divides completed count by included count; weighted progress divides completed points by included points. Percentages round to the nearest integer; empty progress is 0. Tracking off hides the percentage without changing tasks or the other settings.
+
+Projects are grouped into Active, Paused and Completed; Archived is hidden behind Show archived projects. The editor shows saved progress and non-archived linked tasks, with links to their existing editors. Empty states distinguish no projects, no active projects, no visible linked tasks, and linked backlog tasks excluded from progress. Archived task restoration remains outside this slice.
+
 ## Task scheduling fields
 
 | Task field | Default / meaning |
@@ -114,7 +128,7 @@ Before replacing any changed snapshot (including additive legacy upgrades), the 
 
 Read failures propagate without writes. Backup-write failures leave the active original untouched. Repair-write failures retain the original and backup. The app exposes a retry action for I/O failures and a recovery notice for the current runtime. No automatic destructive reset occurs. Backup inspection/restoration currently requires developer tools; there is no recovery export/restore UI.
 
-Task edits, settings edits, and automatic rollover use the same queue. ThemeProvider reads AppDataProvider; appearance edits cannot overwrite concurrent task changes. Rollover changes and summary persist in one snapshot. Editors reject stale saved timestamps and offer reload. The queue is not a transaction across browser tabs or devices. Cross-tab coordination, versioned schema migration, backup management/export and archive restoration remain follow-up work.
+Task edits, settings edits, and automatic rollover use the same queue. ThemeProvider reads AppDataProvider; appearance edits cannot overwrite concurrent task changes. Rollover changes and summary persist in one snapshot. Editors reject stale saved timestamps and offer reload. The queue is not a transaction across browser tabs or devices. Cross-tab coordination, versioned schema migration, backup management/export and task/event archive restoration remain follow-up work.
 
 ## Explicit Start Fresh reset (Slice 7)
 

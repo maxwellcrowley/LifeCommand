@@ -7,6 +7,7 @@ import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, 
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
 import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
+import { changeProject, createProject, insertProject, validateTaskProject, type ProjectInput, type ProjectChanges } from '@/src/domain/projects';
 
 type AppDataValue = {
   data: AppData | null;
@@ -15,6 +16,8 @@ type AppDataValue = {
   retry: () => Promise<void>;
   startFresh: () => Promise<void>;
   resetVersion: number;
+  addProject: (input: ProjectInput) => Promise<void>;
+  editProject: (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => Promise<void>;
   addEvent: (input: EventInput) => Promise<void>;
   editEvent: (key: string, input: EventInput, expectedUpdatedAt?: string) => Promise<void>;
   archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
@@ -71,8 +74,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [commit]);
 
   const addTask = async (input: TaskInput) => {
-    const task = createTask(input);
-    await commit(current => ({ ...current, tasks: [task, ...current.tasks] }));
+    let task!: Task;
+    await commit(current => {
+      validateTaskProject(current.projects, input.projectId);
+      const project = current.projects.find(item => item.id === input.projectId);
+      task = createTask({ ...input, storyPoints: input.storyPoints ?? project?.defaultTaskPoints ?? current.settings.defaultStoryPoints });
+      return { ...current, tasks: [task, ...current.tasks] };
+    });
     return task;
   };
   const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => ({
@@ -80,6 +88,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     tasks: current.tasks.map(task => {
       if (task.id !== id) return task;
       if (expectedUpdatedAt && task.updatedAt !== expectedUpdatedAt) throw new Error('This task changed while you were editing. Reload the task before saving.');
+      validateTaskProject(current.projects, 'projectId' in changes ? changes.projectId : task.projectId, task.projectId);
       return updateTaskSchedule(task, changes, current.settings, choice);
     }),
   }));
@@ -92,10 +101,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const event = createEvent(input);
     await commit(current => insertEvent(current, event));
   };
+  const addProject = async (input: ProjectInput) => {
+    const project = createProject(input);
+    await commit(current => insertProject(current, project));
+  };
+  const editProject = async (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => commit(current => changeProject(current, id, changes, expectedUpdatedAt));
   const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
   const retry = () => commit(current => rolloverAppData(current, new Date()));
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, resetVersion, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
 }
 
 export function useAppData() {

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { AppData, AppSettings, Task } from '@/src/domain/models';
-import { changeAppData, getRecoveryNotice, resetAppData } from './repository';
+import { changeAppData, getRecoveryNotice, resetAppData, importAppData, restoreRecoveryBackup } from './repository';
 import { ResetCleanupError } from './storage';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { rolloverAppData } from '@/src/domain/rollover';
@@ -15,6 +15,8 @@ type AppDataValue = {
   recoveryNotice: string;
   retry: () => Promise<void>;
   startFresh: () => Promise<void>;
+  importData: (raw: string) => Promise<void>;
+  restoreBackup: (key: string, raw: string) => Promise<void>;
   resetVersion: number;
   addProject: (input: ProjectInput) => Promise<void>;
   editProject: (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => Promise<void>;
@@ -34,7 +36,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [resetVersion, setResetVersion] = useState(0);
   const resetting = useRef(false);
   const commit = useCallback(async (change: (current: AppData) => AppData) => {
-    if (resetting.current) throw new Error('Start Fresh is in progress. Please wait.');
+    if (resetting.current) throw new Error('Data replacement is in progress. Please wait.');
     try {
       const next = await changeAppData(change);
       setData(next);
@@ -45,6 +47,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw cause;
     }
   }, []);
+
+  const replaceData = async (operation: () => Promise<AppData>) => {
+    if (resetting.current) throw new Error('Data replacement is already in progress.');
+    resetting.current = true;
+    try {
+      const next = await operation();
+      setData(next); setError(''); setRecoveryNotice('');
+      setResetVersion(version => version + 1);
+    } finally { resetting.current = false; }
+  };
+  const importData = (raw: string) => replaceData(() => importAppData(raw));
+  const restoreBackup = (key: string, raw: string) => replaceData(() => restoreRecoveryBackup(key, raw));
 
   const startFresh = async () => {
     if (resetting.current) throw new Error('Start Fresh is already in progress.');
@@ -109,7 +123,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
   const retry = () => commit(current => rolloverAppData(current, new Date()));
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}>{children}</AppDataContext.Provider>;
 }
 
 export function useAppData() {

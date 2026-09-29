@@ -5,8 +5,8 @@ import { useAppData } from '@/src/data/useAppData';
 import { isDateKey } from '@/src/domain/dates';
 
 export default function NewEventScreen() {
-  const { data, error } = useAppData();
+  const { data, error, resetVersion } = useAppData();
   const { date } = useLocalSearchParams<{ date?: string }>();
   if (!data) return <Page title="New event" subtitle={error || 'Loading your calendar…'} />;
-  return <EventEditor initialDate={typeof date === 'string' && isDateKey(date) ? date : undefined} />;
+  return <EventEditor key={resetVersion} initialDate={typeof date === 'string' && isDateKey(date) ? date : undefined} />;
 }

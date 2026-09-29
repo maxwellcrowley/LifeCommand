@@ -6,6 +6,7 @@ import { ResetCleanupError } from '@/src/data/storage';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Card, Muted, Page } from './ui';
 import { FormError } from './TaskForm';
+import { DataTransferControls } from './DataTransferControls';
 
 export function DataManagementCard({ saving, onReset }: { saving: boolean; onReset: () => void }) {
   const { startFresh } = useAppData();
@@ -33,6 +34,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
   };
   const buttonStyle = { minHeight: 48, padding: 14, borderRadius: 12, borderWidth: 1, justifyContent: 'center' as const, alignItems: 'center' as const };
   return <Card title="Data Management">
+    <DataTransferControls disabled={saving || busy || confirming} onReplace={() => { onReset(); setDone(false); }} />
     <Muted>Clear local data and begin again with default sections and settings.</Muted>
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => { setError(''); setDone(false); setConfirming(true); }} style={{ ...buttonStyle, borderColor: colors.danger }}>
       <Text style={{ color: colors.danger, fontWeight: '700' }}>Start Fresh</Text>

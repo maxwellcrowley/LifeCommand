@@ -126,7 +126,7 @@ Only a missing storage key seeds demo tasks/events. Empty saved collections stay
 
 Before replacing any changed snapshot (including additive legacy upgrades), the repository writes its exact original text to a unique `lifecommand:data:v1:recovery:<timestamp>` key, adding a suffix on collision. Only after that backup succeeds does it persist normalized data. Semantic comparison ignores object property order; ordinary valid writes and subsequent normalized loads do not create backups. Backups are never automatically overwritten or pruned. They are local storage copies, not cloud backups; clearing app/browser storage removes them too.
 
-Read failures propagate without writes. Backup-write failures leave the active original untouched. Repair-write failures retain the original and backup. The app exposes a retry action for I/O failures and a recovery notice for the current runtime. No automatic destructive reset occurs. Backup inspection/restoration currently requires developer tools; there is no recovery export/restore UI.
+Read failures propagate without writes. Backup-write failures leave the active original untouched. Repair-write failures retain the original and backup. The app exposes a retry action for I/O failures and a recovery notice for the current runtime. No automatic destructive reset occurs. Settings now exposes recovery inspection and validated restoration (Slice 9 below).
 
 Task edits, settings edits, and automatic rollover use the same queue. ThemeProvider reads AppDataProvider; appearance edits cannot overwrite concurrent task changes. Rollover changes and summary persist in one snapshot. Editors reject stale saved timestamps and offer reload. The queue is not a transaction across browser tabs or devices. Cross-tab coordination, versioned schema migration, backup management/export and task/event archive restoration remain follow-up work.
 
@@ -155,3 +155,53 @@ Today uses exact local-date filtering for events, with local and family cards se
 ## Seed data
 
 Seed values use relative dates so the dashboard remains populated when first opened. Samples are illustrative and must not be interpreted as user data.
+
+## Export, import and recovery restoration (Slice 9)
+
+`src/domain/transfer.ts` defines the portable format and strict validation; repository operations in `src/data/storage.ts` use the existing serialized queue and AsyncStorage adapter. The active snapshot remains an unwrapped `AppData` under `lifecommand:data:v1`. No data-key migration or dependency is needed.
+
+### Portable JSON format
+
+```json
+{
+  "format": "lifecommand-export",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-28T12:00:00.000Z",
+  "data": {
+    "sections": [],
+    "tasks": [],
+    "projects": [],
+    "calendarEvents": [],
+    "familyEvents": [],
+    "settings": {}
+  }
+}
+```
+
+`schemaVersion` is the app data version, independent of the app package version. Exports include all saved records (including archived records), all settings, task rollover counters/dates and the optional `data.lastRolloverSummary`. The timestamp is an ISO instant. Recovery copies themselves are not embedded in exports. Exports are unencrypted JSON; the browser downloads `lifecommand-<timestamp>.json` without uploading it. Native file export/picking/sharing is deferred; native recovery browsing/restoration uses the same storage/domain layer.
+
+Import requires the envelope, exact numeric version `1`, a valid export timestamp, all five collection arrays, and a settings object. Raw snapshots are accepted only from local legacy recovery keys, not from external import files. Unknown/incompatible versions are rejected rather than guessed. Files/text are limited to 10 MiB of UTF-8 (the UI says 10 MB); an optional UTF-8 BOM is accepted. Larger exports require future large-file support to import.
+
+Every record must be an object with a unique nonempty ID within its collection and a nonempty title/name. Tasks require a section reference; events require a real local date. The validator compares supplied fields against the shared normalization rules and rejects invalid types, enums, dates/times, counters/points, dangling references, duplicate IDs, invalid rollover summaries, and unknown data fields. Supplied audit timestamps must be ISO instants with real date parts. No bad record is dropped during import. Empty optional description/location/notes/reference strings may normalize to absence. Missing optional fields use existing deterministic defaults (including epoch audit sentinels when required history is absent); missing event audit timestamps remain absent. Empty sections receive standard sections. Missing collections or null settings do not become an empty replacement. A preview indicates when defaults apply.
+
+### Recovery format and ordering
+
+Existing normalization/repair copies retain their exact raw text and timestamp-based key format. New replacement backups are one JSON value under a unique `lifecommand:data:v1:recovery:<epoch-milliseconds>` key; collisions append `-1` until unused:
+
+```json
+{
+  "format": "lifecommand-recovery",
+  "schemaVersion": 1,
+  "createdAt": "2026-09-28T12:00:00.000Z",
+  "reason": "before-import",
+  "raw": "<exact previous active snapshot text>"
+}
+```
+
+`reason` is `before-import` or `before-restore`. Storing metadata and the exact original text in one value avoids a partially written sidecar. Legacy copies derive timestamps from their key and display “Storage repair or upgrade (legacy copy)”; malformed keys show timestamp unavailable. Backups are listed newest-key-first, with reason/timestamp and validation errors where applicable. Invalid, incompatible or lossy legacy snapshots remain stored and visible but cannot be restored automatically; no partial salvage is silently applied. The normal startup repair path remains more permissive than explicit import/restore.
+
+Import validates again inside the queue, reads the latest active raw snapshot, awaits its recovery write, then writes the validated replacement. Restore re-reads the selected key, requires the exact bytes shown in its preview, validates through the same `validateSnapshot` path, and performs the same backup-before-replacement sequence. Missing/changed backups require a fresh preview. A missing current active key requires reload before replacement. Read or backup failures prevent replacement; active-write failure preserves the recovery copy and allows retry. Retries may create additional copies; none are pruned or overwritten. Snapshot replacement is one active-key write, but AsyncStorage does not provide a multi-key transaction or protection against another browser runtime.
+
+Settings previews collection counts (including archived items), appearance and rollover preferences, and export time for imported files. Explicit confirmation warns about full replacement, unsaved drafts, local backup retention, and closing other tabs. The provider blocks new mutations during replacement, publishes state only after the write succeeds, and increments the existing reset version to clear Capture and mounted task/event/project drafts; Settings clears its time draft. Automatic rollover resumes through the normal timer/foreground/startup checks.
+
+Recovery copies remain on the same browser/device, unencrypted. Clearing app/browser storage or Start Fresh removes them; only an exported file saved outside that storage survives. There is no backup deletion/pruning, cloud sync, cross-tab locking, authentication, external calendar integration, or notification work in this slice.

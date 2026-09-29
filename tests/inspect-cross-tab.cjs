@@ -51,7 +51,7 @@ async function main() {
   const prefix = key + ':recovery:';
   const data = require('../.test-build/src/domain/normalize.js').normalizeAppData(seedData);
   data.settings.autoRollover = false;
-  const raw = JSON.stringify({ ...data, schemaVersion: 2, revision: 1 });
+  const raw = JSON.stringify({ ...data, schemaVersion: 3, revision: 1 });
   await a.go('/settings', 'Data Management');
   await a.evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(raw)})`);
   await a.go('/settings', 'Data Management');

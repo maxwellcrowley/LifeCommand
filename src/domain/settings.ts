@@ -2,6 +2,9 @@ import { reminderDefaults } from './reminders';
 import type { AppSettings } from './models';
 
 export const defaultSettings: AppSettings = {
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '07:00',
   defaultTaskReminder: 'off',
   defaultEventReminder: 'off',
   appearance: 'system',
@@ -34,6 +37,9 @@ export function normalizeSettings(value: unknown): AppSettings {
     if (typeof settings[key] === typeof defaultSettings[key]) Object.assign(normalized, { [key]: settings[key] });
   }
   normalized.rolloverTime = isRolloverTime(normalized.rolloverTime) ? normalized.rolloverTime : '00:00';
+  for (const key of ['quietHoursStart', 'quietHoursEnd'] as const) {
+    if (!isRolloverTime(normalized[key])) normalized[key] = defaultSettings[key];
+  }
   if (!['system', 'light', 'dark'].includes(normalized.appearance)) normalized.appearance = 'system';
   if (!Number.isFinite(normalized.defaultStoryPoints) || normalized.defaultStoryPoints <= 0) normalized.defaultStoryPoints = 1;
   for (const key of Object.keys(ambientChoices) as (keyof typeof ambientChoices)[]) {
@@ -63,6 +69,8 @@ export function isAmbientLimit(value: unknown): value is number {
 }
 
 export function validateAmbientSetting(key: keyof AppSettings, value: unknown): void {
+  if ((key === 'quietHoursStart' || key === 'quietHoursEnd') && (typeof value !== 'string' || !isRolloverTime(value))) throw Error('Use HH:MM in 24-hour time for quiet hours.');
+  if (key === 'quietHoursEnabled' && typeof value !== 'boolean') throw Error('Quiet hours must be on or off.');
   if ((key === 'defaultTaskReminder' || key === 'defaultEventReminder') && !(reminderDefaults as readonly unknown[]).includes(value)) throw Error('Choose a valid reminder default.');
   if ((key === 'ambientMaxTasks' || key === 'ambientMaxEvents') && !isAmbientLimit(value)) throw new Error('Display limits must be whole numbers from 1 to 20.');
   if (key in ambientChoices && !(ambientChoices[key as keyof typeof ambientChoices] as readonly unknown[]).includes(value)) throw new Error('Choose a valid display option.');

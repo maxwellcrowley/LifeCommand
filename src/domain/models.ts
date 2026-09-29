@@ -6,7 +6,14 @@ export interface Section { id: string; name: SectionName; color: string; order: 
 export type ReminderOffset = 'at-time' | '15-minutes' | '1-hour' | 'morning-of' | 'evening-before';
 export type ReminderDefault = 'off' | ReminderOffset;
 // Optional on input/legacy records; normalized storage always supplies enabled and offset.
-export interface ReminderFields { reminderEnabled?: boolean; reminderAt?: string; reminderOffset?: ReminderOffset }
+export interface ReminderFields {
+  reminderEnabled?: boolean; reminderAt?: string; reminderOffset?: ReminderOffset;
+  lastReminderAcknowledgedAt?: string;
+  reminderDismissedForOccurrence?: string;
+  snoozedUntil?: string;
+  reminderSnoozedForOccurrence?: string;
+}
+export interface QuietHoursSettings { quietHoursEnabled: boolean; quietHoursStart: string; quietHoursEnd: string }
 export interface Task extends ReminderFields { id: string; title: string; description?: string; sectionId: string; projectId?: string; status: TaskStatus; priority: Priority; dueDate?: string; originalDueDate?: string; completedAt?: string; createdAt: string; updatedAt: string; owner: TaskOwner; storyPoints: number; rolloverCount: number; manuallyDeferredCount: number; lastRolledOverAt?: string; lastRolloverDate?: string; tags?: string[] }
 export interface Project { id: string; name: string; description: string; sectionId?: string; status: 'active' | 'paused' | 'complete' | 'archived'; trackCompletion: boolean; useWeightedProgress: boolean; defaultTaskPoints: number; includeBacklogTasks: boolean; createdAt: string; updatedAt: string }
 export type EventSource = 'work' | 'personal' | 'army' | 'family';
@@ -28,6 +35,6 @@ export interface AmbientSettings {
   ambientMaxTasks: number;
   ambientMaxEvents: number;
 }
-export interface AppSettings extends AmbientSettings { defaultTaskReminder: ReminderDefault; defaultEventReminder: ReminderDefault; appearance: 'system' | 'light' | 'dark'; rolloverTime: string; autoRollover: boolean; raiseMissedTasksToHigh: boolean; preserveOriginalDueDate: boolean; addRolloverCount: boolean; moveIncompleteTasksToNextDay: boolean; defaultStoryPoints: number; ambientDisplayEnabled: boolean }
+export interface AppSettings extends AmbientSettings, QuietHoursSettings { defaultTaskReminder: ReminderDefault; defaultEventReminder: ReminderDefault; appearance: 'system' | 'light' | 'dark'; rolloverTime: string; autoRollover: boolean; raiseMissedTasksToHigh: boolean; preserveOriginalDueDate: boolean; addRolloverCount: boolean; moveIncompleteTasksToNextDay: boolean; defaultStoryPoints: number; ambientDisplayEnabled: boolean }
 export interface RolloverSummary { rolloverDate: string; performedAt: string; movedTaskIds: string[] }
 export interface AppData { sections: Section[]; tasks: Task[]; projects: Project[]; calendarEvents: CalendarEvent[]; familyEvents: FamilyEvent[]; settings: AppSettings; lastRolloverSummary?: RolloverSummary }

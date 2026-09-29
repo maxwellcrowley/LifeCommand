@@ -69,7 +69,7 @@ test('malformed legacy data repairs predictably and validates; malformed current
 });
 
 test('future and malformed versions block load, reset, import and save without any writes', async () => {
-  for (const version of [3, 99, '1', null, -1]) {
+  for (const version of [4, 99, '1', null, -1]) {
     const raw = JSON.stringify({ ...createDefaultAppData(), schemaVersion: version, revision: 1 });
     const mem = fixture(raw); const repo = mem.repo();
     for (const action of [() => repo.loadAppData(), () => repo.resetAppData(), () => repo.saveAppData(createDefaultAppData()), () => repo.importAppData(JSON.stringify(createExport(createDefaultAppData())))]) {
@@ -129,7 +129,7 @@ test('failed writes leave marker unchanged and permit retry; no-op batches do no
 test('unmarked legacy writers and external removal are detected; exports omit local metadata', async () => {
   const mem = fixture(); const repo = mem.repo(); await repo.loadAppData();
   const exported = JSON.parse(await repo.exportAppData());
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(exported.schemaVersion, 3);
   assert.equal(exported.data.revision, undefined);
   assert.deepEqual(validateImport(JSON.stringify(exported)).data, createDefaultAppData());
   mem.values.set(STORAGE_KEY, JSON.stringify(createDefaultAppData()));

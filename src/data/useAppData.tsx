@@ -6,7 +6,7 @@ import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError } from './storage';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
-import { applyReminderDefault } from '@/src/domain/reminders';
+import { applyReminderDefault, changeReminder, type ReminderAction, type ScheduledReminder } from '@/src/domain/reminders';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
 import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
@@ -26,6 +26,7 @@ type AppDataValue = {
   addEvent: (input: EventInput) => Promise<void>;
   editEvent: (key: string, input: EventInput, expectedUpdatedAt?: string) => Promise<void>;
   archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
+  actOnReminder: (reminder: ScheduledReminder, action: ReminderAction) => Promise<void>;
   addTask: (input: TaskInput) => Promise<Task>;
   editTask: (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
@@ -140,6 +141,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const editProject = async (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => commit(current => changeProject(current, id, changes, expectedUpdatedAt));
   const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
+  const actOnReminder = async (reminder: ScheduledReminder, action: ReminderAction) => commit(current => changeReminder(current, reminder, action, new Date()));
   const retry = async () => {
     if (resetting.current) return;
     resetting.current = true;
@@ -152,7 +154,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

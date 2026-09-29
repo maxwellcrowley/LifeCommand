@@ -1,6 +1,6 @@
 # Local Data Model
 
-Slice 11 adds reminders and advances local/portable data to schema 2. The final section defines the current reminder and persistence contract; earlier slice descriptions retain their historical context.
+Slice 12 adds reminder acknowledgement, snooze and quiet hours and advances local/portable data to schema 3. The final section defines the current reminder and persistence contract; earlier slice descriptions retain their historical context.
 
 LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
 
@@ -236,7 +236,7 @@ Storage events for the active key (including storage clear), focus, visibility a
 Guarantees cover cooperating tabs on the same origin, not other devices. Old deployed builds/extensions/manual edits do not honor Web Locks: changed bytes are detected, but those writers can still overwrite outside the protocol. Refresh old builds once when deploying this slice. Reset cleanup is still a non-atomic multi-key operation with the existing partial-cleanup error/retry behavior. No cloud sync, auth, notifications or calendar integration is added.
 
 
-## Reminders and notification-ready scheduling (Slice 11, current contract)
+## Reminders and notification-ready scheduling (Slice 11, historical foundation)
 
 Local snapshots now use `schemaVersion: 2` with the existing positive `revision` and `lifecommand:data:v1` storage key. Portable exports also use version 2; imports accept versions 1 and 2. Recovery **envelope** version remains 1 because its exact-raw-text wrapper has not changed. Its payload can be legacy, schema 1, or schema 2. Future local/export/payload versions still reject before writes.
 
@@ -275,3 +275,51 @@ All reminder/default edits use the existing provider/repository queue, Web Lock,
 ### Native delivery boundary
 
 Native delivery is deferred. SDK 57 provides local notification APIs, but this repository has no `expo-notifications` dependency, config plugin or tested native delivery adapter. A future adapter should request permission only after opt-in, reconcile the future descriptors with OS requests, update content when titles change, cancel removed/completed/archived/disabled occurrences, and reconcile after edits, rollover, timezone changes, reload, reset/import/restore and foreground activation. Due reminders should stay in-app rather than replaying an unbounded missed-alert backlog. Delivery identifiers/permission state belong to the installation, not portable exports. Test Android channels/permissions and iOS authorization, scheduling limits, force-close/reboot and deep links in development builds. See Story 011 for verification and remaining work.
+
+
+## Reminder acknowledgement, snooze and quiet hours (Slice 12, current contract)
+
+This section supersedes Slice 11's occurrence identity, dismissal and quiet-hours behavior. Local snapshots and portable exports use **schema 3**. The storage key, positive revision, backup ordering and Web Lock protocol are unchanged. Imports accept export versions 1, 2 and 3. Recovery envelopes remain version 1; payloads support historical versions through schema 3. Future versions still block before writes.
+
+### Persisted state
+
+Tasks, local events and family events share these additional optional `ReminderFields`. Missing fields stay absent; migration never invents interaction history.
+
+| Field | Meaning |
+| --- | --- |
+| `lastReminderAcknowledgedAt` | Absolute ISO instant of the latest explicit acknowledgement, retained across edits |
+| `reminderDismissedForOccurrence` | Opaque occurrence identity suppressed by that acknowledgement |
+| `snoozedUntil` | Absolute ISO instant selected by the latest snooze; acknowledgement clears it |
+| `reminderSnoozedForOccurrence` | Occurrence identity to which the snooze applies; acknowledgement clears it |
+
+A bounded last-acknowledgement record provides lightweight history. There is no growing action log or delivered-notification history. Strict local/import validation rejects invalid supplied timestamps and empty/non-string occurrence tokens. Legacy version-0 normalization omits invalid state. Tokens are opaque nonempty text; a token that does not match the current occurrence has no scheduling effect.
+
+Occurrence identity encodes the collection-qualified key, due/event date (or null), event start time (or null), reminder offset and canonical base reminder instant. Title and audit edits leave identity unchanged. Due-date changes, rollover, event date/time changes, changed reminder timing and local/family collection conversion produce a different occurrence, even when a custom reminder retains the same absolute instant. Old acknowledgement/snooze markers remain stored but apply only to their matching identity. Returning to the exact saved occurrence can therefore restore its prior dismissal or snooze; merely toggling reminders off/on does not erase acknowledgement. Completion/archive exclusions always take precedence, and reopening the same acknowledged occurrence does not revive it.
+
+### Pure calculation and actions
+
+`reminderTime` retains the Slice 11 base timing rules: tasks/all-day events anchor at 09:00, timed events at their start, and custom reminders can apply to undated tasks. `reminderOccurrenceId`, `snoozeUntil`, `deferForQuietHours`, `scheduleReminders`, `computeReminders`, and `changeReminder` are pure domain functions with no native APIs or persistence side effects.
+
+`changeReminder(data, expectedDescriptor, action, now)` accepts Acknowledge, 15 minutes, 1 hour, or tomorrow morning. It checks the current collection-qualified occurrence and `updatedAt` against the descriptor inside the existing queued mutation. Missing, excluded, changed or already-acknowledged reminders reject. A successful action updates only reminder state and a strictly increasing item `updatedAt`, so an editor opened before that action cannot overwrite it. It does not complete tasks, change due dates, or archive events. Provider/repository queues, exact snapshot/revision checks and cross-tab reload guards remain authoritative. Duplicate UI taps are blocked synchronously; failed writes retain the original state and permit retry.
+
+Snooze 15 minutes/1 hour adds elapsed minutes to the action's current time. Tomorrow morning means **09:00 on the next local calendar day**, independent of quiet-hours end. That choice is resolved once to an absolute instant and persists across restarts/timezone changes. Calendar arithmetic handles DST, month/year and leap-day boundaries. Snooze state only applies to its saved occurrence; date changes and rollover recalculate a new occurrence instead of carrying old snoozes forward.
+
+Descriptors now expose `baseReminderAt`, effective in-app `reminderAt`, `notificationReadyAt`, optional applicable `snoozedUntil`, and `updatedAt`, in addition to existing routing/title/key fields. Effective time is the later of base time and matching snooze time. Acknowledged occurrences produce no descriptor. `computeReminders(data, now)` partitions by effective time: due is inclusive (`<= now`), next is strictly future. Snoozed items appear in next until expiry, then return to due. Expiry causes no writes. Today uses its existing 15-second foreground clock and refreshes on activation; there is no background execution promise. Initial list limits remain five due and three next, with Show all.
+
+### Quiet hours
+
+| AppSettings field | Default / validation |
+| --- | --- |
+| `quietHoursEnabled` | `false`; boolean |
+| `quietHoursStart` | `22:00`; local 24-hour `HH:MM` |
+| `quietHoursEnd` | `07:00`; local 24-hour `HH:MM` |
+
+Settings exposes a switch and individually saved start/end inputs with validation, saved values and existing write-error handling. Quiet-hours drafts remount on reset/import/restore and cross-tab reload, using the existing replacement markers.
+
+Quiet hours **never hide in-app reminders**. They defer only `notificationReadyAt`, calculated from effective reminder time. Start is inclusive, end exclusive; overnight intervals cross the local calendar date. For 22:00 to 07:00, a 23:00 reminder stays due in-app at 23:00 and becomes notification-ready at 07:00 the next day. Snoozing to 23:15 remains visible as snoozed until 23:15 and retains 07:00 notification readiness. Matching start/end clocks mean an empty interval. Disabling quiet hours leaves notification-ready time equal to effective time.
+
+Quiet end uses a local calendar clock across DST. Nonexistent clocks resolve forward; ambiguous clocks use the earlier instance unless it has already passed, in which case deferral uses the later instance. Custom and snooze instants stay absolute; quiet-hour interpretation follows the current device timezone. Derived notification times are never persisted. A future adapter must reconcile against `notificationReadyAt` and independently filter out past delivery times; `next` remains an in-app list, not the notification adapter's entire queue. No OS requests, permission prompts or delivery state are added here.
+
+### Migration and verification
+
+Schema 2 to 3 uses strict additive normalization: preserve existing reminders, records and settings; supply disabled quiet hours and valid default clocks; leave new item state absent. Version 1 also receives Slice 11 reminder defaults. Version 0 retains its established repair path. Exact old bytes are backed up before the upgraded active write; revision advances once; repeated loads are idempotent. Schema-3 export/import retains acknowledgement and snooze state. See [Story 012](../stories/STORY-012_REMINDER_SNOOZE_AND_QUIET_HOURS.md) for exact verification commands, browser coverage and remaining work.

@@ -42,7 +42,7 @@ export function createEvent(input: EventInput, now = new Date()): LocalEvent {
 export function updateEvent(event: LocalEvent, input: EventInput, now = new Date()): LocalEvent {
   if (event.archivedAt) throw new Error('Archived events cannot be edited.');
   // A full editable draft is required; identity and audit fields remain protected.
-  const next = createEvent({ reminderEnabled: event.reminderEnabled, reminderOffset: event.reminderOffset, reminderAt: event.reminderAt, ...input }, now);
+  const next = createEvent({ ...normalizeReminder({ ...event }), ...input }, now);
   const previousTimestamp = Date.parse(event.updatedAt ?? '');
   const timestamp = Math.max(now.getTime(), Number.isFinite(previousTimestamp) ? previousTimestamp + 1 : 0);
   return { ...next, id: event.id, createdAt: event.createdAt, updatedAt: new Date(timestamp).toISOString() };

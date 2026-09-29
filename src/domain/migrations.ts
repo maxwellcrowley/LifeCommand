@@ -3,8 +3,9 @@ import { normalizeAppData } from './normalize';
 import { validateSnapshot } from './transfer';
 
 // Version 0 is unversioned data; version 1 predates reminders.
-// Version 1 -> 2 uses strict additive normalization (reminders off).
-export const CURRENT_SCHEMA_VERSION = 2;
+// Versions 1 -> 2 -> 3 use strict additive normalization: reminders and quiet
+// hours default off; absent occurrence state stays absent. No history is invented.
+export const CURRENT_SCHEMA_VERSION = 3;
 export interface PersistedSnapshot extends AppData {
   schemaVersion: number;
   revision: number;

@@ -141,7 +141,7 @@ test('version 1 local data and exports upgrade with reminders off, exact backup 
   assert.equal(migrated.tasks[0].reminderEnabled, false); assert.equal(migrated.calendarEvents[0].reminderEnabled, false);
   assert.equal(migrated.settings.defaultTaskReminder, 'off'); assert.equal(migrated.settings.defaultEventReminder, 'off');
   assert.ok(writes[0].startsWith(RECOVERY_PREFIX)); assert.equal(values.get(writes[0]), raw);
-  assert.equal(JSON.parse(values.get(STORAGE_KEY)!).schemaVersion, 2); assert.equal(JSON.parse(values.get(STORAGE_KEY)!).revision, 9);
+  assert.equal(JSON.parse(values.get(STORAGE_KEY)!).schemaVersion, 3); assert.equal(JSON.parse(values.get(STORAGE_KEY)!).revision, 9);
   await repo.loadAppData(); assert.equal(writes.length, 2);
   assert.deepEqual(migrateSnapshot(persistedSnapshot(migrated, 9)), migrated);
   const portable = validateImport(JSON.stringify({ format: 'lifecommand-export', schemaVersion: 1, exportedAt: instant('2026-09-28'), data: old }));
@@ -149,12 +149,12 @@ test('version 1 local data and exports upgrade with reminders off, exact backup 
   assert.deepEqual((await repo.previewRecoveryBackup(writes[0])).data, migrated);
 });
 
-test('version 2 exports preserve reminders/defaults and future versions still reject', () => {
+test('version 3 exports preserve reminders/defaults and future versions still reject', () => {
   const data = fixture(); data.tasks[0].reminderAt = instant('2026-09-29'); data.settings.defaultEventReminder = '1-hour';
   const exported = createExport(data);
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(exported.schemaVersion, 3);
   assert.deepEqual(validateImport(JSON.stringify(exported)).data, normalizeAppData(data));
-  assert.throws(() => validateImport(JSON.stringify({ ...exported, schemaVersion: 3 })), /Unsupported data version/);
+  assert.throws(() => validateImport(JSON.stringify({ ...exported, schemaVersion: 4 })), /Unsupported data version/);
 });
 
 test('reminder writes retain repository stale-tab protection and failed writes can retry', async () => {

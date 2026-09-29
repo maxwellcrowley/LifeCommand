@@ -1,3 +1,5 @@
+import { ReminderEditor } from './ReminderEditor';
+import { applyReminderDefault, reminderFromDraft, reminderToDraft, type ReminderDraft } from '@/src/domain/reminders';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, TextInput, View } from 'react-native';
@@ -9,13 +11,13 @@ import type { EventSource, FamilyCategory, LocalEvent } from '@/src/domain/model
 import { DateEntry } from './DateEntry';
 import { Card, Label, Muted, Page } from './ui';
 
-type Draft = { title: string; date: string; startTime: string; endTime: string; location: string; notes: string; source: EventSource; addedBy: 'Max' | 'Kellyn'; category: FamilyCategory };
-const toDraft = (event?: LocalEvent, date?: string): Draft => ({ title: event?.title ?? '', date: event?.date ?? date ?? localDateKey(new Date()), startTime: event?.startTime ?? '', endTime: event?.endTime ?? '', location: event?.location ?? '', notes: event?.notes ?? '', source: event?.source ?? 'personal', addedBy: event?.source === 'family' ? event.addedBy : 'Max', category: event?.source === 'family' ? event.category : 'Other' });
+type Draft = ReminderDraft & { title: string; date: string; startTime: string; endTime: string; location: string; notes: string; source: EventSource; addedBy: 'Max' | 'Kellyn'; category: FamilyCategory };
+const toDraft = (event?: LocalEvent, date?: string): Draft => ({ ...reminderToDraft(event ?? {}), title: event?.title ?? '', date: event?.date ?? date ?? localDateKey(new Date()), startTime: event?.startTime ?? '', endTime: event?.endTime ?? '', location: event?.location ?? '', notes: event?.notes ?? '', source: event?.source ?? 'personal', addedBy: event?.source === 'family' ? event.addedBy : 'Max', category: event?.source === 'family' ? event.category : 'Other' });
 
 export function EventEditor({ event, initialDate }: { event?: LocalEvent; initialDate?: string }) {
-  const { addEvent, editEvent, archiveEvent } = useAppData();
+  const { data, addEvent, editEvent, archiveEvent } = useAppData();
   const { colors } = useAppTheme();
-  const [draft, setDraft] = useState(() => toDraft(event, initialDate));
+  const [draft, setDraft] = useState(() => ({ ...toDraft(event, initialDate), ...(!event ? reminderToDraft(applyReminderDefault({}, data?.settings.defaultEventReminder ?? 'off')) : {}) }));
   const [snapshot, setSnapshot] = useState(event);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -34,7 +36,7 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
     try {
       if (archive && snapshot) await archiveEvent(eventKey(snapshot), snapshot.updatedAt);
       else {
-        const common = { title: draft.title, date: draft.date, startTime: draft.startTime, endTime: draft.endTime, location: draft.location, notes: draft.notes };
+        const common = { ...reminderFromDraft(draft), title: draft.title, date: draft.date, startTime: draft.startTime, endTime: draft.endTime, location: draft.location, notes: draft.notes };
         const input: EventInput = draft.source === 'family' ? { ...common, source: 'family', addedBy: draft.addedBy, category: draft.category } : { ...common, source: draft.source };
         if (snapshot) await editEvent(eventKey(snapshot), input, snapshot.updatedAt);
         else await addEvent(input);
@@ -51,6 +53,7 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
       {draft.source === 'family' ? <><Muted>Added by</Muted>{choices('addedBy', ['Max', 'Kellyn'])}<Muted>Family category</Muted>{choices('category', familyCategories)}</> : null}
       <Muted>Leave both times blank for an all-day event. Times use 24-hour HH:MM on the selected date.</Muted>
       {field('startTime', 'Start time · optional', '09:00')}{field('endTime', 'End time · optional', '10:00')}
+      <ReminderEditor draft={draft} disabled={saving} onChange={reminder => setDraft(current => ({ ...current, ...reminder }))} />
       {field('location', 'Location · optional')}{field('notes', 'Notes · optional')}
     </Card>
     {stale ? <Card><Muted>This event changed. Reload its saved details before continuing.</Muted><Pressable disabled={saving} accessibilityRole="button" onPress={() => { setSnapshot(event); setDraft(toDraft(event)); setError(''); setConfirmArchive(false); }} style={{ padding: 12 }}><Label>Reload event</Label></Pressable></Card> : null}

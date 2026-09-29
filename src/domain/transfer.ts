@@ -2,11 +2,11 @@ import type { AppData } from './models';
 import { normalizeAppData } from './normalize';
 import { isDateKey } from './dates';
 
-export const DATA_VERSION = 1;
+export const DATA_VERSION = 2;
 export const MAX_TRANSFER_BYTES = 10 * 1024 * 1024;
 export interface DataExport {
   format: 'lifecommand-export';
-  schemaVersion: 1;
+  schemaVersion: 2;
   exportedAt: string;
   data: AppData;
 }
@@ -41,7 +41,7 @@ function compareSupplied(input: unknown, normalized: unknown, path: string): voi
   } else if (input && typeof input === 'object') {
     const target = object(normalized, path);
     for (const [key, value] of Object.entries(input)) {
-      if (value !== undefined && ['createdAt', 'updatedAt', 'completedAt', 'archivedAt', 'lastRolledOverAt', 'performedAt'].includes(key)) timestamp(value, `${path}.${key}`);
+      if (value !== undefined && ['createdAt', 'updatedAt', 'completedAt', 'archivedAt', 'lastRolledOverAt', 'performedAt', 'reminderAt'].includes(key)) timestamp(value, `${path}.${key}`);
       compareSupplied(value, Object.hasOwn(target, key) ? target[key] : undefined, `${path}.${key}`);
     }
   } else if (input !== normalized) {
@@ -79,7 +79,7 @@ export function validateSnapshot(value: unknown): ImportPreview {
 export function validateImport(raw: string): ImportPreview {
   const envelope = object(parseTransferJSON(raw), 'Export');
   if (envelope.format !== 'lifecommand-export') throw Error('Choose a LifeCommand export (format: lifecommand-export).');
-  if (envelope.schemaVersion !== DATA_VERSION) throw Error(`Unsupported data version ${String(envelope.schemaVersion)}. This app supports version ${DATA_VERSION}; use a compatible LifeCommand release.`);
+  if (envelope.schemaVersion !== 1 && envelope.schemaVersion !== DATA_VERSION) throw Error(`Unsupported data version ${String(envelope.schemaVersion)}. This app supports version ${DATA_VERSION}; use a compatible LifeCommand release.`);
   timestamp(envelope.exportedAt, 'exportedAt');
   return { ...validateSnapshot(envelope.data), exportedAt: envelope.exportedAt as string };
 }

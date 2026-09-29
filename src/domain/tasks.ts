@@ -1,4 +1,5 @@
 import type { AppData, AppSettings, Priority, Task, TaskOwner, TaskStatus } from './models';
+import { normalizeReminder, validateReminder } from './reminders';
 import { localDateKey } from './dates';
 
 export type TaskInput = Pick<Task, 'title' | 'sectionId'> & Partial<Omit<Task, 'id' | 'title' | 'sectionId' | 'createdAt' | 'updatedAt'>>;
@@ -11,6 +12,7 @@ function validateDueDate(dueDate?: string) {
 }
 
 export function createTask(input: TaskInput, now = new Date()): Task {
+  validateReminder(input);
   const title = input.title.trim();
   if (!title) throw new Error('Title is required.');
   if (!input.sectionId) throw new Error('Section is required.');
@@ -19,7 +21,7 @@ export function createTask(input: TaskInput, now = new Date()): Task {
   const timestamp = now.toISOString();
   const dueDate = input.dueDate || undefined;
   validateDueDate(dueDate);
-  return { id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
+  return { ...normalizeReminder({ ...input }), id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
 }
 
 export function updateTask(task: Task, changes: TaskChanges, now = new Date()): Task {
@@ -38,6 +40,7 @@ export function updateTask(task: Task, changes: TaskChanges, now = new Date()): 
   if (changes.status === 'backlog') { merged.dueDate = undefined; merged.status = 'backlog'; }
   if (changes.status === 'complete') merged.completedAt = task.status === 'complete' ? task.completedAt : now.toISOString();
   else if (changes.status) merged.completedAt = undefined;
+  validateReminder(merged);
   return merged;
 }
 

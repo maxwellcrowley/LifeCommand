@@ -1,3 +1,4 @@
+import { normalizeReminder, validateReminder } from './reminders';
 import { addDays, isDateKey, localDateKey } from './dates';
 import type { AppData, EventFields, EventSource, FamilyCategory, LocalEvent, Task } from './models';
 
@@ -5,12 +6,13 @@ export const eventSources = ['work', 'personal', 'army', 'family'] as const;
 export const sourceLabels: Record<EventSource, string> = { work: 'Work', personal: 'Personal', army: 'Army', family: 'Family' };
 export const sourceColors: Record<EventSource, string> = { work: '#3978C5', personal: '#5E9C70', army: '#C7952D', family: '#31A3A0' };
 export const familyCategories: readonly FamilyCategory[] = ['Appointment', 'School', 'Pet/Foster', 'Errand', 'Family Plan', 'Other'];
-export type EventInput = Pick<EventFields, 'title' | 'date' | 'startTime' | 'endTime' | 'location' | 'notes'> & (
+export type EventInput = Pick<EventFields, 'title' | 'date' | 'startTime' | 'endTime' | 'location' | 'notes' | 'reminderEnabled' | 'reminderAt' | 'reminderOffset'> & (
   { source: Exclude<EventSource, 'family'> } | { source: 'family'; addedBy: 'Max' | 'Kellyn'; category: FamilyCategory }
 );
 const clean = (value?: string) => value?.trim() || undefined;
 
 function validatedFields(input: EventInput) {
+  validateReminder(input);
   const title = input.title.trim();
   const date = input.date.trim();
   const startTime = clean(input.startTime);
@@ -27,7 +29,7 @@ function validatedFields(input: EventInput) {
     if (!['Max', 'Kellyn'].includes(input.addedBy)) throw new Error('Choose who added this event: Max or Kellyn.');
     if (!familyCategories.includes(input.category)) throw new Error('Choose a family category.');
   }
-  return { title, date, startTime, endTime, location: clean(input.location), notes: clean(input.notes) };
+  return { ...normalizeReminder({ ...input }), title, date, startTime, endTime, location: clean(input.location), notes: clean(input.notes) };
 }
 
 export function createEvent(input: EventInput, now = new Date()): LocalEvent {
@@ -40,7 +42,7 @@ export function createEvent(input: EventInput, now = new Date()): LocalEvent {
 export function updateEvent(event: LocalEvent, input: EventInput, now = new Date()): LocalEvent {
   if (event.archivedAt) throw new Error('Archived events cannot be edited.');
   // A full editable draft is required; identity and audit fields remain protected.
-  const next = createEvent(input, now);
+  const next = createEvent({ reminderEnabled: event.reminderEnabled, reminderOffset: event.reminderOffset, reminderAt: event.reminderAt, ...input }, now);
   const previousTimestamp = Date.parse(event.updatedAt ?? '');
   const timestamp = Math.max(now.getTime(), Number.isFinite(previousTimestamp) ? previousTimestamp + 1 : 0);
   return { ...next, id: event.id, createdAt: event.createdAt, updatedAt: new Date(timestamp).toISOString() };

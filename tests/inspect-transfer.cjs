@@ -39,7 +39,7 @@ async function main() {
     assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button exists: ' + text);
     await pause(150);
   };
-  const read = async () => { const { schemaVersion, revision, ...data } = await evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))'); assert.equal(schemaVersion, 1); assert.ok(revision >= 1); return data; };
+  const read = async () => { const { schemaVersion, revision, ...data } = await evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))'); assert.equal(schemaVersion, 2); assert.ok(revision >= 1); return data; };
 
   const fixture = require('../.test-build/src/domain/normalize.js').normalizeAppData(seedData);
   fixture.settings.autoRollover = false;
@@ -63,7 +63,7 @@ async function main() {
     await pause(200);
   };
   await navigate();
-  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify({ ...fixture, schemaVersion: 1, revision: 1 }))}); localStorage.setItem('unrelated-transfer-test','keep')`);
+  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify({ ...fixture, schemaVersion: 2, revision: 1 }))}); localStorage.setItem('unrelated-transfer-test','keep')`);
   await navigate();
   const original = await read();
   await evaluate(`window.__originalURL = URL.createObjectURL; URL.createObjectURL = blob => { blob.text().then(text => window.__exported = text); return window.__originalURL(blob); }`);
@@ -71,11 +71,11 @@ async function main() {
   await ready('Export download requested');
   const exported = JSON.parse(await evaluate('window.__exported'));
   assert.deepEqual(exported.data, original);
-  assert.equal(exported.schemaVersion, 1);
+  assert.equal(exported.schemaVersion, 2);
   assert.ok(Date.parse(exported.exportedAt));
   assert.deepEqual(await backupKeys(), []);
   console.log('PASS export blob contains all saved data and version without replacement');
-  for (const raw of ['{bad', JSON.stringify({ ...envelope, schemaVersion: 2 }), JSON.stringify({ ...envelope, data: { ...incoming, tasks: [null] } })]) {
+  for (const raw of ['{bad', JSON.stringify({ ...envelope, schemaVersion: 3 }), JSON.stringify({ ...envelope, data: { ...incoming, tasks: [null] } })]) {
     await click('Import local data');
     await choose(raw);
     assert.equal(await evaluate(`document.body.innerText.includes('Confirm import and replace data')`), false);
@@ -118,7 +118,7 @@ async function main() {
   assert.equal(afterImport.length, 1);
   const recovery = await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(afterImport[0])}))`);
   const { schemaVersion, revision, ...backupData } = JSON.parse(recovery.raw);
-  assert.equal(schemaVersion, 1); assert.equal(revision, 1);
+  assert.equal(schemaVersion, 2); assert.equal(revision, 1);
   assert.deepEqual(backupData, original);
   const writes = await evaluate('window.__writes');
   assert.deepEqual(writes, [afterImport[0], key]);

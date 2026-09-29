@@ -1,6 +1,6 @@
 # Local Data Model
 
-Slice 10 adds persisted schema metadata, migrations and cross-tab coordination. The final section defines the current persistence contract; earlier slice descriptions retain their historical context.
+Slice 11 adds reminders and advances local/portable data to schema 2. The final section defines the current reminder and persistence contract; earlier slice descriptions retain their historical context.
 
 LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
 
@@ -234,3 +234,44 @@ The web adapter holds one exclusive Web Lock (`lifecommand:data:v1:write`) acros
 Storage events for the active key (including storage clear), focus, visibility and the existing periodic/foreground check detect external changes. A global scrollable prompt pauses writes and offers **Reload local data**, explaining that unsaved drafts will be discarded. Save-time checks work even if an event is missed. Reload validates the saved snapshot and remounts the screens, clearing Capture/task/event/project/Settings drafts and import/reset previews. Failed reload leaves saving blocked and displays the error. Ordinary writes also prompt for reload; no automatic draft merge is attempted. Other tabs can remain open.
 
 Guarantees cover cooperating tabs on the same origin, not other devices. Old deployed builds/extensions/manual edits do not honor Web Locks: changed bytes are detected, but those writers can still overwrite outside the protocol. Refresh old builds once when deploying this slice. Reset cleanup is still a non-atomic multi-key operation with the existing partial-cleanup error/retry behavior. No cloud sync, auth, notifications or calendar integration is added.
+
+
+## Reminders and notification-ready scheduling (Slice 11, current contract)
+
+Local snapshots now use `schemaVersion: 2` with the existing positive `revision` and `lifecommand:data:v1` storage key. Portable exports also use version 2; imports accept versions 1 and 2. Recovery **envelope** version remains 1 because its exact-raw-text wrapper has not changed. Its payload can be legacy, schema 1, or schema 2. Future local/export/payload versions still reject before writes.
+
+Tasks, calendar events and family events share `ReminderFields`:
+
+| Field | Default / meaning |
+| --- | --- |
+| `reminderEnabled` | `false`; controls whether the item produces a reminder |
+| `reminderOffset` | `at-time`; one of `at-time`, `15-minutes`, `1-hour`, `morning-of`, `evening-before` |
+| `reminderAt` | Absent by default; optional validated ISO instant with timezone. When present, overrides the relative offset |
+
+These fields are optional in input/legacy TypeScript contracts; normalization always supplies enabled and offset. Malformed supplied values reject in strict persisted/import validation. Permissive version-0 recovery repairs invalid values using disabled/default timing and omits invalid instants. New task/event mutations validate reminder fields before saving. Editing an event without supplying reminder fields preserves its reminder, including source conversion. The editor explicitly clears `reminderAt` when choosing relative timing or turning a reminder off.
+
+`AppSettings.defaultTaskReminder` and `defaultEventReminder` default to `off`. Each accepts `off` or one of the five offsets. Defaults apply only on creation, inside the provider's queued mutation, and respect explicit per-item choices (including false). Capture/new event editors show the initial choice and allow overriding it. Changing defaults never rewrites existing items. Quiet hours are informational future-work text only: no ineffective toggle or stored quiet-hours field.
+
+### Timing and pure domain contract
+
+`src/domain/reminders.ts` contains validation, normalization, creation defaults, draft conversion, `reminderTime`, `scheduleReminders`, and `computeReminders(data, now)` without storage, platform imports, timers, permission requests or delivery side effects.
+
+- Relative task reminders use due date at 09:00; timed events use their start time; all-day events use 09:00. An enabled undated task with relative timing waits for a due date. A custom reminder can independently remind about a backlog task.
+- At time uses that anchor; 15 minutes / 1 hour subtract elapsed minutes. Morning of uses 09:00 on the item's date; evening before uses 18:00 on the previous local calendar date. Morning of can be after an early event's start; this is a named clock-time option, not always an advance reminder.
+- Relative instants are derived, never cached in `reminderAt`. Date/start-time edits and automatic task rollover move relative reminders. Custom reminders stay at their saved absolute instant through rollover/rescheduling; clearing a task's due date suspends only relative reminders.
+- Relative schedules follow the device's current timezone. Custom dates/times entered in the editor become absolute ISO instants; travel changes their displayed local time. Date arithmetic follows local calendar days across DST. JavaScript resolves nonexistent local times forward and ambiguous times to the earlier occurrence. The custom editor has minute precision.
+- `scheduleReminders` returns time-sorted descriptors with `key`, `kind`, `itemId`, `title`, `reminderAt`, and `occurrenceId`. Keys qualify collection (`task:`, `local:`, `family:`); event item IDs use the existing editor route key. Occurrence IDs encode the qualified key and canonical ISO instant, so ID collisions across collections remain distinct. Ties sort by key.
+- Completed/archived tasks, archived local/family events, disabled reminders and unresolved relative dates produce no descriptor. A project's lifecycle does not change its tasks' independent lifecycle/reminders.
+- `computeReminders` takes an explicit valid `now`. Due is `reminderAt <= now`; next is strictly future. Every overdue reminder remains due until disabled, completed, archived or rescheduled. Repeated computation never marks anything delivered or writes storage. Reopening an old completed task can therefore reveal its old due reminder again.
+
+Today refreshes using the existing foreground clock. Its reminder card includes backlog/custom reminders and advance reminders for future events, initially showing five due and three next entries with Show all. Links open the relevant editor; task/event rows also show reminder text. Turning a reminder off is the current dismissal workflow. There is no background execution, sound, OS notification or delivered/acknowledged history in this slice.
+
+### Migration, transfer and coordination
+
+Schema 1 -> 2 is additive strict normalization: missing reminder fields/defaults are supplied, while identity, lifecycle, dates, timestamps, other settings and collections remain intact. Existing items always default off, independently of new-item settings. Version 0 retains the established permissive recovery path before strict validation. Migration is deterministic and idempotent. The repository backs up exact prior bytes before writing schema 2, advances the revision once, and does not re-backup/rewrite a normalized reload. Version-1 portable files/recovery snapshots use the same additive defaults; version-2 exports retain reminder data losslessly.
+
+All reminder/default edits use the existing provider/repository queue, Web Lock, expected snapshot/revision checks, task/event stale-editor checks and global reload prompt. Import, restore and reset retain draft-clearing behavior. Reminder calculation performs no writes and introduces no competing cross-tab scheduler.
+
+### Native delivery boundary
+
+Native delivery is deferred. SDK 57 provides local notification APIs, but this repository has no `expo-notifications` dependency, config plugin or tested native delivery adapter. A future adapter should request permission only after opt-in, reconcile the future descriptors with OS requests, update content when titles change, cancel removed/completed/archived/disabled occurrences, and reconcile after edits, rollover, timezone changes, reload, reset/import/restore and foreground activation. Due reminders should stay in-app rather than replaying an unbounded missed-alert backlog. Delivery identifiers/permission state belong to the installation, not portable exports. Test Android channels/permissions and iOS authorization, scheduling limits, force-close/reboot and deep links in development builds. See Story 011 for verification and remaining work.

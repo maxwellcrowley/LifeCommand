@@ -5,13 +5,16 @@ import { Card, Muted } from './ui';
 import { DateEntry } from './DateEntry';
 import { getActiveProjects, projectStatusLabels } from '@/src/domain/projects';
 
+import { ReminderEditor } from './ReminderEditor';
+import { reminderToDraft, type ReminderDraft } from '@/src/domain/reminders';
+
 const priorities: Priority[] = ['low', 'normal', 'high'];
 const owners: TaskOwner[] = ['me', 'kellyn', 'shared', 'system'];
 const statuses: TaskStatus[] = ['backlog', 'scheduled', 'overdue', 'deferred', 'complete', 'archived'];
 
-export type TaskDraft = { title: string; description: string; sectionId: string; projectId: string; priority: Priority; dueDate: string; owner: TaskOwner; storyPoints: string; status: TaskStatus };
-export const blankTaskDraft = (sectionId = ''): TaskDraft => ({ title: '', description: '', sectionId, projectId: '', priority: 'normal', dueDate: '', owner: 'me', storyPoints: '1', status: 'backlog' });
-export const taskToDraft = (task: Task): TaskDraft => ({ title: task.title, description: task.description ?? '', sectionId: task.sectionId, projectId: task.projectId ?? '', priority: task.priority, dueDate: task.dueDate ?? '', owner: task.owner, storyPoints: String(task.storyPoints), status: task.status });
+export type TaskDraft = ReminderDraft & { title: string; description: string; sectionId: string; projectId: string; priority: Priority; dueDate: string; owner: TaskOwner; storyPoints: string; status: TaskStatus };
+export const blankTaskDraft = (sectionId = ''): TaskDraft => ({ ...reminderToDraft({}), title: '', description: '', sectionId, projectId: '', priority: 'normal', dueDate: '', owner: 'me', storyPoints: '1', status: 'backlog' });
+export const taskToDraft = (task: Task): TaskDraft => ({ ...reminderToDraft(task), title: task.title, description: task.description ?? '', sectionId: task.sectionId, projectId: task.projectId ?? '', priority: task.priority, dueDate: task.dueDate ?? '', owner: task.owner, storyPoints: String(task.storyPoints), status: task.status });
 
 export function TaskForm({ draft, onChange, sections, projects, showStatus = false, currentProjectId }: { draft: TaskDraft; onChange: (draft: TaskDraft) => void; sections: Section[]; projects: Project[]; showStatus?: boolean; currentProjectId?: string }) {
   const { colors } = useAppTheme();
@@ -32,6 +35,7 @@ export function TaskForm({ draft, onChange, sections, projects, showStatus = fal
     {select('Owner', 'owner', owners.map(value => ({ value, label: value === 'kellyn' ? 'Kellyn' : value[0].toUpperCase() + value.slice(1) })))}
     <DateEntry value={draft.dueDate} onChange={dueDate => onChange({ ...draft, dueDate, status: draft.status === 'complete' || draft.status === 'archived' ? draft.status : !dueDate ? 'backlog' : draft.status === 'backlog' ? 'scheduled' : draft.status })} />
     <View style={{ gap: 7 }}><Muted>Story points · positive number</Muted><TextInput accessibilityLabel="Story points, positive number" value={draft.storyPoints} onChangeText={storyPoints => onChange({ ...draft, storyPoints })} keyboardType="number-pad" style={inputStyle} /></View>
+    <ReminderEditor draft={draft} onChange={reminder => onChange({ ...draft, ...reminder })} />
     {showStatus ? select('Status', 'status', statuses.map(value => ({ value, label: value }))) : null}
   </Card>;
 }

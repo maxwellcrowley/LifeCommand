@@ -1,6 +1,7 @@
 import type { AppData, CalendarEvent, FamilyEvent, Project, Section, Task } from './models';
 import { normalizeSettings, isRolloverTime } from './settings';
 import { familyCategories, sourceColors } from './events';
+import { normalizeReminder } from './reminders';
 import { isDateKey } from './dates';
 import { sections as defaultSections } from './defaults';
 
@@ -55,6 +56,7 @@ export function normalizeAppData(value: unknown): AppData {
   const tasks: Task[] = records(data.tasks).map((t, i) => {
     const dueDate = date(t.dueDate);
     return compact({
+      ...normalizeReminder(t),
       id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description),
       sectionId: ensureSection(t.sectionId), projectId: projects.some(p => p.id === t.projectId) ? text(t.projectId) : undefined,
       status: choice(t.status, ['backlog', 'scheduled', 'overdue', 'complete', 'deferred', 'archived'], dueDate ? 'scheduled' : 'backlog'),
@@ -77,6 +79,7 @@ export function normalizeAppData(value: unknown): AppData {
     const startTime = typeof e.startTime === 'string' && isRolloverTime(e.startTime) ? e.startTime : undefined;
     const endTime = startTime && typeof e.endTime === 'string' && isRolloverTime(e.endTime) && e.endTime > startTime ? e.endTime : undefined;
     const fields = {
+      ...normalizeReminder(e),
       id: family ? familyId(e.id, i) : localId(e.id, i), title: text(e.title) ?? 'Untitled event', date: eventDate,
       startTime, endTime, location: text(e.location), notes: text(e.notes), createdAt: instant(e.createdAt), updatedAt: instant(e.updatedAt),
       archivedAt: e.archivedAt ? instant(e.archivedAt) ?? epoch : undefined,

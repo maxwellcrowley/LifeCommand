@@ -182,5 +182,5 @@ test('old snapshots receive defaults without resetting saved preferences or task
   assert.equal(result.settings.raiseMissedTasksToHigh, true);
   assert.equal(result.settings.autoRollover, false);
   assert.equal(result.settings.rolloverTime, '04:00');
-  assert.deepEqual(result.tasks, legacy.tasks);
+  assert.deepEqual(result.tasks, legacy.tasks.map(task => ({ ...task, reminderEnabled: false, reminderOffset: 'at-time' })));
 });

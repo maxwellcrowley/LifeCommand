@@ -6,6 +6,7 @@ import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError } from './storage';
 import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
+import { applyReminderDefault } from '@/src/domain/reminders';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
 import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
@@ -110,7 +111,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await commit(current => {
       validateTaskProject(current.projects, input.projectId);
       const project = current.projects.find(item => item.id === input.projectId);
-      task = createTask({ ...input, storyPoints: input.storyPoints ?? project?.defaultTaskPoints ?? current.settings.defaultStoryPoints });
+      task = createTask({ ...applyReminderDefault(input, current.settings.defaultTaskReminder), storyPoints: input.storyPoints ?? project?.defaultTaskPoints ?? current.settings.defaultStoryPoints });
       return { ...current, tasks: [task, ...current.tasks] };
     });
     return task;
@@ -130,8 +131,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await commit(current => rolloverAppData({ ...current, settings: { ...current.settings, [key]: value } }, new Date()));
   };
   const addEvent = async (input: EventInput) => {
-    const event = createEvent(input);
-    await commit(current => insertEvent(current, event));
+    await commit(current => insertEvent(current, createEvent(applyReminderDefault(input, current.settings.defaultEventReminder))));
   };
   const addProject = async (input: ProjectInput) => {
     const project = createProject(input);

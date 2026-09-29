@@ -1,6 +1,9 @@
+import { reminderDefaults } from './reminders';
 import type { AppSettings } from './models';
 
 export const defaultSettings: AppSettings = {
+  defaultTaskReminder: 'off',
+  defaultEventReminder: 'off',
   appearance: 'system',
   autoRollover: true,
   rolloverTime: '00:00',
@@ -42,6 +45,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   for (const key of ['ambientMaxTasks', 'ambientMaxEvents'] as const) {
     if (!isAmbientLimit(normalized[key])) normalized[key] = defaultSettings[key];
   }
+  for (const key of ['defaultTaskReminder', 'defaultEventReminder'] as const) {
+    if (!reminderDefaults.includes(normalized[key])) normalized[key] = 'off';
+  }
   return normalized;
 }
 
@@ -57,6 +63,7 @@ export function isAmbientLimit(value: unknown): value is number {
 }
 
 export function validateAmbientSetting(key: keyof AppSettings, value: unknown): void {
+  if ((key === 'defaultTaskReminder' || key === 'defaultEventReminder') && !(reminderDefaults as readonly unknown[]).includes(value)) throw Error('Choose a valid reminder default.');
   if ((key === 'ambientMaxTasks' || key === 'ambientMaxEvents') && !isAmbientLimit(value)) throw new Error('Display limits must be whole numbers from 1 to 20.');
   if (key in ambientChoices && !(ambientChoices[key as keyof typeof ambientChoices] as readonly unknown[]).includes(value)) throw new Error('Choose a valid display option.');
   if (['ambientShowTomorrow', 'ambientShowCompleted', 'ambientDisplayEnabled'].includes(key) && typeof value !== 'boolean') throw new Error('Display toggles must be on or off.');

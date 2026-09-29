@@ -2,9 +2,9 @@ import type { AppData } from './models';
 import { normalizeAppData } from './normalize';
 import { validateSnapshot } from './transfer';
 
-// Version 0 is the historical, unversioned local snapshot. Portable exports
-// remain version 1; storage metadata is deliberately excluded from that format.
-export const CURRENT_SCHEMA_VERSION = 1;
+// Version 0 is unversioned data; version 1 predates reminders.
+// Version 1 -> 2 uses strict additive normalization (reminders off).
+export const CURRENT_SCHEMA_VERSION = 2;
 export interface PersistedSnapshot extends AppData {
   schemaVersion: number;
   revision: number;

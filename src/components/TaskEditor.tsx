@@ -1,3 +1,4 @@
+import { reminderFromDraft } from '@/src/domain/reminders';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import { router } from 'expo-router';
@@ -27,7 +28,7 @@ export function TaskEditor({ task }: { task: Task }) {
     setSaving(true);
     try {
       setError('');
-      await editTask(task.id, { title: draft.title, description: draft.description, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status }, needsChoice ? choice : undefined, snapshot.updatedAt);
+      await editTask(task.id, { ...reminderFromDraft(draft), title: draft.title, description: draft.description, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status }, needsChoice ? choice : undefined, snapshot.updatedAt);
       if (router.canGoBack()) router.back(); else router.replace('/(tabs)/review');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update task.'); }
     finally { setSaving(false); }

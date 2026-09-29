@@ -1,11 +1,10 @@
-import type { AppData, Section, SectionName } from './models';
+import type { AppData } from './models';
+import { sections } from './defaults';
 import { localDateKey } from './dates';
 import { defaultSettings } from './settings';
+export { sections } from './defaults';
 const today = new Date();
 const day = (offset: number) => { const d = new Date(today); d.setDate(d.getDate() + offset); return localDateKey(d); };
-const names: SectionName[] = ['Work', 'Army', 'Family', 'Home', 'Health', 'Finance', 'Projects', 'Personal', 'Pets/Fosters'];
-const colors = ['#3978C5', '#C7952D', '#31A3A0', '#D78343', '#5E9C70', '#8066B2', '#5474A5', '#5A9A75', '#C36D8E'];
-export const sections: Section[] = names.map((name, order) => ({ id: name.toLowerCase().replaceAll('/', '-'), name, color: colors[order], order }));
 const now = today.toISOString();
 export const seedData: AppData = {
   sections,

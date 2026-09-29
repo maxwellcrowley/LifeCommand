@@ -2,7 +2,7 @@ import type { AppData, CalendarEvent, FamilyEvent, Project, Section, Task } from
 import { normalizeSettings, isRolloverTime } from './settings';
 import { familyCategories, sourceColors } from './events';
 import { isDateKey } from './dates';
-import { sections as defaultSections } from './seed';
+import { sections as defaultSections } from './defaults';
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): value is RecordValue => !!value && typeof value === 'object' && !Array.isArray(value);

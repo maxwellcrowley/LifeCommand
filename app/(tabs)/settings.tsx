@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { AmbientSettingsCard } from '@/src/components/AmbientSettingsCard';
+import { DataManagementCard } from '@/src/components/DataManagementCard';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
 import { FormError } from '@/src/components/TaskForm';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
@@ -42,5 +43,6 @@ export default function SettingsScreen() {
     </Card>
     <Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Decrease default story points" onPress={() => void save('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Increase default story points" onPress={() => void save('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card>
     <AmbientSettingsCard settings={settings} saving={saving} save={save} />
+    <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
   </Page>;
 }

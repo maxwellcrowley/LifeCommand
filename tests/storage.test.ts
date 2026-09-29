@@ -16,6 +16,8 @@ function memory(raw?: string) {
   const storage: SnapshotStorage = {
     getItem: async key => values.get(key) ?? null,
     setItem: async (key, value) => { writes.push(key); values.set(key, value); },
+    getAllKeys: async () => [...values.keys()],
+    removeItem: async key => { values.delete(key); },
   };
   return { storage, values, writes, backups: () => [...values.entries()].filter(([key]) => key.startsWith(RECOVERY_PREFIX)) };
 }

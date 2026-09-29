@@ -7,6 +7,11 @@ import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 
 export default function CaptureScreen() {
+  const { resetVersion } = useAppData();
+  return <CaptureForm key={resetVersion} />;
+}
+
+function CaptureForm() {
   const { data, addTask } = useAppData();
   const { colors } = useAppTheme();
   const [rawDraft, setDraft] = useState(blankTaskDraft());

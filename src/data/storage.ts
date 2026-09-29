@@ -1,12 +1,21 @@
 import type { AppData } from '../domain/models';
 import { normalizeAppData } from '../domain/normalize';
 import { seedData } from '../domain/seed';
+import { createDefaultAppData } from '../domain/defaults';
 
 export const STORAGE_KEY = 'lifecommand:data:v1';
 export const RECOVERY_PREFIX = `${STORAGE_KEY}:recovery:`;
 export interface SnapshotStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
+  getAllKeys(): Promise<readonly string[]>;
+  removeItem(key: string): Promise<void>;
+}
+
+export class ResetCleanupError extends Error {
+  constructor(public readonly data: AppData) {
+    super('Your active data was reset, but local recovery copies could not all be removed. Try Start Fresh again to finish.');
+  }
 }
 
 function canonical(value: unknown): string {
@@ -47,7 +56,21 @@ export function createRepository(storage: SnapshotStorage) {
   return {
     loadAppData: () => enqueue(read),
     saveAppData: (data: AppData) => enqueue(() => write(data)),
-    resetAppData: () => enqueue(() => write(normalizeAppData(seedData))),
+    resetAppData: () => enqueue(async () => {
+      // Enumerate first: failure here leaves all data untouched. Never clear shared storage.
+      const backups = (await storage.getAllKeys()).filter(key => key.startsWith(RECOVERY_PREFIX));
+      const data = createDefaultAppData();
+      // Keep the active key present so the next launch cannot seed demonstration data.
+      await write(data);
+      recoveryNotice = '';
+      try {
+        for (const key of backups) await storage.removeItem(key);
+      } catch {
+        // AsyncStorage has no cross-key transaction. Let the UI reflect the durable state.
+        throw new ResetCleanupError(data);
+      }
+      return data;
+    }),
     getRecoveryNotice: () => recoveryNotice,
     changeAppData: (change: (current: AppData) => AppData) => enqueue(async () => {
       const current = await read();

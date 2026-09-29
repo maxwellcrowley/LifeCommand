@@ -1,6 +1,6 @@
 # Initial Local Data Model
 
-LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/seed.ts` provides the first-run data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
+LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.
 
 ## Collections
 
@@ -96,7 +96,7 @@ The layout uses width and font scale for columns (800 effective pixels) and larg
 
 ## Persistence and evolution
 
-AsyncStorage is an asynchronous, unencrypted key/value store for device-local data. The active key remains `lifecommand:data:v1`; no collection or schema-version field was added. `src/data/storage.ts` implements the serialized repository with an injectable get/set boundary; `repository.ts` binds it to AsyncStorage. All public loads, saves, resets and read/modify/write operations share one runtime queue. A failed operation does not poison later retries.
+AsyncStorage is an asynchronous, unencrypted key/value store for device-local data. The active key remains `lifecommand:data:v1`; no collection or schema-version field was added. `src/data/storage.ts` implements the serialized repository with an injectable get/set/enumerate/remove boundary; `repository.ts` binds it to AsyncStorage. All public loads, saves, resets and read/modify/write operations share one runtime queue. A failed operation does not poison later retries.
 
 ### Validation and recovery (Slice 6)
 
@@ -115,6 +115,20 @@ Before replacing any changed snapshot (including additive legacy upgrades), the 
 Read failures propagate without writes. Backup-write failures leave the active original untouched. Repair-write failures retain the original and backup. The app exposes a retry action for I/O failures and a recovery notice for the current runtime. No automatic destructive reset occurs. Backup inspection/restoration currently requires developer tools; there is no recovery export/restore UI.
 
 Task edits, settings edits, and automatic rollover use the same queue. ThemeProvider reads AppDataProvider; appearance edits cannot overwrite concurrent task changes. Rollover changes and summary persist in one snapshot. Editors reject stale saved timestamps and offer reload. The queue is not a transaction across browser tabs or devices. Cross-tab coordination, versioned schema migration, backup management/export and archive restoration remain follow-up work.
+
+## Explicit Start Fresh reset (Slice 7)
+
+Settings > Data Management > Start Fresh opens a cross-platform confirmation with Cancel and Delete local data and start fresh. It warns that tasks, local and family events, projects, settings, rollover history, and local recovery copies are permanently removed. No storage operation runs merely from opening or cancelling confirmation. The destructive control is guarded against duplicate taps and disabled while pending.
+
+`createDefaultAppData()` returns fresh default section/settings objects and empty `tasks`, `projects`, `calendarEvents`, and `familyEvents`, with no rollover summary. Default section IDs, colors and order are shared with normalization and demo seeds. Demo records are separate from clean defaults.
+
+`resetAppData()` is a serialized repository operation. It enumerates keys, replaces `lifecommand:data:v1` with the clean snapshot, then removes only keys beginning `lifecommand:data:v1:recovery:`. It does not call AsyncStorage.clear, remove the active key, read/repair the discarded snapshot, or create a backup of intentionally discarded data. Unrelated storage keys are untouched. Recovery backups remain protected during normal operation; this explicitly confirmed reset is the exception to retention. No filesystem content is deleted.
+
+Keeping a valid empty snapshot prevents samples from returning on reload. Missing storage on a genuinely new installation still seeds demonstrations; clearing browser/app storage outside this flow also restores that first-run behavior. No storage-key or schema change is required.
+
+The provider replaces live app state only after the active write succeeds, clears stale recovery/error messages, and advances a reset version so mounted Capture drafts are discarded. Settings also clears its unsaved rollover-time draft. Theme, rollover defaults, and all data views immediately use the new snapshot without a process restart. New provider mutations are rejected while resetting; already queued writes finish before reset, and later rollover checks read the empty snapshot.
+
+Enumeration/write failures reject without publishing an empty state or deleting recovery copies. Cleanup is not a cross-key transaction: if deleting a recovery copy fails after the active write, `ResetCleanupError` carries the durable empty state to the provider, and confirmation reports that active data was reset but recovery copies remain. Retrying Start Fresh completes cleanup. An interruption during cleanup may likewise leave recovery copies; a subsequent confirmed reset removes them. The queue remains limited to one runtime, so the confirmation asks web users to close other LifeCommand tabs.
 
 ## Derived views
 

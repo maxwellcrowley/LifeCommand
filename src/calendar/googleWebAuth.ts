@@ -55,6 +55,7 @@ export function createWebGoogleAuth(clientId: string | undefined, load: () => Pr
       return token.value;
     },
     async invalidate(value) { if (token?.value === value) token = undefined; },
+    tokenExpiresAt: () => token?.expiresAt,
     async forget() { cancel?.(); token = undefined; },
   };
 }

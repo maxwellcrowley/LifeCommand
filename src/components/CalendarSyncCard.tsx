@@ -1,4 +1,4 @@
-import { Pressable, Switch, TextInput, View } from 'react-native';
+import { Platform, Pressable, Switch, TextInput, View } from 'react-native';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
 import { config, manualSample } from '../calendar/provider';
 import { sourceColors } from '../domain/events';
@@ -8,20 +8,23 @@ import { FormError } from './TaskForm';
 import { Card, Label, Muted, Row } from './ui';
 
 const providers = ['google', 'outlook'] as const;
-const names = { google: 'Google Calendar', outlook: 'Microsoft Outlook' };
+const names = { google: 'Google Calendar', outlook: 'Outlook Calendar' };
 const palette = [{ name: 'Purple', color: '#8962CF' }, { name: 'Blue', color: '#3978C5' }, { name: 'Green', color: '#5E9C70' }, { name: 'Teal', color: '#31A3A0' }, { name: 'Gold', color: '#C7952D' }];
 export function CalendarSyncCard() {
   const sync = useCalendarSync();
   const { colors } = useAppTheme();
-  return <Card title="Calendar Sync">
+  return <Card title="Calendar Connections">
     <Label>{sync.busy ? 'Sync in progress…' : sync.cache.accounts.length ? `${sync.cache.accounts.length} connected calendar account${sync.cache.accounts.length === 1 ? '' : 's'}` : providers.some(provider => sync.support[provider].configured) ? 'Signed out / not connected' : 'Not configured'}</Label>
-    <Muted>Read-only imports: 30 days back and 90 days ahead. Imported events cannot be edited here. Cached events stay available offline.</Muted>
-    {providers.map(provider => <View key={provider} style={{ gap: 8 }}>
+    <Muted>External events are read-only in LifeCommand. Edit them in Google or Outlook. We show events from 30 days back to 90 days ahead, and keep a copy available offline.</Muted>
+    {providers.map(provider => <View key={provider} testID={`calendar-provider-${provider}`} style={{ gap: 8 }}>
+      <Label>{names[provider]}</Label>
+      <Muted>{!sync.support[provider].configured ? 'Not configured' : sync.cache.accounts.some(account => account.mode === provider) ? `${sync.cache.accounts.filter(account => account.mode === provider).length} connected account(s)` : 'Not connected'}</Muted>
       <Action label={`Connect ${names[provider]}`} disabled={sync.busy || !sync.ready || !sync.authReady[provider]} onPress={() => void sync.connectProvider(provider)} />
       {!sync.support[provider].configured ? <Muted>{sync.support[provider].reason}</Muted> : !sync.authReady[provider] && !sync.authError[provider] ? <Muted>Loading {names[provider]} sign-in…</Muted> : null}
       {sync.authError[provider] ? <><FormError>{sync.authError[provider]}</FormError><Action label={`Retry loading ${names[provider]} sign-in`} disabled={sync.busy} onPress={() => void sync.prepare(provider)} /></> : null}
     </View>)}
-    <Muted>Add multiple accounts with Connect. Reconnect an account after restarting the app or when authorization expires, then use Sync now.</Muted>
+    <Muted>Connect to sign in and choose the calendars to show. Use Connect again to add another account.</Muted>
+    <Muted>{Platform.OS === 'web' ? 'For your privacy, sign-in lasts only for this browser session. Reconnect after reloading or when authorization expires.' : 'Sign-in is saved securely on this device. Reconnect when authorization expires.'}</Muted>
     {sync.cache.accounts.map(account => <View key={account.id} testID={`calendar-account-${account.id}`} style={{ gap: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.soft }}>
       <Label>{account.label}</Label>
       <Muted>{sync.activeAccount === account.id ? 'Sync in progress…' : sync.needsReconnect[account.id] ? 'Reconnect required' : `Connected · ${account.mode === 'manual' ? 'manual test provider' : names[account.provider]}`}</Muted>
@@ -29,9 +32,11 @@ export function CalendarSyncCard() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Action label="Sync now" disabled={sync.busy || !sync.ready || (account.mode === 'manual' ? !config.manualEnabled : !sync.support[account.provider].configured)} onPress={() => void sync.sync(account.id)} />
         {account.mode !== 'manual' ? <Action label={`Reconnect ${names[account.provider]}`} disabled={sync.busy || !sync.ready || !sync.authReady[account.provider]} onPress={() => void sync.connectProvider(account.provider, account.id)} /> : null}
-        <Action label="Disconnect" disabled={sync.busy || !sync.ready} onPress={() => void sync.disconnect(account.id)} />
+        <Action label="Disconnect account" disabled={sync.busy || !sync.ready} onPress={() => void sync.disconnect(account.id)} />
       </View>
-      {sync.accountErrors[account.id] ? <FormError>{sync.accountErrors[account.id]}</FormError> : null}
+      {sync.accountErrors[account.id] ? <><FormError>{sync.accountErrors[account.id]}</FormError><Action label="Retry sync" disabled={sync.busy || !sync.ready || (account.mode === 'manual' ? !config.manualEnabled : !sync.support[account.provider].configured)} onPress={() => void sync.sync(account.id)} /></> : null}
+      <Label>Calendars to show · {sync.cache.calendars.filter(calendar => calendar.accountId === account.id && calendar.syncEnabled).length} selected</Label>
+      {!sync.cache.calendars.some(calendar => calendar.accountId === account.id) ? <Muted>{account.lastSyncedAt ? 'No readable calendars were found for this account.' : 'Your calendars will appear after a successful sync. Use Sync now to retry.'}</Muted> : null}
       {sync.cache.calendars.filter(calendar => calendar.accountId === account.id).map(calendar => <View key={calendar.id} style={{ gap: 4, paddingLeft: 10, borderLeftWidth: 4, borderLeftColor: calendar.colorOverride ?? calendar.color ?? sourceColors[account.provider] }}>
         <Row><View style={{ flex: 1 }}><Label>{calendar.name}</Label></View><Switch accessibilityLabel={`Import calendar: ${calendar.name}`} value={calendar.syncEnabled} disabled={sync.busy} onValueChange={value => void sync.updateCalendar(account.id, calendar.id, { syncEnabled: value })} /></Row>
         <Row><View style={{ flex: 1 }}><Muted>Show in Family mode</Muted></View><Switch accessibilityLabel={`Family calendar: ${calendar.name}`} value={!!calendar.family} disabled={sync.busy} onValueChange={value => void sync.updateCalendar(account.id, calendar.id, { family: value })} /></Row>
@@ -52,6 +57,7 @@ export function CalendarSyncCard() {
       <Action label="Load sample snapshot" disabled={sync.busy} onPress={() => sync.setManualJSON(manualSample())} />
     </View> : null}
     {sync.error ? <><FormError>{sync.error}</FormError><Action label="Retry Calendar Sync" disabled={sync.busy} onPress={() => void sync.reload()} /></> : null}
+    {sync.credentialError ? <><FormError>{sync.credentialError}</FormError><Action label="Retry saved sign-in cleanup" disabled={sync.busy} onPress={() => void sync.reload()} /></> : null}
     {sync.error && (!sync.ready || !sync.cache.accounts.length) ? <Action label="Disconnect and clear imported cache" disabled={sync.busy} onPress={() => void sync.clearInvalidCache()} /> : null}
   </Card>;
 }

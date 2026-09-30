@@ -39,6 +39,7 @@ export default function SettingsScreen() {
   if (!ready) return <Page title="Settings" subtitle={storageError || 'Loading settings…'} />;
   return <Page title="Settings" subtitle="Shape how LifeCommand fits your day.">
     {error || storageError ? <FormError>{error || storageError}</FormError> : null}
+    <CalendarSyncCard />
     <Card title="Appearance"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{appearances.map(mode => <Pressable accessibilityRole="radio" aria-checked={settings.appearance === mode} accessibilityState={{ checked: settings.appearance === mode, disabled: saving }} key={mode} disabled={saving} onPress={() => void save('appearance', mode)} style={{ flexGrow: 1, minHeight: 44, padding: 12, borderRadius: 10, alignItems: 'center', backgroundColor: settings.appearance === mode ? colors.soft : colors.background }}><Text style={{ color: colors.text, textTransform: 'capitalize' }}>{mode}</Text></Pressable>)}</View></Card>
     <Card title="Daily rollover">
       <Muted>At this local time, unfinished work from the previous day moves forward. If the app is closed, it catches up when you return.</Muted>
@@ -52,7 +53,6 @@ export default function SettingsScreen() {
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
     <AmbientSettingsCard settings={settings} saving={saving} save={save} />
     <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
-    <CalendarSyncCard />
     <CloudSyncCard disabled={saving} />
   </Page>;
 }

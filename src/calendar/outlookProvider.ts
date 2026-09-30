@@ -2,6 +2,7 @@ import { addDays, isDateKey } from '../domain/dates';
 import { normalizeGoogleEvent, validCalendarColor, type CalendarSnapshot, type ExternalAccount, type GoogleEvent } from '../domain/externalCalendars';
 import { CalendarAuthError, createAccountSessions, type CalendarAuth } from './auth';
 import type { CalendarProvider } from './provider';
+import type { TokenVault } from './tokenVault';
 
 type Json = Record<string, unknown>;
 const object = (value: unknown): value is Json => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -28,8 +29,8 @@ export function normalizeOutlookEvent(raw: Json): GoogleEvent {
   return result;
 }
 
-export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch = fetch): CalendarProvider {
-  const sessions = createAccountSessions(auth);
+export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch = fetch, vault?: TokenVault): CalendarProvider {
+  const sessions = createAccountSessions(auth, vault);
   async function get(url: string, token: string, signal: AbortSignal, timezone = 'UTC'): Promise<Json> {
     const target = new URL(url);
     if (target.origin !== 'https://graph.microsoft.com' || target.username || target.password || target.hash || !(target.pathname.startsWith('/v1.0/me/') || target.pathname === '/oidc/userinfo')) throw Error('Outlook returned an unsafe page URL. Previous imports were kept.');

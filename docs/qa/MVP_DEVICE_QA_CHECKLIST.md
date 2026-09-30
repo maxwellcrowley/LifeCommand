@@ -71,7 +71,23 @@ Follow [Native notification device QA](NATIVE_NOTIFICATION_DEVICE_QA.md) for exa
 - [ ] Use VoiceOver/TalkBack and large system text on Notifications: switch names, disabled request/test actions, permission/error text and quiet-hour summary remain understandable and reachable.
 - [ ] Web: Notifications says unavailable; controls are disabled; no browser permission prompt, native module error or device preference write occurs. In-app acknowledgement/snooze and static-export navigation still work.
 
-## Sign-off
+## Calendar Connections (Slice 019)
+
+Use publisher-configured clients from [Google setup](../integrations/GOOGLE_CALENDAR_SETUP.md) and [Microsoft setup](../integrations/MICROSOFT_CALENDAR_SETUP.md). Rebuild native apps with Google Sign-In, AuthSession and SecureStore plugins. Real provider logins remain manual; record platform/build, account type, callback URI and pass/fail without tokens or authorization codes.
+
+- [ ] Unconfigured build: Settings → Calendar Connections shows both providers, disabled Connect actions and “Calendar provider not configured in this build.” Local tasks/family/manual events, offline use and cloud controls still work.
+- [ ] Configured build: tap Connect Google Calendar / Connect Outlook Calendar, choose an account, grant read-only permissions, and return to the app. Calendars and events load without a separate first Sync now tap. Verify provider status, account label, selected count and last successful sync.
+- [ ] Google native: check Android package/signing SHA-1 and iOS reversed client scheme. Outlook native: callback must return through `lifecommand://oauth/microsoft`. Web: Google popup origins and same-origin Outlook `/oauth/microsoft` completion. Test foreground/background return, cancellation, denied/partial consent and retry on both platforms. Expo Go must remain safe with sign-in unavailable.
+- [ ] Connect two Google accounts and an Outlook account. Reconnect one using a different identity: reject the replacement and preserve existing imports. Disconnect one account: delete only its imports/session and preserve others plus local/family/manual events.
+- [ ] Read/select the Google shared family calendar Kellyn updates. Edit an event in Google, sync, and verify labels/color/read-only state across Today/Calendar/Ambient. Disable all subscriptions to that calendar: hide it everywhere. Enable, sync and check Family mode/color preferences persist.
+- [ ] Interrupt the network after consent but before calendar fetch: account stays connected with Retry sync. Restore network and retry without another consent popup. Later sync failures preserve cached events/last success. Test provider revocation and expired access, then reconnect.
+- [ ] Native restart before token expiry: Sync now uses the correct stored account credentials. Test device locked/unlocked and unavailable secure storage; no insecure fallback or raw token error. Web reload requires reconnect and keeps cached events. Verify no OAuth token in localStorage, export/import JSON, recovery data or cloud snapshots.
+- [ ] Start Fresh/import replacement clears accounts and private tokens, including while OAuth/sync is pending. Restart and confirm no connection returns. Test iOS reinstall/orphaned Keychain cleanup and Android backup restore with disposable data. Verify disconnect/secure-storage failure messaging permits recovery.
+- [ ] At 320px width, landscape, large text and with VoiceOver/TalkBack, verify all Connect/Sync/Retry/Disconnect actions and calendar switches are reachable, labeled and at least 44px high. External event rows must not offer edit/delete or create provider notifications.
+
+Real-account/device results: **pending manual QA**. Browser harnesses use mocked OAuth/API boundaries and cannot establish real consent or native callback success.
+
+## Final sign-off
 
 - [ ] Record results for Android, iOS, web and the physical TV separately. Treat missing native/TV runs as unverified, even when unit tests and browser exports pass.
 - [ ] Resolve any lost data, clipped essential action, blocked keyboard save, unreadable priority state or repeated rollover before MVP device sign-off.

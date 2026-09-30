@@ -75,7 +75,7 @@ async function main() {
       assert.deepEqual(await a.evaluate(`Array.from(document.querySelectorAll('input:not([type=checkbox]),textarea,[role=button],[role=checkbox]')).filter(el => { const r=el.getBoundingClientRect(); return r.width>0 && (r.left < -1 || r.right > innerWidth+1 || r.height < 44); }).map(el => el.getAttribute('aria-label') || el.innerText)`), []);
     }
   };
-  await a.go('/settings', 'Calendar Sync');
+  await a.go('/settings', 'Calendar Connections');
   await a.evaluate(`Object.keys(localStorage).filter(k=>k.startsWith('lifecommand:')).forEach(k=>localStorage.removeItem(k)); localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))})`);
   await a.go('/', 'Family morning');
   await choose(`Add from backlog · ${today}`);
@@ -127,8 +127,11 @@ async function main() {
   assert.equal((await read()).tasks.find(task => task.title === 'Review quick').dueDate, today);
   console.log('PASS Projects/Review Today, Tomorrow, Pick date and Clear date without task editor');
 
-  await a.go('/settings', 'Calendar Sync');
+  await a.go('/settings', 'Calendar Connections');
   assert.ok((await body()).includes('Not configured'));
+  assert.ok((await body()).includes('Calendar provider not configured in this build'));
+  assert.ok((await body()).includes('External events are read-only in LifeCommand'));
+  for (const provider of ['google', 'outlook']) assert.ok(await a.evaluate(`!!document.querySelector('[data-testid="calendar-provider-${provider}"] [aria-disabled="true"]')`));
   await a.click('Connect manual test calendar'); await a.ready('Connected · manual test provider');
   await a.click('Sync now'); await a.ready('Last synced:');
   let cache = await readCache(); assert.equal(cache.events.length, 1);
@@ -143,10 +146,12 @@ async function main() {
   await a.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1100, deviceScaleFactor: 1, mobile: false });
   await a.go('/ambient', 'Demo imported meeting');
   assert.ok((await body()).includes('read-only'));
-  await a.go('/settings', 'Calendar Sync');
+  await a.go('/settings', 'Calendar Connections');
   await choose('Import calendar: Demo calendar (manual)');
   await a.go('/', 'Local afternoon'); assert.ok(!(await body()).includes('Demo imported meeting'));
-  await a.go('/settings', 'Calendar Sync'); await choose('Import calendar: Demo calendar (manual)');
+  await a.go('/calendar', 'Local afternoon'); assert.ok(!(await body()).includes('Demo imported meeting'));
+  await a.go('/ambient', 'Local afternoon'); assert.ok(!(await body()).includes('Demo imported meeting'));
+  await a.go('/settings', 'Calendar Connections'); await choose('Import calendar: Demo calendar (manual)');
   await a.click('Sync now');
   const edited = [{ calendar: { id: 'manual-primary', name: 'Demo calendar (manual)' }, events: [{ id: 'demo-meeting', summary: 'Updated imported meeting', start: { dateTime: new Date(`${today}T10:00:00`).toISOString() }, end: { dateTime: new Date(`${today}T11:00:00`).toISOString() } }] }];
   await a.fill('Manual calendar snapshot JSON', JSON.stringify(edited)); await a.click('Sync now');
@@ -160,7 +165,7 @@ async function main() {
   await a.click('Load sample snapshot'); await a.click('Sync now');
   await a.fill('Manual calendar snapshot JSON', '[]'); await a.click('Sync now');
   assert.equal((await readCache()).events.length, 0);
-  await a.click('Load sample snapshot'); await a.click('Sync now'); await a.click('Disconnect');
+  await a.click('Load sample snapshot'); await a.click('Sync now'); await a.click('Disconnect account');
   assert.equal((await readCache()).accounts.length, 0);
   saved = await read();
   assert.deepEqual(saved.calendarEvents.map(event => event.title), ['Local afternoon']);

@@ -14,7 +14,7 @@ export function outlookAvailability(config: OutlookConfig, platform: string, exp
       : redirect.href === 'lifecommand://oauth/microsoft');
   } catch { /* Missing config must leave local-only use available. */ }
   const configured = !expoGo && ['web', 'ios', 'android'].includes(platform) && !!client && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(client) && validTenant && validRedirect;
-  return { configured, reason: configured ? '' : expoGo ? 'Outlook sign-in needs a development build.' : 'Outlook is not configured. Add a public Microsoft client ID and this platform’s registered redirect URI, then rebuild.' };
+  return { configured, reason: configured ? '' : expoGo ? 'Outlook sign-in needs a development build.' : 'Calendar provider not configured in this build. Outlook Calendar will be available when the app publisher enables it. You can keep using LifeCommand offline.' };
 }
 export interface OutlookToken { accessToken: string; expiresIn?: number; scope?: string }
 export interface OutlookRequest { authorize(): Promise<OutlookToken>; cancel?(): void }
@@ -59,6 +59,7 @@ export function createOutlookAuth(support: { configured: boolean; reason: string
     },
     async accessToken() { if (!token || now() >= expires) throw new CalendarAuthError('Outlook authorization expired. Reconnect Outlook.'); return token; },
     async invalidate(value) { if (token === value) { token = ''; expires = 0; } },
+    tokenExpiresAt: () => expires || undefined,
     async forget() { epoch++; token = ''; expires = 0; request = undefined; cancelPending?.(); },
   };
 }

@@ -3,6 +3,7 @@ import { normalizeGoogleEvent, validCalendarColor, type CalendarSnapshot, type E
 import type { CalendarProvider } from './provider';
 import { GoogleAuthError, type GoogleAuth } from './googleAuth';
 import { createAccountSessions } from './auth';
+import type { TokenVault } from './tokenVault';
 
 type Json = Record<string, unknown>;
 const object = (value: unknown): value is Json => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -10,8 +11,8 @@ const nonempty = (value: unknown): value is string => typeof value === 'string' 
 const API = 'https://www.googleapis.com/calendar/v3';
 const USERINFO = 'https://openidconnect.googleapis.com/v1/userinfo';
 
-export function createGoogleProvider(auth: GoogleAuth, fetcher: typeof fetch = fetch): CalendarProvider {
-  const sessions = createAccountSessions(auth);
+export function createGoogleProvider(auth: GoogleAuth, fetcher: typeof fetch = fetch, vault?: TokenVault): CalendarProvider {
+  const sessions = createAccountSessions(auth, vault);
   async function get(url: string, token: string, signal: AbortSignal): Promise<Json> {
     let response: Response;
     try { response = await fetcher(url, { method: 'GET', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal, credentials: 'omit', cache: 'no-store', redirect: 'error' }); }

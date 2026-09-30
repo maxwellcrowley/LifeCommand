@@ -18,7 +18,7 @@ export function googleAvailability(config: GoogleConfig, platform: string, expoG
   const configured = platform === 'web' ? !!validClientId(config.webClientId)
     : platform === 'ios' ? !!validClientId(config.iosClientId)
       : platform === 'android' ? !!validClientId(config.webClientId) && !!validClientId(config.androidClientId) : false;
-  return { configured, reason: configured ? '' : `Google Calendar is not configured for ${platform}. Add this platform's public OAuth client IDs and rebuild.` };
+  return { configured, reason: configured ? '' : 'Calendar provider not configured in this build. Google Calendar will be available when the app publisher enables it. You can keep using LifeCommand offline.' };
 }
 export const googleConfig: GoogleConfig = {
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,

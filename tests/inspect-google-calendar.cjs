@@ -84,7 +84,7 @@ async function main() {
         const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
         if (window.outlookTest.fail) return json({}, window.outlookTest.fail);
         if (url.pathname === '/oidc/userinfo') return json({ sub: 'outlook-user', email: 'outlook-user@example.com' });
-        if (url.pathname === '/v1.0/me/calendars') return json({ value: [{ id: 'outlook-work', name: 'Outlook work calendar', hexColor: '#0078D4' }] });
+        if (url.pathname === '/v1.0/me/calendars') return window.outlookTest.failCalendars ? json({}, 500) : json({ value: [{ id: 'outlook-work', name: 'Outlook work calendar', hexColor: '#0078D4' }] });
         if (url.pathname.endsWith('/calendarView')) {
           const date = new Date(); const key = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
           return json({ value: [{ id: 'meeting', subject: 'Live Outlook meeting', isAllDay: true, originalStartTimeZone: 'UTC', start: { dateTime: key + 'T00:00:00', timeZone: 'UTC' }, end: { dateTime: new Date(new Date(key + 'T12:00:00').getTime()+86400000).toISOString().slice(0,10) + 'T00:00:00', timeZone: 'UTC' } }] });
@@ -117,7 +117,7 @@ async function main() {
   const readCache = () => a.evaluate(`JSON.parse(localStorage.getItem('lifecommand:external-calendars:v1'))`);
   const readLocal = () => a.evaluate(`localStorage.getItem('lifecommand:data:v1')`);
   const choose = async label => { assert.ok(await a.evaluate(`(() => { const el = [...document.querySelectorAll('[aria-label]')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) return false; el.click(); return true; })()`), label); await pause(180); };
-  await a.go('/settings', 'Calendar Sync');
+  await a.go('/settings', 'Calendar Connections');
   await a.evaluate(`Object.keys(localStorage).filter(k=>k.startsWith('lifecommand:')).forEach(k=>localStorage.removeItem(k)); localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))})`);
   await a.go('/settings', 'Signed out / not connected');
   await pause(200);
@@ -127,7 +127,8 @@ async function main() {
   await a.evaluate('window.googleTest.partial = false');
   await a.click('Connect Google Calendar'); await a.ready('Connected · Google Calendar');
   const localBefore = await readLocal();
-  await a.click('Sync now'); await a.ready('Last synced:');
+  await a.ready('Last synced:'); // First calendar discovery/import must happen automatically.
+  await a.ready('Calendars to show · 2 selected');
   assert.equal((await readCache()).events.length, 2);
   assert.equal(await readLocal(), localBefore);
   assert.ok(await a.evaluate(`window.googleTest.requests.every(request => request.method === 'GET' && request.bearer && !request.url.includes('test-access-token'))`));
@@ -146,10 +147,13 @@ async function main() {
   assert.equal(await a.evaluate(`window.googleTest.requests.some(request => request.url.includes('/second/events'))`), false);
   console.log('PASS live UI authorization, partial consent, focus return, pagination, narrow GET requests, token isolation, failure preservation and disabled calendars');
   await a.go('/', 'Updated live meeting'); await a.ready('Preserved family event');
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Second calendar meeting')`), false);
   assert.equal(await a.evaluate(`!!document.querySelector('[aria-label="Edit Updated live meeting"]')`), false);
   await a.go('/calendar', 'Updated live meeting');
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Second calendar meeting')`), false);
   await a.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1200, deviceScaleFactor: 1, mobile: false });
   await a.go('/ambient', 'Updated live meeting');
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Second calendar meeting')`), false);
   await a.go('/settings', 'Connected · Google Calendar');
   await a.click('Sync now'); await a.ready('Reconnect required');
   await a.evaluate(`window.googleTest.sub = 'another-user'`); await a.click('Reconnect Google Calendar'); await a.ready('different account');
@@ -160,7 +164,7 @@ async function main() {
   await a.evaluate('window.googleTest.cancelled = false'); await a.click('Sync now');
   await a.evaluate('window.googleTest.deleted = true'); await a.click('Sync now');
   assert.equal((await readCache()).events.filter(event => event.externalCalendarId === 'primary').length, 0);
-  await a.click('Disconnect'); await a.ready('Signed out / not connected');
+  await a.click('Disconnect account'); await a.ready('Signed out / not connected');
   assert.equal((await readCache()).events.length, 0); assert.equal(await readLocal(), localBefore);
   console.log('PASS imported timelines, browser reload reauthorization, wrong-account rejection, updates/cancellations/deletions and disconnect');
   await a.evaluate('window.googleTest.deleted = false'); await a.click('Connect Google Calendar'); await a.ready('Connected · Google Calendar');
@@ -175,10 +179,10 @@ async function main() {
   assert.equal((await readCache()).events.length, 4);
   await accountClick('google:test-user', 'Sync now'); // token still belongs to the first login
   assert.equal((await readCache()).calendars.find(item => item.accountId === 'google:test-user' && item.id === 'primary').colorOverride, '#C7952D');
-  await a.evaluate('window.outlookTest.wrongState = true'); await a.click('Connect Microsoft Outlook'); await a.ready('could not be verified');
+  await a.evaluate('window.outlookTest.wrongState = true'); await a.click('Connect Outlook Calendar'); await a.ready('could not be verified');
   assert.equal((await readCache()).accounts.length, 2);
-  await a.evaluate('window.outlookTest.wrongState = false; window.outlookTest.partial = true'); await a.click('Connect Microsoft Outlook'); await a.ready('Grant read-only calendar access');
-  await a.evaluate('window.outlookTest.partial = false'); await a.click('Connect Microsoft Outlook'); await a.ready('3 connected calendar accounts');
+  await a.evaluate('window.outlookTest.wrongState = false; window.outlookTest.partial = true'); await a.click('Connect Outlook Calendar'); await a.ready('Grant read-only calendar access');
+  await a.evaluate('window.outlookTest.partial = false'); await a.click('Connect Outlook Calendar'); await a.ready('3 connected calendar accounts');
   await accountClick('outlook:outlook-user', 'Sync now'); await a.ready('Outlook work calendar');
   assert.equal((await readCache()).events.length, 5);
   assert.ok(await a.evaluate(`window.outlookTest.requests.every(request => request.method === 'GET' && request.bearer)`));
@@ -199,9 +203,9 @@ async function main() {
   await a.go('/ambient', 'Live Google meeting');
   assert.equal(await a.evaluate(`document.body.innerText.includes('Live Outlook meeting')`), false);
   await a.go('/settings', '3 connected calendar accounts');
-  await accountClick('google:second-user', 'Disconnect');
+  await accountClick('google:second-user', 'Disconnect account');
   assert.equal((await readCache()).events.length, 3);
-  await accountClick('outlook:outlook-user', 'Disconnect');
+  await accountClick('outlook:outlook-user', 'Disconnect account');
   assert.equal((await readCache()).events.length, 2);
   await a.evaluate(`window.googleTest.sub = 'test-user'`); await accountClick('google:test-user', 'Reconnect Google Calendar');
   console.log('PASS three connected accounts, real AuthSession popup callback and PKCE with mocked OAuth, state/consent rejection, shared-calendar deduplication, color/family settings, mobile bounds and account-specific disconnect');
@@ -212,11 +216,20 @@ async function main() {
   await a.go('/', 'No events today.');
   await a.go('/settings', 'Signed out / not connected');
   await pause(200); await a.evaluate('window.outlookTest.pending = true');
-  await a.click('Connect Microsoft Outlook'); await a.ready('Sync in progress');
+  await a.click('Connect Outlook Calendar'); await a.ready('Sync in progress');
   await a.click('Start Fresh'); await a.click('Delete local data and start fresh'); await a.ready('Start Fresh complete.');
   await pause(250); assert.equal((await readCache())?.accounts?.length ?? 0, 0);
-  await a.evaluate('window.outlookTest.pending = false'); await a.click('Connect Microsoft Outlook'); await a.ready('Connected · Microsoft Outlook');
-  await accountClick('outlook:outlook-user', 'Disconnect');
+  await a.evaluate('window.outlookTest.pending = false'); await a.click('Connect Outlook Calendar'); await a.ready('Connected · Outlook Calendar');
+  await accountClick('outlook:outlook-user', 'Disconnect account');
+  // Identity succeeds but the first calendar fetch fails: keep the connection and
+  // offer a sync retry without another OAuth popup.
+  await a.evaluate('window.outlookTest.failCalendars = true');
+  await a.click('Connect Outlook Calendar'); await a.ready('request failed (500)');
+  assert.equal((await readCache()).accounts.length, 1);
+  assert.equal((await readCache()).accounts[0].lastSyncedAt, undefined);
+  await a.evaluate('window.outlookTest.failCalendars = false'); await a.click('Retry sync'); await a.ready('Last synced:');
+  await a.ready('Calendars to show · 1 selected');
+  await accountClick('outlook:outlook-user', 'Disconnect account');
   assert.deepEqual(errors, []);
   console.log('PASS reset during in-flight sync/OAuth cannot restore imports; Outlook can reconnect after popup cancellation; no runtime exceptions');
 }

@@ -4,6 +4,8 @@ LifeCommand connects to Google with read-only access using Google Identity Servi
 
 ## Google Cloud configuration
 
+These steps are performed once by the **LifeCommand publisher**, not by each user. Ship the configured public client IDs in the build/export environment. Users only open Settings → Calendar Connections and sign in with their own Google account. Empty or malformed configuration displays “Calendar provider not configured in this build” and leaves local-only use available.
+
 1. Create/select a Google Cloud project, enable the **Google Calendar API**, and configure its OAuth consent screen. While the app is in Testing, add each Google account you intend to use as a test user. Public distribution may require Google verification for the requested scopes.
 2. Create the public OAuth clients below in that same project. Put their IDs into `.env.local` using `.env.example`; also configure them in the appropriate EAS build environment. Do not put a client secret, authorization code, access token, or refresh token into environment variables or app data.
 3. Restart Metro with `npx expo start --clear`, or export web with `npx expo export --platform web --clear`, after changing public environment values. Rebuild native apps after changing native client configuration.
@@ -18,9 +20,9 @@ Native Google Sign-In requires a development/production build. Use `npx eas-cli@
 
 ## Connect and sync
 
-1. Open Settings / Calendar Sync. Wait for sign-in to load, then choose **Connect Google Calendar**.
+1. Open Settings → Calendar Connections. Wait for sign-in to load, then choose **Connect Google Calendar**.
 2. Choose the account and grant **both** read-only calendar permissions. Calendar scopes are `calendar.calendarlist.readonly` and `calendar.events.readonly` under `https://www.googleapis.com/auth/`. `openid`/`email` identify the account; the native SDK also supplies its standard basic sign-in profile. No calendar write scope is requested.
-3. Press **Sync now**. The first sync discovers readable calendars and imports the complete 30-days-back / 90-days-forward window. Toggle calendars off to hide and suspend refresh. After enabling one, sync again.
+3. Consent automatically starts the first sync, discovering readable calendars and importing the complete 30-days-back / 90-days-forward window. If calendar loading fails after consent, the connection remains with **Retry sync**. Toggle calendars off to hide them immediately across Today/Calendar/Ambient and suspend refresh. After enabling one, use **Sync now** to refresh its cached events.
 4. Imported events display alongside local/family events with provider/calendar/account labels and the calendar's color. Edit them in Google Calendar, then sync here to update them. Settings offers a local color override and a **Show in Family mode** switch.
 5. Use **Connect Google Calendar** again to add another account. Sync, reconnect, calendar preferences and disconnect are scoped to each account. Outlook accounts may coexist; see [Microsoft setup](MICROSOFT_CALENDAR_SETUP.md).
 
@@ -34,11 +36,19 @@ Every calendar-list and event page must succeed before the cache is replaced. Go
 
 ## Sessions, disconnect, and offline behavior
 
-- **Web:** access tokens live only in memory, with an expiry margin. After a page reload or expiry, use **Reconnect Google Calendar**, then Sync now. No popup opens automatically and no refresh token is stored. Allow popups and access to `accounts.google.com/gsi/client`; production must use HTTPS. GIS manages the popup protocol; the app additionally validates a random request state and granted scopes.
-- **Native:** the Google SDK has one active login. Explicit Connect signs it out before opening the chooser; already issued tokens remain in LifeCommand's runtime account-bound session map. Sync uses the selected account's token, or attempts SDK silent sign-in if no runtime token exists. An expired/mismatched session needs **Reconnect** for that account. LifeCommand never copies credentials into AsyncStorage, its cache, exports, cloud snapshots, or logs.
+- **Web:** access tokens live only in memory, with an expiry margin. After a page reload or expiry, use **Reconnect Google Calendar**; a successful reconnect also refreshes events. No popup opens automatically and no refresh token is stored. Allow popups and access to `accounts.google.com/gsi/client`; production must use HTTPS. GIS manages the popup protocol; the app additionally validates a random request state and granted scopes.
+- **Native:** the Google SDK owns sign-in and has one active login. Explicit Connect signs it out before opening the chooser. LifeCommand saves each account's access token separately in Expo SecureStore (iOS Keychain / Android Keystore-backed storage), using `WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS. It reuses tokens for at most 50 minutes; the native SDK does not expose access-token expiry, so Google may reject them sooner. Expiry/revocation prompts **Reconnect**. An absent token may use SDK silent sign-in, with identity verified before reading calendars. Rebuild with `expo-secure-store` and its plugin; storage failures show an error with no fallback to AsyncStorage.
 - The provider verifies the Google `sub` through UserInfo on connect and before every sync. Reconnecting with a different account is rejected; use **Connect** to add it as another account. Cached events cannot silently become another account's events.
-- Disconnect removes only that account's local imports and runtime token, signing out of the active SDK login when applicable. It does **not** revoke grants for other devices/features or erase other connected accounts. Revoke the app separately in Google Account / Security / third-party connections if desired.
-- Start Fresh removes imports and clears loaded Google credentials. Cached events remain usable offline until disconnected/reset. Local tasks, local/family events, notifications, and Supabase cloud sync remain independent.
+- **Disconnect account** removes that account's local imports and stored/runtime token, signing out of the active SDK login when applicable. It does **not** revoke grants for other devices/features or erase other connected accounts. Revoke the app separately in Google Account / Security / third-party connections if desired.
+- Start Fresh and data replacement remove imports and clear calendar credentials. Startup also prunes stored tokens without matching local connections, including Keychain entries surviving an iOS reinstall. The SecureStore plugin excludes its Android data from OS backups. LifeCommand JSON exports, recovery data and cloud snapshots contain no OAuth credentials or provider caches. Cached events remain usable offline until disconnected/reset. Local tasks, local/family events, notifications, and Supabase cloud sync remain independent.
+
+Google GIS uses its supported browser token popup API, which does not expose a PKCE code exchange. Native Google authentication is owned by the Google Sign-In SDK. Do not add a web client-secret exchange to the app. Outlook uses explicit S256 PKCE. No refresh token is requested or persisted by LifeCommand, and this slice does not promise unattended/background sync.
+
+## Release and real-account QA
+
+Publishers must complete the Google consent screen, verified domains/privacy policy, production origins, platform clients/signing certificates and any required scope verification before broad release. Testing-mode allowlists are a development restriction, not an end-user setup workflow. Never ship the synthetic IDs used by the browser harness.
+
+Use a rebuilt device app and production-shaped web export. Connect two accounts, cancel/deny consent, retry, reload/restart, and verify expiry/revocation recovery. Confirm native return through the registered Google client scheme/signing configuration. Select the shared family calendar Kellyn updates, change an event in Google, then Sync now and verify it here. Disable each subscription to that shared calendar to hide it everywhere. Confirm disconnect preserves local/family/manual events and the other account. Record results in [device QA](../qa/MVP_DEVICE_QA_CHECKLIST.md); provider login must be tested manually, not automated.
 
 Errors are reduced to actionable messages without logging tokens or raw server response details. Missing/malformed client IDs and unsupported builds do not initialize native auth or block local-only use. No calendar request uses a method other than GET.
 

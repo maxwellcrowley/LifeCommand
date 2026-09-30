@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { AmbientSettingsCard } from '@/src/components/AmbientSettingsCard';
 import { DataManagementCard } from '@/src/components/DataManagementCard';
+import { CloudSyncCard } from '@/src/components/CloudSyncCard';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
 import { FormError } from '@/src/components/TaskForm';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
@@ -25,6 +26,8 @@ export default function SettingsScreen() {
   const time = timeDraft ?? settings.rolloverTime;
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [seenReset, setSeenReset] = useState(resetVersion);
+  if (seenReset !== resetVersion) { setSeenReset(resetVersion); setTime(undefined); setError(''); }
   const save = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSaving(true); setError('');
     try { await updateSetting(key, value); if (key === 'rolloverTime') setTime(undefined); }
@@ -48,5 +51,6 @@ export default function SettingsScreen() {
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
     <AmbientSettingsCard settings={settings} saving={saving} save={save} />
     <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
+    <CloudSyncCard disabled={saving} />
   </Page>;
 }

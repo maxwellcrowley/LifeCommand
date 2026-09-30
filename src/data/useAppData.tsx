@@ -58,7 +58,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [markStale]);
 
-  const replaceData = async (operation: () => Promise<AppData>) => {
+  const replaceData = useCallback(async (operation: () => Promise<AppData>) => {
     if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Data replacement is already in progress.');
     resetting.current = true;
@@ -70,8 +70,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (cause instanceof ExternalDataChangeError) markStale();
       throw cause;
     } finally { resetting.current = false; }
-  };
-  const importData = (raw: string) => replaceData(() => importAppData(raw));
+  }, [markStale]);
+  const importData = useCallback((raw: string) => replaceData(() => importAppData(raw)), [replaceData]);
   const restoreBackup = (key: string, raw: string) => replaceData(() => restoreRecoveryBackup(key, raw));
 
   const startFresh = async () => {

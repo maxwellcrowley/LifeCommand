@@ -1,6 +1,7 @@
+import type { DisplayEvent, ExternalEvent } from './externalCalendars';
 import { addDays, localDateKey } from './dates';
 import { compareEvents, eventKey, eventsOnDate, nextEvent } from './events';
-import type { AmbientMode, AmbientSettings, AppData, ClockFormat, LocalEvent, Task } from './models';
+import type { AmbientMode, AmbientSettings, AppData, ClockFormat, Task } from './models';
 import { getTodayTasks, isTaskOverdue } from './tasks';
 
 export const ambientModeLabels: Record<AmbientMode, string> = { today: 'Today Board', focus: 'Focus Mode', family: 'Family Mode', minimal: 'Minimal Mode' };
@@ -25,7 +26,7 @@ export function formatAmbientTime(time: string, format: ClockFormat): string {
   return `${hour % 12 || 12}:${minutes} ${hour < 12 ? 'AM' : 'PM'}`;
 }
 
-export function ambientEventTime(event: LocalEvent, format: ClockFormat): string {
+export function ambientEventTime(event: DisplayEvent, format: ClockFormat): string {
   return event.startTime ? `${formatAmbientTime(event.startTime, format)}${event.endTime ? ` – ${formatAmbientTime(event.endTime, format)}` : ''}` : 'All day';
 }
 
@@ -43,13 +44,13 @@ function limited<T>(items: T[], max: number, capacity: number) {
   return { items: visible, total: items.length, remaining: items.length - visible.length };
 }
 
-export function selectAmbient(data: AppData, now: Date, capacity: AmbientCapacity = { tasks: 20, events: 20 }) {
+export function selectAmbient(data: AppData & { externalEvents?: ExternalEvent[] }, now: Date, capacity: AmbientCapacity = { tasks: 20, events: 20 }) {
   const settings = data.settings;
   const today = localDateKey(now);
   const family = settings.ambientMode === 'family';
   const familySections = new Set(data.sections.filter(section => section.name === 'Family').map(section => section.id));
   const belongs = (task: Task) => !family || task.owner === 'shared' || task.owner === 'kellyn' || familySections.has(task.sectionId);
-  const scoped = { calendarEvents: family ? [] : data.calendarEvents, familyEvents: data.familyEvents };
+  const scoped = { externalEvents: family ? data.externalEvents?.filter(event => event.family) : data.externalEvents, calendarEvents: family ? [] : data.calendarEvents, familyEvents: data.familyEvents };
   const next = nextEvent(scoped, now);
   const events = eventsOnDate(scoped, today).sort((a, b) => Number(eventKey(b) === (next && eventKey(next))) - Number(eventKey(a) === (next && eventKey(next))) || compareEvents(a, b));
   const active = getTodayTasks(data.tasks, today).filter(belongs).sort((a, b) => compareAmbientTasks(a, b, today));

@@ -1,3 +1,5 @@
+import { useCalendarSync } from '../calendar/CalendarSyncProvider';
+import type { DisplayEvent } from '../domain/externalCalendars';
 import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -5,12 +7,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { ambientEventTime, ambientLayout, ambientModeLabels, formatAmbientTime, selectAmbient } from '@/src/domain/ambient';
-import { eventKey, sourceColors, sourceLabels } from '@/src/domain/events';
+import { eventKey, eventSourceColor, eventSourceLabel } from '@/src/domain/events';
 import { isTaskOverdue } from '@/src/domain/tasks';
 import { useLocalClock } from '@/src/hooks/useLocalClock';
-import type { LocalEvent, Task } from '@/src/domain/models';
+import type { Task } from '@/src/domain/models';
 
 export function AmbientDisplayView() {
+  const { events: externalEvents } = useCalendarSync();
   const { data, error, recoveryNotice, retry } = useAppData();
   const { colors, settings } = useAppTheme();
   const { width, height, fontScale } = useWindowDimensions();
@@ -37,14 +40,14 @@ export function AmbientDisplayView() {
     {data && !settings.ambientDisplayEnabled ? <Text style={[styles.meta, muted]}>Enable ambient display in Settings to show your day here.</Text> : null}
   </ScrollView>;
 
-  const selection = selectAmbient(data, now, layout);
+  const selection = selectAmbient({ ...data, externalEvents }, now, layout);
   const family = settings.ambientMode === 'family';
   const board = settings.ambientMode === 'today' || family;
   const itemSize = layout.wide ? 24 : 20;
-  const renderEvent = (event: LocalEvent, spotlight = false) => {
+  const renderEvent = (event: DisplayEvent, spotlight = false) => {
     const compact = settings.ambientEventDensity === 'compact' && !spotlight;
-    return <View key={eventKey(event)} style={[styles.event, { borderLeftColor: sourceColors[event.source], paddingVertical: compact ? 4 : 8 }]}>
-      <Text numberOfLines={1} style={[styles.meta, text]}>{ambientEventTime(event, settings.ambientClockFormat)} · {sourceLabels[event.source]}</Text>
+    return <View key={eventKey(event)} style={[styles.event, { borderLeftColor: eventSourceColor(event), paddingVertical: compact ? 4 : 8 }]}>
+      <Text numberOfLines={1} style={[styles.meta, text]}>{ambientEventTime(event, settings.ambientClockFormat)} · {eventSourceLabel(event)}</Text>
       <Text accessibilityLabel={event.title} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: '600' }}>{event.title}</Text>
     </View>;
   };

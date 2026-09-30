@@ -1,3 +1,4 @@
+import { EXTERNAL_CALENDAR_KEY } from '../domain/externalCalendars';
 import type { AppData } from '../domain/models';
 import { normalizeAppData } from '../domain/normalize';
 import { migrateSnapshot, persistedSnapshot, snapshotData, snapshotRevision, snapshotVersion } from '../domain/migrations';
@@ -27,7 +28,7 @@ export class ExternalDataChangeError extends Error {
 
 export class ResetCleanupError extends Error {
   constructor(public readonly data: AppData) {
-    super('Your active data was reset, but local recovery copies could not all be removed. Try Start Fresh again to finish.');
+    super('Your active data was reset, but local recovery copies or imported calendar data could not all be removed. Try Start Fresh again to finish.');
   }
 }
 
@@ -166,7 +167,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
       await write(data);
       recoveryNotice = '';
       try {
-        for (const key of backups) await storage.removeItem(key);
+        for (const key of [...backups, EXTERNAL_CALENDAR_KEY]) await storage.removeItem(key);
       } catch {
         // AsyncStorage has no cross-key transaction. Let the UI reflect the durable state.
         throw new ResetCleanupError(data);

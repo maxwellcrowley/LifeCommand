@@ -5,7 +5,7 @@ import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, reset
 import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError } from './storage';
-import { createTask, updateTaskSchedule, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
+import { createTask, scheduleTasks, updateTaskSchedule, type ScheduleSelection, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { applyReminderDefault, changeReminder, type ReminderAction, type ScheduledReminder } from '@/src/domain/reminders';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
@@ -28,6 +28,7 @@ type AppDataValue = {
   archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
   actOnReminder: (reminder: ScheduledReminder, action: ReminderAction) => Promise<void>;
   addTask: (input: TaskInput) => Promise<Task>;
+  schedule: (selection: ScheduleSelection[], date: string, backlogOnly?: boolean) => Promise<void>;
   editTask: (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
 };
@@ -117,6 +118,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
     return task;
   };
+  const schedule = (selection: ScheduleSelection[], date: string, backlogOnly = false) => commit(current => scheduleTasks(current, selection, date, backlogOnly));
   const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => ({
     ...current,
     tasks: current.tasks.map(task => {
@@ -154,7 +156,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

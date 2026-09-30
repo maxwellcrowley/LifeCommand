@@ -45,7 +45,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
         <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
         <Page title="Start Fresh?" subtitle="This cannot be undone.">
           <Card>
-            <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved app settings, including test and sample data. Local recovery copies and rollover history are also removed. Device notification preferences and OS permission remain; pending reminders and test alerts are canceled when the notification queue refreshes.</Muted>
+            <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved app settings, including test and sample data. Imported calendar connections/events, local recovery copies and rollover history are also removed. Device notification preferences and OS permission remain; pending reminders and test alerts are canceled when the notification queue refreshes.</Muted>
             <Muted>Default sections and settings will be restored. Tasks, events, and projects will be empty. Other open tabs will pause saving and ask you to reload. Reloading discards their unsaved drafts.</Muted>
           </Card>
           {error ? <FormError>{error}</FormError> : null}

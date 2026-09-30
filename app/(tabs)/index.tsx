@@ -1,3 +1,5 @@
+import { AddFromBacklog } from '@/src/components/TaskScheduling';
+import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
@@ -10,19 +12,21 @@ import { EventRow } from '@/src/components/EventRow';
 import { useLocalClock } from '@/src/hooks/useLocalClock';
 
 export default function TodayScreen() {
+  const { events: externalEvents } = useCalendarSync();
   const { data, editTask, error } = useAppData();
   const { colors } = useAppTheme();
   const now = useLocalClock();
   if (!data || !now) return <Page title="Today" subtitle={error || 'Loading your day...'} />;
   const today = localDateKey(now);
   const dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const events = eventsOnDate(data, today);
+  const events = eventsOnDate({ ...data, externalEvents }, today);
   const todayTasks = getTodayTasks(data.tasks, today).sort(compareTaskPriority);
   const completedCount = data.tasks.filter(task => task.status === 'complete' && task.completedAt && localDateKey(new Date(task.completedAt)) === today).length;
 
   return <Page title="Today" subtitle={dateLabel}>
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
     <Card title={`Today's tasks · ${todayTasks.length}`}>
+      <AddFromBacklog key={today} date={today} />
       {completedCount ? <Muted>{completedCount} completed today</Muted> : null}
       {todayTasks.length ? todayTasks.map(task => <Row key={task.id}>
         <View style={{ flex: 1, gap: 3 }}>

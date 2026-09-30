@@ -57,7 +57,26 @@ export function compareTaskPriority(a: Task, b: Task): number {
 
 export function getProjectTasks(tasks: Task[], projectId: string): Task[] {
   return tasks.filter(task => task.projectId === projectId && task.status !== 'archived')
-    .sort((a, b) => Number(a.status === 'complete') - Number(b.status === 'complete') || compareTaskPriority(a, b));
+    .sort((a, b) => Number(a.status === 'complete') - Number(b.status === 'complete') || compareTaskPriority(a, b)
+      || (a.status !== 'complete' ? (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') : 0));
+}
+
+export type ScheduleSelection = Pick<Task, 'id' | 'updatedAt'>;
+// Validate the entire selection before returning one snapshot for one durable write.
+export function scheduleTasks(data: AppData, selection: ScheduleSelection[], dueDate: string, backlogOnly = false, now = new Date()): AppData {
+  validateDueDate(dueDate);
+  if (!selection.length) throw Error('Select at least one task.');
+  const selected = new Map(selection.map(item => [item.id, item.updatedAt]));
+  if (selected.size !== selection.length) throw Error('A task was selected more than once.');
+  for (const item of selection) {
+    const task = data.tasks.find(task => task.id === item.id);
+    if (!task || task.updatedAt !== item.updatedAt || task.status === 'complete' || task.status === 'archived' || (backlogOnly && task.dueDate)) {
+      throw Error('A selected task changed or is no longer available. Nothing was scheduled. Reopen the selection and try again.');
+    }
+  }
+  return { ...data, tasks: data.tasks.map(task => selected.has(task.id)
+    ? updateTaskSchedule(task, { dueDate, status: dueDate ? 'scheduled' : 'backlog' }, data.settings, dueDate ? 'clean' : 'backlog', new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)))
+    : task) };
 }
 
 export function getBacklogBySection(data: AppData) {

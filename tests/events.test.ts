@@ -38,7 +38,7 @@ test('times must be valid HH:MM with a later same-day end and a start when end i
 });
 
 test('family events have a distinct source/color and accept both people and every category', () => {
-  assert.equal(new Set(Object.values(sourceColors)).size, 4);
+  assert.equal(new Set(Object.values(sourceColors)).size, 6);
   for (const addedBy of ['Max', 'Kellyn'] as const) for (const category of familyCategories) {
     const event = createEvent({ ...input, source: 'family', addedBy, category });
     assert.equal(event.source, 'family');

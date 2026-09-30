@@ -1,3 +1,4 @@
+import { CalendarSyncCard } from '@/src/components/CalendarSyncCard';
 import { ReminderSettingsCard } from '@/src/components/ReminderSettingsCard';
 import { NotificationSettingsCard } from '@/src/components/NotificationSettingsCard';
 import { useState } from 'react';
@@ -42,7 +43,7 @@ export default function SettingsScreen() {
     <Card title="Daily rollover">
       <Muted>At this local time, unfinished work from the previous day moves forward. If the app is closed, it catches up when you return.</Muted>
       <Label>Rollover time · 24-hour HH:MM</Label>
-      <Row><TextInput accessibilityLabel="Rollover time, 24-hour HH:MM" value={time} onChangeText={setTime} placeholder="00:00" placeholderTextColor={colors.muted} maxLength={5} autoCorrect={false} style={{ flex: 1, color: colors.text, backgroundColor: colors.background, padding: 12, borderRadius: 10 }} /><Pressable disabled={saving} accessibilityRole="button" onPress={() => void save('rolloverTime', time.trim())} style={{ padding: 12 }}><Label>{saving ? 'Saving…' : 'Save time'}</Label></Pressable></Row>
+      <Row><TextInput accessibilityLabel="Rollover time, 24-hour HH:MM" value={time} onChangeText={setTime} placeholder="00:00" placeholderTextColor={colors.muted} maxLength={5} autoCorrect={false} style={{ flex: 1, minHeight: 44, color: colors.text, backgroundColor: colors.background, padding: 12, borderRadius: 10 }} /><Pressable disabled={saving} accessibilityRole="button" onPress={() => void save('rolloverTime', time.trim())} style={{ padding: 12 }}><Label>{saving ? 'Saving…' : 'Save time'}</Label></Pressable></Row>
       <Muted>Saved: {settings.rolloverTime === '00:00' ? '12:00 AM (midnight)' : settings.rolloverTime}</Muted>
       {toggles.map(([key, label]) => <Row key={key}><View style={{ flex: 1 }}><Label>{label}</Label></View><Switch accessibilityLabel={label} disabled={saving} value={settings[key]} onValueChange={value => void save(key, value)} trackColor={{ true: colors.accent }} /></Row>)}
     </Card>
@@ -51,6 +52,7 @@ export default function SettingsScreen() {
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
     <AmbientSettingsCard settings={settings} saving={saving} save={save} />
     <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
+    <CalendarSyncCard />
     <CloudSyncCard disabled={saving} />
   </Page>;
 }

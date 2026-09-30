@@ -1,3 +1,4 @@
+import { QuickSchedule } from '@/src/components/TaskScheduling';
 import { Link } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
@@ -18,8 +19,8 @@ export default function ReviewScreen() {
   const overdue = active.filter(task => isTaskOverdue(task, today));
   const rolled = active.filter(task => !!task.lastRolledOverAt || task.rolloverCount > 0);
   const groups = getBacklogBySection(data);
-  const futureGroups = data.sections.map(section => ({ section, tasks: active.filter(task => task.sectionId === section.id && !!task.dueDate && task.dueDate > today) })).sort((a, b) => a.section.order - b.section.order);
-  const renderTask = (task: Task) => <Link key={task.id} href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild><Pressable style={{ backgroundColor: colors.background, borderRadius: 10, padding: 12, gap: 4 }}><Label>{task.title}</Label><Muted>{data.sections.find(section => section.id === task.sectionId)?.name} · {task.dueDate || 'Backlog'} · {task.priority}</Muted>{isTaskOverdue(task, today) ? <Label style={{ color: colors.danger }}>Overdue</Label> : null}{task.lastRolledOverAt || task.rolloverCount > 0 ? <Muted>Rolled over · Count: {task.rolloverCount}{task.lastRolledOverAt ? ` · Last: ${localDateKey(new Date(task.lastRolledOverAt))}` : ''}</Muted> : null}{task.originalDueDate ? <Muted>Originally due {task.originalDueDate}</Muted> : null}{task.manuallyDeferredCount > 0 ? <Muted>Manually deferred {task.manuallyDeferredCount} times</Muted> : null}</Pressable></Link>;
+  const futureGroups = data.sections.map(section => ({ section, tasks: active.filter(task => task.sectionId === section.id && !!task.dueDate && task.dueDate > today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!)) })).sort((a, b) => a.section.order - b.section.order);
+  const renderTask = (task: Task) => <View key={task.id} style={{ gap: 8 }}><Link href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild><Pressable style={{ backgroundColor: colors.background, borderRadius: 10, padding: 12, gap: 4 }}><Label>{task.title}</Label><Muted>{data.sections.find(section => section.id === task.sectionId)?.name} · {task.dueDate || 'Backlog'} · {task.priority}</Muted>{isTaskOverdue(task, today) ? <Label style={{ color: colors.danger }}>Overdue</Label> : null}{task.lastRolledOverAt || task.rolloverCount > 0 ? <Muted>Rolled over · Count: {task.rolloverCount}{task.lastRolledOverAt ? ` · Last: ${localDateKey(new Date(task.lastRolledOverAt))}` : ''}</Muted> : null}{task.originalDueDate ? <Muted>Originally due {task.originalDueDate}</Muted> : null}{task.manuallyDeferredCount > 0 ? <Muted>Manually deferred {task.manuallyDeferredCount} times</Muted> : null}</Pressable></Link><QuickSchedule task={task} /></View>;
   return <Page title="Review" subtitle="Review missed work and plan what comes next.">
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
     <Card title={`Overdue · ${overdue.length}`}>{overdue.length ? overdue.map(renderTask) : <Muted>No overdue tasks.</Muted>}</Card>

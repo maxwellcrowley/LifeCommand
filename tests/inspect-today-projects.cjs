@@ -98,7 +98,7 @@ async function main() {
   console.log('PASS Today tasks first, priority order, all-day/combined timeline, attribution, hidden sections, mobile bounds and edit/complete');
 
   await a.go('/projects', 'Polish project'); await choose('Edit project: Polish project'); await a.ready('Project tasks');
-  assert.deepEqual(await taskTitles(), ['High second', 'Normal today', 'Future', 'Low today', 'Low overdue', 'High today', 'Done high']);
+  assert.deepEqual(await taskTitles(), ['High second', 'Normal today', 'Future', 'Low overdue', 'Low today', 'High today', 'Done high']);
   const progress = () => a.evaluate(`Number(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'))`);
   assert.equal(await progress(), 29);
   await a.click('Add task to project'); await a.ready('Title is required.');
@@ -116,7 +116,7 @@ async function main() {
   const added = saved.tasks.find(t => t.title === 'Added directly');
   assert.deepEqual([added.projectId, added.sectionId, added.priority, added.storyPoints, added.status, added.reminderOffset], [project.id, 'home', 'high', 3, 'backlog', 'morning-of']);
   assert.equal(await progress(), 25);
-  assert.equal((await taskTitles())[0], 'Added directly');
+  assert.equal((await taskTitles())[1], 'Added directly', 'Dated high-priority work precedes high-priority backlog');
   await screenshot('project-tasks-polish');
   await choose('Complete task: Added directly'); assert.equal(await progress(), 38);
   assert.equal((await read()).tasks.find(t => t.id === added.id).status, 'complete');

@@ -8,7 +8,8 @@
     "scheme": "lifecommand",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.crowleymh.LifeCommand"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",

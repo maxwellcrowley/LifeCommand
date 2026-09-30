@@ -1,3 +1,4 @@
+import { QuickSchedule } from './TaskScheduling';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, TextInput, View } from 'react-native';
@@ -49,7 +50,7 @@ export function ProjectTasks({ project }: { project: Project }) {
       <View accessibilityRole="radiogroup" accessibilityLabel="New task priority" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {(['high', 'normal', 'low'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`New task priority: ${value}`} aria-checked={priority === value} accessibilityState={{ checked: priority === value }} disabled={saving} onPress={() => setPriority(value)} style={{ minHeight: 44, padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: priority === value ? colors.soft : colors.background }}><Label>{value[0].toUpperCase() + value.slice(1)}</Label></Pressable>)}
       </View>
-      <Muted>Adds to {section.name} backlog with {project.defaultTaskPoints} points. Open the task to schedule it or edit details.</Muted>
+      <Muted>Adds to {section.name} backlog with {project.defaultTaskPoints} points. Use Schedule below to choose a day.</Muted>
       <TaskButton label="Add task to project" onPress={() => void add()} disabled={saving} />
     </View> : <Muted>Save this project as Active to add tasks.</Muted>}
     {error ? <FormError>{error}</FormError> : null}
@@ -62,6 +63,7 @@ export function ProjectTasks({ project }: { project: Project }) {
         <Pressable accessibilityRole="checkbox" accessibilityLabel={`Complete task: ${task.title}`} accessibilityState={{ checked: task.status === 'complete', disabled: saving }} aria-checked={task.status === 'complete'} disabled={saving} onPress={() => void toggle(task)} style={{ minHeight: 44, padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: colors.soft }}><Label>{task.status === 'complete' ? '✓ Completed · undo' : 'Mark complete'}</Label></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`Archive task: ${task.title}`} disabled={saving} onPress={() => setArchiveId(task.id)} style={{ minHeight: 44, padding: 10, justifyContent: 'center' }}><Label style={{ color: colors.danger }}>Archive</Label></Pressable>
       </View>
+      <QuickSchedule task={task} />
       {archiveId === task.id ? <View style={{ gap: 8 }}>
         <Muted>Archive “{task.title}”? It will leave this list and no longer count toward project progress. Its saved record is kept.</Muted>
         <TaskButton label="Confirm archive task" onPress={() => void archive(task)} disabled={saving} danger />

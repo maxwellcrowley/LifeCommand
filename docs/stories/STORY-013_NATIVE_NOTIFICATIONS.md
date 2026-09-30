@@ -4,6 +4,16 @@ Historical Slice 13 record. [Story 014](STORY-014_NOTIFICATION_TAP_ROUTING_AND_D
 
 ## Implementation and Max's workflow
 
+### Expo Go safety correction — 2026-09-29
+
+The import audit found no static runtime `expo-notifications` import in app source, but the native adapter's dynamic import ran during startup through permission reconciliation and tap-response initialization. Its Android/iOS-only availability check admitted Expo Go and evaluated `DevicePushTokenAutoRegistration.fx`. Lazy import alone was insufficient.
+
+`adapter.native.ts` now reads Expo Constants ownership and constructs the guarded adapter in `nativeAdapter.ts`. Every permission, pending, schedule, cancel and response operation passes through the same availability check before the sole runtime dynamic import. Type-only notification references do not execute the package. Expo Go returns unavailable/no-op results; web retains its separate inert adapter. Compatible Android/iOS builds retain lazy loading, shared module initialization, retry, channels, scheduling and tap handling.
+
+Settings exposes **Native notifications unavailable in Expo Go** and **Use a development build to test notification delivery**, disables native controls and preserves in-app reminders. Native notification tests now exercise the real adapter with a module-loader mock: zero imports for Expo Go/web, scheduling and tap response handling for native builds, and retry after a failed import. Follow the corrected [device runbook](../qa/NATIVE_NOTIFICATION_DEVICE_QA.md); previous Expo Go delivery smoke-test guidance is superseded.
+
+Guard-fix verification on 2026-09-29: typecheck, lint, all **170 tests**, dependency compatibility check, web export, Android export to `.test-build/native-notification-guard`, all nine existing browser harnesses (including `inspect-notifications`) and `git diff --check` passed. Full results and rerun details are in [Story 014](STORY-014_NOTIFICATION_TAP_ROUTING_AND_DEVICE_QA.md#guard-fix-verification--2026-09-29). Physical-device checks remain pending Max.
+
 On a compatible Android/iOS build, open **Settings → Notifications**, switch on **Enable native notifications**, then tap **Request permission**. Enabling alone does not prompt. Permission status is read from the OS and refreshes on return to the app. If denied, allow LifeCommand (and its Android reminder channel) in system Settings, return, and tap **Refresh notifications** if needed. Provisional iOS permission is labeled and may deliver quietly. In-app reminders always remain available.
 
 Tap **Test notification** to schedule one alert about 10 seconds ahead. Keep **Respect quiet hours** on to use the saved Quiet hours interval; a test inside that interval is deferred too, and its scheduled local date/time appears in Settings. Repeated tests replace one request. Then create a task or local/family event with a near-future reminder, save, and test foreground, background and locked-screen arrival. Titles can appear on the lock screen. OS sound, Focus/DND, channel and preview settings still apply.
@@ -16,7 +26,7 @@ On **web**, the card says native notifications are unavailable, all delivery con
 
 The repository uses Expo `~57.0.25` with React Native `0.86.3` and npm (`package-lock.json`, no Bun lock). Read the SDK 57 versioned reference and documentation index before implementation. Installed only `expo-notifications` via `npx expo install expo-notifications`; Expo selected **~57.0.21**. Added its built-in config plugin to `app.json`. No generated `android/` or `ios/` files were created or edited.
 
-SDK 57 supports one-shot local notification scheduling, request enumeration/cancellation, authorization inspection and Android channels. Local APIs are available in Expo Go; Android remote push requires a development build. This slice does not request push tokens or configure remote/background notification delivery. No EAS project, credentials, auth, cloud sync or external calendar sync was introduced.
+SDK 57 supports one-shot local notification scheduling, request enumeration/cancellation, authorization inspection and Android channels. LifeCommand native delivery requires a compatible development/production build. Expo Go is intentionally unavailable on both mobile platforms: evaluating the notification package can initialize Android push-token registration even though this feature only schedules local reminders. This slice does not request push tokens or configure remote/background notification delivery. No EAS project, credentials, auth, cloud sync or external calendar sync was introduced.
 
 Android uses channel `lifecommand-reminders`, DEFAULT importance and default sound; it is created before explicit permission requests and scheduling. Application denial or a blocked channel suppresses scheduling. iOS authorization checks use the platform status, including provisional/ephemeral. The native module is loaded lazily and failures become retryable Settings errors rather than crashing Today. A foreground handler allows banners/list/sound without badges.
 
@@ -33,7 +43,7 @@ Android uses channel `lifecommand-reminders`, DEFAULT importance and default sou
 
 ## Native setup and verification boundary
 
-The package/plugin are ready for a new native binary. Existing binaries that lack the module must be rebuilt; OTA JavaScript alone cannot add it. Expo Go can provide an initial local-notification smoke test, but no Expo Go, development-build or physical-device delivery was run in this environment. Android JavaScript export passes; that is not native compilation, installation, signing or delivery verification.
+The package/plugin are ready for a new native binary. Existing binaries that lack the module must be rebuilt; OTA JavaScript alone cannot add it. Expo Go only provides a safe-startup/in-app-reminder check; native delivery is disabled. No Expo Go device check, development-build or physical-device delivery was run in this environment. Android JavaScript export passes; that is not native compilation, installation, signing or delivery verification.
 
 For physical device QA, follow the [Expo development build setup](https://docs.expo.dev/develop/development-builds/introduction/) and [EAS setup](https://docs.expo.dev/build/setup/). This repo does not yet supply an EAS development profile or application identifiers/signing setup. A follow-up setup session can:
 

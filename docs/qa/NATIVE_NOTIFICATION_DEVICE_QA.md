@@ -2,18 +2,18 @@
 
 Owner: Max. Status: **physical Android/iOS delivery and tap routing not yet verified**. Use disposable data. Record app version/build, device/model/OS, Expo Go or app binary, date/timezone, permission/channel state, battery/Focus mode, scheduled time, actual arrival time, route opened, pass/fail and screenshots. Scheduling success and browser tests do not establish delivery.
 
-## Expo Go smoke test
+## Expo Go safety check (no native delivery)
 
-This repo uses npm, Expo SDK 57 and `expo-notifications ~57.0.21`. Use an SDK-57-compatible Expo Go. Local notifications are supported in Expo Go; Android remote push limitations do not apply to this local-only feature. Expo Go does not validate LifeCommand's own package, plugin, permission or cold-start binary behavior. See the [SDK 57 notification reference](https://docs.expo.dev/versions/v57.0.0/sdk/notifications/).
+This repo uses npm, Expo SDK 57 and `expo-notifications ~57.0.21`. **Android notification delivery testing requires a LifeCommand development build.** LifeCommand disables native notifications in Expo Go on Android and iOS. Although the [SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/sdk/notifications/) distinguishes local notifications from unsupported Android remote push, importing the package can initialize push-token registration. The adapter checks `Constants.appOwnership === 'expo'` before importing the package, including startup permission checks and tap-response initialization. Expo Go is only a safety/in-app-reminder check for this app, never native delivery evidence.
 
-1. From the repo root run `npm ci`, `npx expo install --check`, then `npx expo start --go`. Put computer and phone on the same reachable network. Open the QR in Expo Go (iOS Camera can open the link).
-2. Open Settings → Notifications. Expect disabled by default on a fresh installation, with no unsolicited permission prompt. Turn on **Enable native notifications**, then **Request permission**. Allow OS notifications. System controls belong to **Expo Go** during this smoke test.
-3. With quiet hours disabled, tap **Test notification**, press Home, and wait about 10 seconds plus OS delay. Tap the tray entry: Today should open. Repeat with the app foregrounded and screen locked.
-4. Run Android steps 4–8 below for a task, local event and family event. Capture failures separately from app-build results. If Expo Go lacks the module or cannot run SDK 57, use the development build below.
+1. From the repo root run `npm ci`, `npx expo install --check`, then `npx expo start --go --clear`. Put computer and phone on the same reachable network and open the QR in SDK-57-compatible Expo Go.
+2. Open Settings → Notifications. Expect **Native notifications unavailable in Expo Go** and **Use a development build to test notification delivery**, permission **unavailable**, and disabled delivery switches/buttons. Startup, foregrounding and Settings must not crash or show the Android push-registration error or an OS permission prompt.
+3. Create a disposable task/event reminder. Verify it appears in Today when due and that acknowledgement, snooze, quiet-hour editing and reload still work. Native scheduling/delivery is intentionally unavailable.
+4. Repeat the Settings/in-app check on web with `npm run web`; expect **Native notifications unavailable on web** and no browser notification prompt. Continue below for actual Android delivery and tap routing.
 
 ## Development build setup
 
-A development build is needed for app-specific permission/channel, plugin and launch sign-off, and whenever the installed binary lacks the native module. OTA JavaScript cannot add native modules. This slice adds no dependency, EAS account/project, identifiers, signing credentials or native directories. The repo currently has no `eas.json` or `expo-dev-client`.
+A development build is the supported path for Android notification testing and app-specific permission/channel, plugin and launch sign-off. OTA JavaScript cannot add native modules. This slice adds no dependency, EAS account/project, identifiers, signing credentials or native directories. The repo currently has no `eas.json` or `expo-dev-client`.
 
 For the setup session, run from the repo root:
 
@@ -75,7 +75,7 @@ For a physical iPhone, use `npx eas-cli@latest device:create` to register the de
 
 ## Queue inspection in a development build
 
-The Settings count excludes the single manual test. For OS evidence, open React Native DevTools from Metro (`j`). In Sources, place a breakpoint in `src/notifications/adapter.native.ts` inside `loadNotificationResponses`, after `const api = await notifications()` has completed. Reload the app; while paused and that function's frame selected, run `globalThis.__lcNotificationQA = api` in the Console, then remove the breakpoint and resume. This is a temporary debug handle, not a code or persisted-data change.
+The Settings count excludes the single manual test. For OS evidence, open React Native DevTools from Metro (`j`). In Sources, place a breakpoint in `src/notifications/nativeAdapter.ts` inside `loadNotificationResponses`, after `const api = await notifications()` has completed. Reload the app; while paused and that function's frame selected, run `globalThis.__lcNotificationQA = api` in the Console, then remove the breakpoint and resume. This is a temporary debug handle, not a code or persisted-data change.
 
 In the Console run:
 
@@ -106,6 +106,6 @@ console.log('unique IDs', new Set(queue.map(r => r.identifier)).size, 'total', q
 | --- | --- | --- | --- | --- | --- |
 | Android | Not run | Full pass | — | — | Pending Max |
 | iOS | Not run | Full pass | — | — | Pending Max |
-| Expo Go | Not run | Smoke only | — | — | Pending Max |
+| Expo Go safety/in-app | Not run | Native delivery disabled | — | — | Pending Max |
 
 Use the [MVP checklist](MVP_DEVICE_QA_CHECKLIST.md#native-local-notifications-slices-13-14) for sign-off and [Story 014](../stories/STORY-014_NOTIFICATION_TAP_ROUTING_AND_DEVICE_QA.md) for automated results and limitations.

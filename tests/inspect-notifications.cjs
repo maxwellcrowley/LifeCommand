@@ -59,14 +59,12 @@ async function main() {
   await evaluate(`document.querySelector('[aria-label="Enable native notifications"]').scrollIntoView({block:'center'})`);
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync('.test-build/notifications-web.png', Buffer.from(screenshot.data, 'base64'));
-  await go('/', 'Due: Web reminder still works');
-  assert.ok(await evaluate(`document.querySelector('[aria-label="Snooze 15 minutes: Web reminder still works"]') !== null`));
-  await evaluate(`document.querySelector('[aria-label="Acknowledge: Web reminder still works"]').click()`);
-  await pause(300);
-  assert.ok(await evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1')).tasks[0].lastReminderAcknowledgedAt`));
+  await go('/', "Today's calendar");
+  assert.equal(await evaluate(`document.querySelector('[aria-label^="Snooze"]') !== null`), false);
+  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1')).tasks[0].reminderEnabled`), true);
   await go('/settings', 'Native notifications unavailable on web');
   assert.deepEqual(errors, []);
-  console.log('PASS web unavailability, disabled accessible controls, no browser prompts/device writes, mobile bounds, reminder acknowledgement and reload');
+  console.log('PASS web unavailability, disabled accessible controls, no browser prompts/device writes, mobile bounds, hidden Today reminders with saved configuration and reload');
 }
 const watchdog = setTimeout(() => { console.error('Notification harness timed out'); process.exitCode = 1; ws?.close(); chrome?.kill(); server.close(); }, 120000);
 main().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => { clearTimeout(watchdog); ws?.close(); chrome?.kill(); server.close(); });

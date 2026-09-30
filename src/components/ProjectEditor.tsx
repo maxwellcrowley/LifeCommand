@@ -6,7 +6,7 @@ import type { Project } from '@/src/domain/models';
 import { projectStatuses, projectStatusLabels } from '@/src/domain/projects';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { FormError } from './TaskForm';
-import { ProjectProgress } from './ProjectProgress';
+import { ProjectTasks } from './ProjectTasks';
 import { Card, Label, Muted, Page, Row } from './ui';
 
 const toDraft = (project?: Project) => ({ name: project?.name ?? '', description: project?.description ?? '', sectionId: project?.sectionId ?? '', status: project?.status ?? 'active', trackCompletion: project?.trackCompletion ?? true, useWeightedProgress: project?.useWeightedProgress ?? false, defaultTaskPoints: String(project?.defaultTaskPoints ?? 1), includeBacklogTasks: project?.includeBacklogTasks ?? true });
@@ -38,8 +38,8 @@ export function ProjectEditor({ project }: { project?: Project }) {
   const choices = (key: 'sectionId' | 'status', label: string, options: { value: string; label: string }[]) => <View style={{ gap: 6 }}><Muted>{label}</Muted><View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{options.map(option => <Pressable key={option.value} disabled={saving} accessibilityRole="radio" accessibilityLabel={`${label}: ${option.label}`} aria-checked={draft[key] === option.value} accessibilityState={{ checked: draft[key] === option.value }} onPress={() => setDraft(current => ({ ...current, [key]: option.value }))} style={{ minHeight: 44, maxWidth: '100%', padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: draft[key] === option.value ? colors.soft : colors.background }}><Label>{option.label}</Label></Pressable>)}</View></View>;
   const toggle = (key: 'trackCompletion' | 'useWeightedProgress' | 'includeBacklogTasks', label: string) => <Row><Label>{label}</Label><Switch accessibilityLabel={label} disabled={saving} value={draft[key]} onValueChange={value => setDraft(current => ({ ...current, [key]: value }))} /></Row>;
   if (!data) return <Page hasHeader title="Project" subtitle="Loading your projects…" />;
-  const linked = project ? data.tasks.filter(task => task.projectId === project.id && task.status !== 'archived') : [];
   return <Page hasHeader title={project ? 'Edit project' : 'New project'} subtitle="Organize related tasks and choose how to track progress.">
+    {project ? <ProjectTasks project={project} /> : null}
     <Card title="Project details">
       {field('name', 'Project name · required')}{field('description', 'Project description · optional')}
       {choices('sectionId', 'Project section', [{ value: '', label: 'None' }, ...data.sections.map(section => ({ value: section.id, label: section.name }))])}
@@ -59,11 +59,6 @@ export function ProjectEditor({ project }: { project?: Project }) {
     <EditorButton label={saving ? 'Saving…' : 'Save project'} onPress={() => void save()} disabled={saving || stale} />
     {project ? <Card><Muted>Archive and restore also save the details above. Restoring makes the project Active.</Muted><EditorButton label={project.status === 'archived' ? 'Unarchive project' : 'Archive project'} onPress={() => void save(project.status === 'archived' ? 'active' : 'archived')} disabled={saving || stale} /></Card> : null}
     <EditorButton label="Cancel" onPress={leave} disabled={saving} />
-    {project ? <Card title="Linked tasks · saved progress">
-      <ProjectProgress project={project} tasks={data.tasks} />
-      {linked.map(task => <Pressable key={task.id} accessibilityRole="button" accessibilityLabel={`Edit task: ${task.title}`} onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })} style={{ minHeight: 44, paddingVertical: 10 }}><Label>{task.title}</Label><Muted>{task.status} · {task.storyPoints} points</Muted></Pressable>)}
-      <Muted>Use Capture to add tasks, or Review to open existing tasks and change their project.</Muted>
-    </Card> : null}
   </Page>;
 }
 

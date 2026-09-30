@@ -23,7 +23,9 @@ export function NotificationSettingsCard() {
     return <Pressable accessibilityRole="button" accessibilityState={{ disabled: inactive }} disabled={inactive} onPress={() => void perform(action)} style={{ minHeight: 44, paddingVertical: 12, opacity: inactive ? 0.5 : 1 }}><Label>{label}</Label></Pressable>;
   };
   return <Card title="Notifications">
-    <Muted>{notifications.available ? 'Local alerts on this device. In-app reminders keep working even without permission.' : 'Native notifications unavailable on web. Reminders, snooze and acknowledgement still work in Today.'}</Muted>
+    <Muted>{notifications.available ? 'Local alerts on this device. In-app reminders keep working even without permission.' : notifications.unavailableReason === 'expo-go'
+      ? 'Native notifications unavailable in Expo Go. Use a development build to test notification delivery. Reminders, snooze and acknowledgement still work in Today.'
+      : 'Native notifications unavailable on web. Reminders, snooze and acknowledgement still work in Today.'}</Muted>
     <Row><Label>Enable native notifications</Label><Switch accessibilityLabel="Enable native notifications" value={notifications.preferences.enabled} disabled={disabled} onValueChange={enabled => void perform(() => notifications.setPreferences({ enabled }))} /></Row>
     <Label>Permission status: {notifications.permission}</Label>
     {notifications.permission === 'denied' ? <Muted>Permission or the reminder channel is blocked. Allow LifeCommand notifications in device Settings, then return and retry.</Muted> : null}

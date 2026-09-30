@@ -48,6 +48,18 @@ export function getTodayTasks(tasks: Task[], date = localDateKey(new Date())) {
   return tasks.filter(task => task.status !== 'complete' && task.status !== 'archived' && !!task.dueDate && task.dueDate <= date);
 }
 
+const priorityRank: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
+
+// Equal priorities retain the existing collection order (newest captures first).
+export function compareTaskPriority(a: Task, b: Task): number {
+  return priorityRank[a.priority] - priorityRank[b.priority];
+}
+
+export function getProjectTasks(tasks: Task[], projectId: string): Task[] {
+  return tasks.filter(task => task.projectId === projectId && task.status !== 'archived')
+    .sort((a, b) => Number(a.status === 'complete') - Number(b.status === 'complete') || compareTaskPriority(a, b));
+}
+
 export function getBacklogBySection(data: AppData) {
   return data.sections.map(section => ({ section, tasks: data.tasks.filter(task => task.sectionId === section.id && !task.dueDate && task.status !== 'complete' && task.status !== 'archived') })).sort((a, b) => a.section.order - b.section.order);
 }

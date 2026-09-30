@@ -67,7 +67,9 @@ async function main() {
   await a.click('Save task'); await a.ready('Section backlogs');
   let saved = (await read()).tasks[0];
   assert.equal(saved.reminderEnabled, true); assert.ok(saved.reminderAt);
-  await a.go('/', 'Due: Reminder harness task');
+  await a.go('/', "Today's tasks");
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Due: Reminder harness task')`), false);
+  assert.equal((await read()).tasks[0].reminderEnabled, true);
   await a.go('/task/' + saved.id, 'Save changes');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Reminder time, HH:MM"]').value`), '08:30');
   for (const [width,height] of [[320,568],[390,844],[844,390]]) {
@@ -87,10 +89,13 @@ async function main() {
   await a.go('/task/' + saved.id, 'Save changes');
   await choose('Reminder: Custom date and time'); await a.fill('Reminder date, YYYY-MM-DD', '2020-01-01');
   await a.click('Save changes'); await pause(300);
-  await a.go('/', 'Due: Reminder harness task');
+  await a.go('/', "Today's tasks");
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Due: Reminder harness task')`), false);
+  assert.equal((await read()).tasks[0].reminderEnabled, true);
   await a.go('/task/' + saved.id, 'Save changes'); await choose('Status: complete'); await a.click('Save changes'); await pause(300);
-  await a.go('/', 'No reminders scheduled.');
-  console.log('PASS task defaults, custom validation, Today due indication, persistence, responsive controls, failed save/retry, relative clearing and completion exclusion');
+  await a.go('/', "Today's calendar");
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Reminders')`), false);
+  console.log('PASS task defaults, custom validation, Today reminder hiding, persistence, responsive controls, failed save/retry, relative clearing and completion exclusion');
   await a.go('/event/new', 'Save event');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Reminder: 15 minutes before"]').getAttribute('aria-checked')`), 'true');
   await a.fill('Title \u00b7 required', 'Reminder harness event');
@@ -106,7 +111,8 @@ async function main() {
   await a.go('/event/' + encodeURIComponent('family:' + family.id), 'Save event');
   await a.click('Archive event'); await a.click('Confirm archive'); await pause(300);
   assert.ok((await read()).familyEvents[0].archivedAt);
-  await a.go('/', 'No reminders scheduled.');
+  await a.go('/', "Today's calendar");
+  assert.equal(await a.evaluate(`document.body.innerText.includes('Reminders')`), false);
   await a.go('/settings', 'Reminder defaults');
   assert.equal((await read()).settings.defaultEventReminder, '15-minutes');
   assert.deepEqual(errors, []);

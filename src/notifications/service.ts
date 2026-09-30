@@ -14,6 +14,7 @@ export interface NotificationRequest { id: string; title: string; body: string; 
 export interface PendingNotification { id: string; fingerprint?: string }
 export interface NotificationAdapter {
   available: boolean;
+  unavailableReason?: 'expo-go' | 'unsupported-platform';
   permission(request: boolean): Promise<Permission>;
   pending(): Promise<PendingNotification[]>;
   schedule(request: NotificationRequest): Promise<void>;
@@ -38,6 +39,7 @@ export function notificationPlan(data: AppData, preferences: DevicePreferences, 
 export interface NotificationState {
   loaded: boolean;
   available: boolean;
+  unavailableReason?: NotificationAdapter['unavailableReason'];
   preferences: DevicePreferences;
   permission: Permission;
   pending: number;
@@ -55,7 +57,7 @@ export class NotificationService {
   private listeners = new Set<() => void>();
   private state: NotificationState;
   constructor(private adapter: NotificationAdapter, private storage: PreferenceStore, private now = () => new Date()) {
-    this.state = { loaded: false, available: adapter.available, preferences: { ...defaultPreferences }, permission: adapter.available ? 'undetermined' : 'unavailable', pending: 0, error: '' };
+    this.state = { loaded: false, available: adapter.available, unavailableReason: adapter.unavailableReason, preferences: { ...defaultPreferences }, permission: adapter.available ? 'undetermined' : 'unavailable', pending: 0, error: '' };
   }
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };

@@ -48,7 +48,7 @@ Run on disposable test data first. Record device/OS/browser, build/commit, date,
 
 ## Native local notifications (Slices 13-14)
 
-Use disposable reminders and a rebuilt Android/iOS app containing `expo-notifications` and its config plugin. Expo Go can smoke-test local APIs, but does not sign off this app's binary configuration or delivery. Record scheduled time, actual arrival, app state, battery mode, OS authorization/channel state, and build/device details for each run.
+Use disposable reminders and a rebuilt Android/iOS app containing `expo-notifications` and its config plugin. Expo Go only tests safe startup, disabled native controls and in-app reminders; LifeCommand does not import or schedule native notifications there. Android delivery testing requires a development build; follow the [native notification setup](NATIVE_NOTIFICATION_DEVICE_QA.md#development-build-setup). Record scheduled time, actual arrival, app state, battery mode, OS authorization/channel state, and build/device details for each run.
 
 Follow [Native notification device QA](NATIVE_NOTIFICATION_DEVICE_QA.md) for exact Expo Go commands, EAS development-build setup, Android steps, iOS checks, quiet-hour timings and OS queue inspection. Physical Android/iOS and Expo Go results remain **pending Max**; automated checks are recorded in [Story 014](../stories/STORY-014_NOTIFICATION_TAP_ROUTING_AND_DEVICE_QA.md).
 

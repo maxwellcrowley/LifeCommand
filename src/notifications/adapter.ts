@@ -6,6 +6,7 @@ export const loadNotificationResponses = async (): Promise<NotificationResponseS
 // Web/unsupported platforms never import the native module or ask browser permission.
 export const notificationAdapter: NotificationAdapter = {
   available: false,
+  unavailableReason: 'unsupported-platform',
   permission: async () => 'unavailable',
   pending: async () => [],
   schedule: async () => undefined,

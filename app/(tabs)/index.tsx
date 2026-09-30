@@ -1,14 +1,14 @@
-import { TodayReminders, ReminderIndicator } from '@/src/components/TodayReminders';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { localDateKey } from '@/src/domain/dates';
-import { getTodayTasks, isTaskOverdue } from '@/src/domain/tasks';
-import { eventsOnDate, nextEvent, eventKey } from '@/src/domain/events';
+import { compareTaskPriority, getTodayTasks, isTaskOverdue } from '@/src/domain/tasks';
+import { eventsOnDate, eventKey } from '@/src/domain/events';
 import { EventRow } from '@/src/components/EventRow';
 import { useLocalClock } from '@/src/hooks/useLocalClock';
+
 export default function TodayScreen() {
   const { data, editTask, error } = useAppData();
   const { colors } = useAppTheme();
@@ -17,16 +17,29 @@ export default function TodayScreen() {
   const today = localDateKey(now);
   const dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const events = eventsOnDate(data, today);
-  const tasks = data?.tasks ?? [];
-  const todayTasks = getTodayTasks(tasks, today);
-  const overdue = todayTasks.filter(task => isTaskOverdue(task, today));
-  const dueToday = todayTasks.filter(task => task.dueDate === today && !isTaskOverdue(task, today));
-  const completedToday = tasks.filter(task => task.status === 'complete' && task.completedAt && localDateKey(new Date(task.completedAt)) === today);
-  const summary = data?.lastRolloverSummary;
-  const showSummary = summary && localDateKey(new Date(summary.performedAt)) === today && summary.movedTaskIds.length > 0;
-  const priorities = [...todayTasks].sort((a,b) => Number(b.priority === 'high') - Number(a.priority === 'high')).slice(0,3);
-  const next = nextEvent(data, now);
-  const renderTask = (task: (typeof tasks)[number]) => <Row key={task.id}><View style={{ flex: 1, gap: 3 }}><Link style={{ minHeight: 44, paddingVertical: 8 }} href={{ pathname: '/task/[id]', params: { id: task.id } }}><Label>{task.title}</Label></Link><Muted>{task.priority} · {task.storyPoints} point{task.storyPoints === 1 ? '' : 's'}</Muted><ReminderIndicator item={task} date={task.dueDate} now={now} /></View><Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 20 }}>○</Text></Pressable></Row>;
-  return <Page title="Today" subtitle={dateLabel}>{error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}{showSummary ? <Card title="Rollover summary"><Label>{summary.movedTaskIds.length} task{summary.movedTaskIds.length === 1 ? '' : 's'} rolled forward from {summary.rolloverDate} or earlier.</Label><Link href="/(tabs)/review"><Label>Review rolled-over tasks →</Label></Link></Card> : null}<TodayReminders data={data} now={now} /><Card title="Next event">{next ? <EventRow event={next} showDate={next.date !== today} /> : <Muted>No upcoming timed events.</Muted>}</Card><Card title="Today's calendar">{events.filter(event => event.source !== 'family').length ? events.filter(event => event.source !== 'family').map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No local events today.</Muted>}</Card><Card title="Today's family events">{events.filter(event => event.source === 'family').length ? events.filter(event => event.source === 'family').map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No family events today.</Muted>}</Card><Card title="Top priorities">{priorities.length ? priorities.map(renderTask) : <Muted>No tasks due today.</Muted>}</Card><Card title={`Overdue · ${overdue.length}`}>{overdue.length ? overdue.map(renderTask) : <Muted>You’re clear.</Muted>}</Card><Card title={`Due today · ${dueToday.length}`}>{dueToday.length ? dueToday.map(renderTask) : <Muted>No additional tasks scheduled today.</Muted>}</Card>{completedToday.length ? <Card title={`Completed · ${completedToday.length}`}>{completedToday.map(task => <Label key={task.id} style={{ textDecorationLine: 'line-through', color: colors.muted }}>✓  {task.title}</Label>)}</Card> : null}<Link href="/(tabs)/capture" asChild><Pressable style={StyleSheet.flatten([styles.capture, { backgroundColor: colors.accent }])}><Text style={[styles.captureText, { color: colors.onAccent }]}>＋  Quick capture</Text></Pressable></Link></Page>;
+  const todayTasks = getTodayTasks(data.tasks, today).sort(compareTaskPriority);
+  const completedCount = data.tasks.filter(task => task.status === 'complete' && task.completedAt && localDateKey(new Date(task.completedAt)) === today).length;
+
+  return <Page title="Today" subtitle={dateLabel}>
+    {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
+    <Card title={`Today's tasks · ${todayTasks.length}`}>
+      {completedCount ? <Muted>{completedCount} completed today</Muted> : null}
+      {todayTasks.length ? todayTasks.map(task => <Row key={task.id}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Link href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Edit task: ${task.title}`} style={{ minHeight: 44, justifyContent: 'center' }}><Label>{task.title}</Label></Pressable>
+          </Link>
+          <Label style={{ color: task.priority === 'high' ? colors.danger : colors.muted, fontWeight: '700' }}>{task.priority[0].toUpperCase() + task.priority.slice(1)} priority</Label>
+          {isTaskOverdue(task, today) ? <Muted>Overdue · {task.originalDueDate ?? task.dueDate}</Muted> : null}
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }, undefined, task.updatedAt).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 24 }}>○</Text></Pressable>
+      </Row>) : <Muted>No tasks due today.</Muted>}
+    </Card>
+    <Card title="Today's calendar">
+      {events.length ? events.map(event => <EventRow key={eventKey(event)} event={event} showReminder={false} />) : <Muted>No events today.</Muted>}
+    </Card>
+    <Link href="/(tabs)/capture" asChild><Pressable accessibilityRole="button" style={StyleSheet.flatten([styles.capture, { backgroundColor: colors.accent }])}><Text style={[styles.captureText, { color: colors.onAccent }]}>＋ Quick capture</Text></Pressable></Link>
+  </Page>;
 }
-const styles = StyleSheet.create({ capture: { padding: 16, borderRadius: 15, alignItems: 'center' }, captureText: { color: 'white', fontWeight: '700', fontSize: 15 } });
+
+const styles = StyleSheet.create({ capture: { padding: 16, borderRadius: 15, alignItems: 'center' }, captureText: { fontWeight: '700', fontSize: 15 } });

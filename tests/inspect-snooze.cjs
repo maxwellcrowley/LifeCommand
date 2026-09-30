@@ -56,37 +56,12 @@ async function main() {
   const choose = async label => { assert.ok(await a.evaluate(`(() => { const el = [...document.querySelectorAll('[aria-label]')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if(!el) return false; el.click(); return true; })()`), label); await pause(200); };
   await a.go('/settings', 'Quiet hours');
   await a.evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))})`);
-  await a.go('/', 'Due: Fifteen');
-  for (const [width,height] of [[320,568],[390,844],[844,390]]) {
-    await a.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor:1, mobile:false });
-    assert.equal(await a.evaluate(`Array.from(document.querySelectorAll('[aria-label^="Acknowledge:"], [aria-label^="Snooze"]')).filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.left < -1 || r.right > innerWidth+1 || r.height<44)}).length`), 0);
-  }
-  // Double taps must write once, and a failed acknowledgement must remain retryable.
-  const revision = (await read()).revision;
-  await a.evaluate(`const el=document.querySelector('[aria-label="Snooze 15 minutes: Fifteen"]');el.click();el.click()`);
-  await a.ready('Snoozed: Fifteen');
-  let saved = await read(); assert.equal(saved.revision, revision + 1);
-  let fifteen = saved.tasks.find(t=>t.title==='Fifteen');
-  assert.ok(Math.abs(Date.parse(fifteen.snoozedUntil)-Date.now()-15*60000)<10000);
-  await choose('Snooze 1 hour: Hour'); await a.ready('Snoozed: Hour');
-  saved = await read(); assert.ok(Math.abs(Date.parse(saved.tasks.find(t=>t.title==='Hour').snoozedUntil)-Date.now()-60*60000)<10000);
-  await choose('Snooze until tomorrow morning: Tomorrow'); await a.ready('Snoozed: Tomorrow');
-  saved = await read();
-  assert.equal(await a.evaluate(`(() => {const d=new Date(${JSON.stringify(saved.tasks.find(t=>t.title==='Tomorrow').snoozedUntil)});const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);return d.getHours()===9 && d.getMinutes()===0 && d.toDateString()===tomorrow.toDateString()})()`), true);
-  await a.evaluate(`window.__set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='lifecommand:data:v1')throw Error('Action write failure');return window.__set.call(this,k,v)}`);
-  await choose('Acknowledge: Acknowledge'); await a.ready('Action write failure');
-  assert.equal((await read()).tasks.find(t=>t.title==='Acknowledge').lastReminderAcknowledgedAt, undefined);
-  await a.evaluate('Storage.prototype.setItem=window.__set');
-  await choose('Acknowledge: Acknowledge'); await choose('Acknowledge: Family acknowledgement');
-  await a.go('/', 'Snoozed: Fifteen');
-  assert.equal(await a.evaluate(`document.body.innerText.includes('Due: Acknowledge')`),false);
-  assert.ok((await read()).familyEvents[0].lastReminderAcknowledgedAt);
-  // Move only the browser clock forward; persisted snooze is unchanged and expires in-app.
-  const expiry = Date.parse(fifteen.snoozedUntil)+1000;
-  const clock = await a.send('Page.addScriptToEvaluateOnNewDocument', {source:`const RealDate=Date;Date=class extends RealDate{constructor(...args){super(...(args.length?args:[${expiry}]))}static now(){return ${expiry}}}`});
-  await a.go('/', 'Due: Fifteen');
-  assert.equal((await read()).tasks.find(t=>t.title==='Fifteen').snoozedUntil, fifteen.snoozedUntil);
-  await a.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:clock.identifier});
+  // Today no longer exposes reminder actions. Their lifecycle remains covered by
+  // reminder-actions.test.ts; keep browser coverage for quiet hours and storage.
+  await a.go('/', "Today's calendar");
+  assert.equal(await a.evaluate(`document.querySelector('[aria-label^="Snooze"], [aria-label^="Acknowledge:"]') !== null`), false);
+  let saved = await read();
+  assert.equal(saved.tasks.filter(task => task.reminderEnabled).length, 4);
   await a.go('/settings','Quiet hours');
   await choose('Quiet hours enabled');
   await a.fill('Quiet hours start, HH:MM','25:00'); await a.click('Save quiet hours start'); await a.ready('Use HH:MM');
@@ -104,22 +79,13 @@ async function main() {
   saved.tasks[0].reminderAt=evening;
   const descriptor=scheduleReminders(saved).find(r=>r.title==='Fifteen');
   assert.ok(Date.parse(descriptor.notificationReadyAt)>Date.parse(evening));
-  // Open an editor in another tab before an action; the shared revision blocks it.
-  const target = await (await fetch('http://127.0.0.1:9230/json/new?about:blank',{method:'PUT'})).json(); const b=await connect(target);
-  await b.go('/task/'+data.tasks[0].id,'Save changes'); await b.fill('Task title, required','Stale draft');
-  await a.go('/','Snoozed: Fifteen'); await choose('Acknowledge: Fifteen');
-  await b.ready('Local data changed in another tab');
-  await b.click('Save changes');
-  assert.equal((await read()).tasks.find(t=>t.id===data.tasks[0].id).title,'Fifteen');
-  await b.click('Reload local data'); await b.ready('Save changes');
-  assert.equal(await b.evaluate(`document.querySelector('[aria-label="Task title, required"]').value`),'Fifteen');
   await a.go('/settings','Quiet hours');
   await a.fill('Quiet hours start, HH:MM','04:44');
   await a.click('Start Fresh'); await a.click('Delete local data and start fresh'); await a.ready('Start Fresh complete.');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Quiet hours start, HH:MM"]').value`),'22:00');
   assert.equal((await read()).settings.quietHoursEnabled,false);
   assert.deepEqual(errors,[]);
-  console.log('PASS acknowledge/task+family, all snoozes, expiry, reload, double taps, failed write/retry, quiet hours validation/persistence/scheduling, mobile bounds cross-tab stale editor protection and reset draft clearing');
+  console.log('PASS hidden Today reminder actions, retained reminder data, quiet hours validation/persistence/scheduling, mobile bounds and reset draft clearing');
 }
 const watchdog=setTimeout(()=>{console.error('Snooze harness timed out');process.exitCode=1;for(const c of clients)c.ws.close();chrome?.kill();server.close()},120000);
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{clearTimeout(watchdog);for(const c of clients)c.ws.close();chrome?.kill();server.close()});

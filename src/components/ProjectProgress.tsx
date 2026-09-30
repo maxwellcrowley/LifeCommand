@@ -13,7 +13,7 @@ export function ProjectProgress({ project, tasks }: { project: Project; tasks: T
     {linked.length > 0 && progress.total === 0 ? <Muted>No tasks count toward progress yet. Schedule a linked task or turn on Include backlog tasks.</Muted> : null}
     {progress.value === null ? <Muted>Completion tracking is off.</Muted> : <>
       <Row><Label>{project.useWeightedProgress ? 'Weighted progress' : 'Simple progress'}</Label><Label>{progress.value}%</Label></Row>
-      <View accessibilityRole="progressbar" accessibilityLabel={`${project.name} progress`} accessibilityValue={{ min: 0, max: 100, now: progress.value }} style={{ backgroundColor: colors.background, borderRadius: 6, height: 8, overflow: 'hidden' }}>
+      <View accessibilityRole="progressbar" accessibilityLabel={`${project.name} progress`} accessibilityValue={{ min: 0, max: 100, now: progress.value }} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.value} style={{ backgroundColor: colors.background, borderRadius: 6, height: 8, overflow: 'hidden' }}>
         <View style={{ backgroundColor: colors.accent, width: `${progress.value}%`, height: 8 }} />
       </View>
       <Muted>{progress.complete} of {progress.total} tasks · {progress.donePoints}/{progress.totalPoints} story points</Muted>

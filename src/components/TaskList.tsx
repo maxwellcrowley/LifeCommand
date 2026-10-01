@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { AppData, Task } from '@/src/domain/models';
-import { groupTasksBySection, isTaskOverdue } from '@/src/domain/tasks';
+import { groupTasksBySection, groupTasksBySectionAndProject, isTaskOverdue } from '@/src/domain/tasks';
 import { localDateKey } from '@/src/domain/dates';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Action } from './TaskScheduling';
@@ -38,16 +38,35 @@ export function TaskRow({ task, data, date, history = false, disabled = false, a
   </View>;
 }
 
-export function TaskList({ tasks, data, renderTask, showEmptySections = false }: {
+export function TaskList({ tasks, data, renderTask, showEmptySections = false, collapsibleGroups }: {
   tasks: Task[]; data: ListData; renderTask: (task: Task) => ReactNode; showEmptySections?: boolean;
+  /** Screen/category label also provides context for accessible collapse controls. */
+  collapsibleGroups?: string;
 }) {
   const { colors } = useAppTheme();
-  return <View style={{ gap: 16 }}>{groupTasksBySection(data, tasks).filter(group => showEmptySections || group.tasks.length).map(({ section, tasks: grouped }) =>
-    <View key={section.id} testID={`task-section-${section.id}`} style={{ gap: 8 }}>
-      <View style={{ borderLeftWidth: 3, borderLeftColor: section.color, paddingLeft: 10 }}>
-        <Text accessibilityRole="header" style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{section.name} · {grouped.length}</Text>
-      </View>
-      {grouped.map(task => <View key={task.id}>{renderTask(task)}</View>)}
-      {!grouped.length ? <Muted>No backlog tasks.</Muted> : null}
-    </View>)}</View>;
+  // Local to this list instance: Today and each Review category are independent.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const groups = collapsibleGroups ? groupTasksBySectionAndProject(data, tasks)
+    : groupTasksBySection(data, tasks).map(group => ({ ...group, projectGroups: undefined }));
+  return <View testID={collapsibleGroups ? `task-list-${collapsibleGroups}` : undefined} style={{ gap: 16 }}>{groups.filter(group => showEmptySections || group.tasks.length).map(group => {
+    const { section, tasks: grouped } = group;
+    const expanded = !(collapsed[section.id] ?? !grouped.length);
+    const heading = <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15, flex: 1, minWidth: 0 }}>{section.name} · {grouped.length}</Text>;
+    return <View key={section.id} testID={`task-section-${section.id}`} style={{ gap: 8 }}>
+      {collapsibleGroups ? <Pressable accessibilityRole="button"
+        accessibilityLabel={`${collapsibleGroups}, ${section.name}, ${grouped.length} ${grouped.length === 1 ? 'task' : 'tasks'}`}
+        accessibilityHint={expanded ? 'Collapse section' : 'Expand section'} accessibilityState={{ expanded }} aria-expanded={expanded}
+        onPress={() => setCollapsed(current => ({ ...current, [section.id]: expanded }))}
+        style={({ pressed }) => ({ minHeight: 44, borderLeftWidth: 3, borderLeftColor: section.color, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.soft, opacity: pressed ? 0.7 : 1 })}>
+        {heading}<Text style={{ color: colors.muted, fontSize: 18 }}>{expanded ? '⌄' : '›'}</Text>
+      </Pressable> : <View accessibilityRole="header" style={{ borderLeftWidth: 3, borderLeftColor: section.color, paddingLeft: 10 }}>{heading}</View>}
+      {!collapsibleGroups || expanded ? <>
+        {group.projectGroups ? group.projectGroups.map(projectGroup => <View key={projectGroup.project?.id ?? 'no-project'} style={{ gap: 6 }}>
+          <Text accessibilityRole="header" style={{ color: colors.muted, fontWeight: '600', fontSize: 13, paddingHorizontal: 10 }}>{projectGroup.project?.name ?? 'No project'}</Text>
+          {projectGroup.tasks.map(task => <View key={task.id}>{renderTask(task)}</View>)}
+        </View>) : grouped.map(task => <View key={task.id}>{renderTask(task)}</View>)}
+        {!grouped.length ? <Muted>No backlog tasks.</Muted> : null}
+      </> : null}
+    </View>;
+  })}</View>;
 }

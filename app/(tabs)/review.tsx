@@ -22,9 +22,9 @@ export default function ReviewScreen() {
   const renderTask = (task: Task) => <TaskRow task={task} data={data} date={today} history><QuickSchedule task={task} /></TaskRow>;
   return <Page title="Review" subtitle="Review missed work and plan what comes next.">
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
-    <Card title={`Overdue · ${overdue.length}`}>{overdue.length ? <TaskList tasks={overdue} data={data} renderTask={renderTask} /> : <Muted>No overdue tasks.</Muted>}</Card>
-    <Card title={`Rolled over · ${rolled.length}`}>{rolled.length ? <TaskList tasks={rolled} data={data} renderTask={renderTask} /> : <Muted>No rolled-over tasks to review.</Muted>}</Card>
-    <Card title="Section backlogs"><Muted>Backlog tasks stay off Today until they have a due date.</Muted><TaskList tasks={backlog} data={data} renderTask={renderTask} showEmptySections /></Card>
-    <Card title="Scheduled later">{future.length ? <TaskList tasks={future} data={data} renderTask={renderTask} /> : <Muted>No future scheduled tasks.</Muted>}</Card>
+    <Card title={`Overdue · ${overdue.length}`}>{overdue.length ? <TaskList collapsibleGroups="Overdue" tasks={overdue} data={data} renderTask={renderTask} /> : <Muted>No overdue tasks.</Muted>}</Card>
+    <Card title={`Rolled over · ${rolled.length}`}>{rolled.length ? <TaskList collapsibleGroups="Rolled over" tasks={rolled} data={data} renderTask={renderTask} /> : <Muted>No rolled-over tasks to review.</Muted>}</Card>
+    <Card title="Section backlogs"><Muted>Backlog tasks stay off Today until they have a due date.</Muted><TaskList collapsibleGroups="Section backlogs" tasks={backlog} data={data} renderTask={renderTask} showEmptySections /></Card>
+    <Card title="Scheduled later">{future.length ? <TaskList collapsibleGroups="Scheduled later" tasks={future} data={data} renderTask={renderTask} /> : <Muted>No future scheduled tasks.</Muted>}</Card>
   </Page>;
 }

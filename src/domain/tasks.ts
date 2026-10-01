@@ -74,6 +74,32 @@ export function groupTasksBySection(data: Pick<AppData, 'sections'>, tasks: Task
     .map(section => ({ section, tasks: (buckets.get(section.id) ?? []).sort(compareTaskDisplay) }));
 }
 
+// Keep section order, then named projects alphabetically, with unlinked work last.
+// Resolve by identity so equally named projects remain separate; missing links fall
+// back to No project. Each bucket retains the shared priority/date/title ordering.
+export function groupTasksBySectionAndProject(data: Pick<AppData, 'sections' | 'projects'>, tasks: Task[]) {
+  const projects = new Map(data.projects.map(project => [project.id, project]));
+  return groupTasksBySection(data, tasks).map(group => {
+    const buckets = new Map<string | undefined, Task[]>();
+    for (const task of group.tasks) {
+      const projectId = task.projectId && projects.has(task.projectId) ? task.projectId : undefined;
+      const bucket = buckets.get(projectId) ?? [];
+      bucket.push(task);
+      buckets.set(projectId, bucket);
+    }
+    const projectGroups = [...buckets].map(([projectId, grouped]) => ({
+      project: projectId ? projects.get(projectId) : undefined,
+      tasks: grouped,
+    })).sort((a, b) => {
+      if (!a.project) return b.project ? 1 : 0;
+      if (!b.project) return -1;
+      return a.project.name.localeCompare(b.project.name, undefined, { sensitivity: 'base' })
+        || a.project.id.localeCompare(b.project.id);
+    });
+    return { section: group.section, tasks: projectGroups.flatMap(project => project.tasks), projectGroups };
+  });
+}
+
 function currentTask(data: AppData, id: string, expectedUpdatedAt?: string) {
   const task = data.tasks.find(item => item.id === id);
   if (!task) throw new Error('This task no longer exists. Return to your task list.');

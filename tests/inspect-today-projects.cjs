@@ -191,6 +191,7 @@ async function main() {
   await a.go('/review', 'Backlog cleanup'); await choose('Edit task: Backlog cleanup'); await a.ready('Save changes');
   await a.click('Delete task'); await a.click('Permanently delete task'); await a.ready('Section backlogs');
   assert.equal((await taskTitles()).includes('Backlog cleanup'), false);
+  assert.equal(await a.evaluate(`document.querySelector('[aria-label="Section backlogs, Home, 0 tasks"]').getAttribute('aria-expanded')`), 'false');
 
   // Keep a stale task editor open while the other tab deletes its project.
   const target = await (await fetch('http://127.0.0.1:9232/json/new?about:blank', { method: 'PUT' })).json();
@@ -219,6 +220,89 @@ async function main() {
   await a.go('/review', 'Future cleanup'); assert.ok((await rowInfo()).every(row => !row.text.includes('Cleanup project')));
   await a.go('/projects', 'No projects yet');
   console.log('PASS 30-task section grouping, shared Today/Review/Projects rows, mobile bounds, deletion cancel/confirm, failure/retry, double taps, progress, ambient, persisted unlinking, archived tasks and stale cross-tab editor');
+
+  // Multiple projects in every Review category; overdue tasks also appear in Rolled over.
+  const grouped = createDefaultAppData();
+  grouped.settings.autoRollover = false;
+  const alpha = createProject({ name: 'alpha project' });
+  const zulu = createProject({ name: 'Zulu project with a long name that wraps on a narrow mobile screen' });
+  grouped.projects = [zulu, alpha];
+  const makeGroup = (prefix, dueDate) => [
+    ['Zulu high', 'high', zulu.id, 'work'],
+    ['Alpha low', 'low', alpha.id, 'work'],
+    ['No project high', 'high', undefined, 'work'],
+    ['Alpha normal', 'normal', alpha.id, 'work'],
+    ['Alpha high Z', 'high', alpha.id, 'work'],
+    ['Alpha high A', 'high', alpha.id, 'work'],
+    ['Home task', 'normal', undefined, 'home'],
+  ].map(([title, priority, projectId, sectionId]) => createTask({ title: `${prefix} ${title}`, priority, projectId, sectionId, dueDate }));
+  grouped.tasks = [
+    ...makeGroup('Missed', addDays(today, -1)).map(task => ({ ...task, rolloverCount: 1 })),
+    ...makeGroup('Backlog', undefined),
+    ...makeGroup('Future', addDays(today, 1)),
+  ];
+  await a.evaluate(`localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(grouped, (await read()).revision + 1)))})`);
+  const expected = prefix => ['Alpha high A', 'Alpha high Z', 'Alpha normal', 'Alpha low', 'Zulu high', 'No project high', 'Home task'].map(title => `${prefix} ${title}`);
+  const listTitles = category => a.evaluate(`Array.from(document.querySelector('[data-testid="task-list-${category}"]').querySelectorAll('[aria-label^="Edit task:"]')).map(el => el.getAttribute('aria-label').slice(11))`);
+  const expanded = label => a.evaluate(`document.querySelector(${JSON.stringify(`[aria-label="${label}"]`)}).getAttribute('aria-expanded')`);
+  const tab = async (path, ready) => {
+    assert.ok(await a.evaluate(`(() => { const el = document.querySelector('a[href="${path}"]'); if (!el) return false; el.click(); return true; })()`));
+    await a.ready(ready);
+  };
+  await a.go('/', 'Missed Alpha high A');
+  assert.deepEqual(await listTitles('Today'), expected('Missed'));
+  assert.equal(await expanded('Today, Work, 6 tasks'), 'true');
+  assert.deepEqual(await a.evaluate(`Array.from(document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]')).map(el => el.innerText)`), [alpha.name, zulu.name, 'No project']);
+  await bounds(); await screenshot('today-project-groups');
+  await choose('Today, Work, 6 tasks');
+  assert.equal(await expanded('Today, Work, 6 tasks'), 'false');
+  assert.deepEqual(await listTitles('Today'), ['Missed Home task']);
+  assert.equal(await a.evaluate(`document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]').length`), 0);
+  // Enter activates the focused web button and reveals its tasks again.
+  await a.send('Page.bringToFront');
+  await a.evaluate(`document.querySelector('[aria-label="Today, Work, 6 tasks"]').focus()`);
+  assert.equal(await a.evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Today, Work, 6 tasks', await a.evaluate(`document.querySelector('[aria-label="Today, Work, 6 tasks"]').outerHTML`));
+  await a.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13 });
+  await a.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await a.ready('Missed Alpha high A');
+  assert.deepEqual(await listTitles('Today'), expected('Missed'));
+  await choose('Complete Missed Alpha high A');
+  assert.equal(await expanded('Today, Work, 5 tasks'), 'true');
+  await choose('Today, Work, 5 tasks');
+  await tab('/review', 'Section backlogs');
+  const missedRemaining = expected('Missed').filter(title => title !== 'Missed Alpha high A');
+  for (const [category, prefix] of [['Overdue', 'Missed'], ['Rolled over', 'Missed'], ['Section backlogs', 'Backlog'], ['Scheduled later', 'Future']]) {
+    const titles = prefix === 'Missed' ? missedRemaining : expected(prefix);
+    assert.deepEqual(await listTitles(category), titles);
+    const label = `${category}, Work, ${titles.length - 1} tasks`;
+    assert.equal(await expanded(label), 'true', 'Today collapse must not affect Review');
+    await choose(label);
+    assert.equal(await expanded(label), 'false');
+    assert.deepEqual(await listTitles(category), [`${prefix} Home task`]);
+    if (category === 'Overdue') assert.deepEqual(await listTitles('Rolled over'), missedRemaining, 'Same section is independent across Review categories');
+    await choose(label);
+    assert.deepEqual(await listTitles(category), titles);
+  }
+  assert.equal(await expanded('Section backlogs, Army, 0 tasks'), 'false');
+  await tab('/', 'Missed Home task');
+  assert.equal(await expanded('Today, Work, 5 tasks'), 'false', 'Today retains its own state when switching tabs');
+  await tab('/review', 'Section backlogs');
+  await bounds(); await screenshot('review-project-groups');
+  await choose('Scheduled later, Work, 6 tasks');
+  await choose('Schedule: Backlog Alpha high A'); await a.click('Tomorrow');
+  assert.equal(await expanded('Section backlogs, Work, 5 tasks'), 'true');
+  assert.equal(await expanded('Scheduled later, Work, 7 tasks'), 'false', 'Count updates while collapsed');
+  assert.deepEqual(await listTitles('Scheduled later'), ['Future Home task']);
+  await choose('Scheduled later, Work, 7 tasks');
+  assert.ok((await listTitles('Scheduled later')).includes('Backlog Alpha high A'));
+  await choose('Edit task: Backlog Alpha high Z'); await a.ready('Save changes');
+  await a.click('Delete task'); await a.click('Permanently delete task'); await a.ready('Section backlogs');
+  assert.equal(await expanded('Section backlogs, Work, 4 tasks'), 'true');
+  assert.equal((await listTitles('Section backlogs')).includes('Backlog Alpha high Z'), false);
+  await choose('Overdue, Work, 5 tasks');
+  await a.go('/review', 'Missed Alpha high Z');
+  assert.equal(await expanded('Overdue, Work, 5 tasks'), 'true', 'Reload resets UI-only collapse state');
+  console.log('PASS section/project/priority ordering, No project last, Today and all Review category collapse/expand, keyboard activation, independent categories/screens, live completion/deletion/scheduling counts, collapsed count updates, reload defaults and narrow layouts');
   await a.go('/settings', 'Data Management');
   await a.click('Start Fresh'); await a.click('Delete local data and start fresh'); await a.ready('Start Fresh complete.');
   await a.go('/', 'No tasks due today.'); await a.ready('No events today.');

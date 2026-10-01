@@ -29,7 +29,7 @@ export default function TodayScreen() {
     <Card title={`Today's tasks · ${todayTasks.length}`}>
       <AddFromBacklog key={today} date={today} />
       {completedCount ? <Muted>{completedCount} completed today</Muted> : null}
-      {todayTasks.length ? <TaskList tasks={todayTasks} data={data} renderTask={task => <TaskRow task={task} data={data} date={today} action={
+      {todayTasks.length ? <TaskList collapsibleGroups="Today" tasks={todayTasks} data={data} renderTask={task => <TaskRow task={task} data={data} date={today} action={
         <Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }, undefined, task.updatedAt).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 24 }}>○</Text></Pressable>
       } />} /> : <Muted>No tasks due today.</Muted>}
     </Card>

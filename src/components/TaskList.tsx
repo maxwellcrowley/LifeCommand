@@ -20,6 +20,7 @@ export function TaskRow({ task, data, date, history = false, disabled = false, a
     <Row>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Label style={{ fontWeight: '700', textDecorationLine: task.status === 'complete' ? 'line-through' : 'none' }}>{task.title}</Label>
+        {task.description ? <Text numberOfLines={2} ellipsizeMode="tail" style={{ color: colors.muted, flexShrink: 1, fontSize: 14, lineHeight: 20 }}>{task.description}</Text> : null}
         <Muted>{section?.name ?? 'No section'}{project ? ` · ${project.name}` : ''}</Muted>
       </View>
       <Action label={`Edit task: ${task.title}`} text="Edit" disabled={disabled} onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })} />

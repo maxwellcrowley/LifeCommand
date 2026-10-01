@@ -12,9 +12,9 @@ const priorities: Priority[] = ['low', 'normal', 'high'];
 const owners: TaskOwner[] = ['me', 'kellyn', 'shared', 'system'];
 const statuses: TaskStatus[] = ['backlog', 'scheduled', 'overdue', 'deferred', 'complete', 'archived'];
 
-export type TaskDraft = ReminderDraft & { title: string; description: string; sectionId: string; projectId: string; priority: Priority; dueDate: string; owner: TaskOwner; storyPoints: string; status: TaskStatus };
-export const blankTaskDraft = (sectionId = ''): TaskDraft => ({ ...reminderToDraft({}), title: '', description: '', sectionId, projectId: '', priority: 'normal', dueDate: '', owner: 'me', storyPoints: '1', status: 'backlog' });
-export const taskToDraft = (task: Task): TaskDraft => ({ ...reminderToDraft(task), title: task.title, description: task.description ?? '', sectionId: task.sectionId, projectId: task.projectId ?? '', priority: task.priority, dueDate: task.dueDate ?? '', owner: task.owner, storyPoints: String(task.storyPoints), status: task.status });
+export type TaskDraft = ReminderDraft & { title: string; description: string; notes: string; sectionId: string; projectId: string; priority: Priority; dueDate: string; owner: TaskOwner; storyPoints: string; status: TaskStatus };
+export const blankTaskDraft = (sectionId = ''): TaskDraft => ({ ...reminderToDraft({}), title: '', description: '', notes: '', sectionId, projectId: '', priority: 'normal', dueDate: '', owner: 'me', storyPoints: '1', status: 'backlog' });
+export const taskToDraft = (task: Task): TaskDraft => ({ ...reminderToDraft(task), title: task.title, description: task.description ?? '', notes: task.notes ?? '', sectionId: task.sectionId, projectId: task.projectId ?? '', priority: task.priority, dueDate: task.dueDate ?? '', owner: task.owner, storyPoints: String(task.storyPoints), status: task.status });
 
 export function TaskForm({ draft, onChange, sections, projects, showStatus = false, currentProjectId }: { draft: TaskDraft; onChange: (draft: TaskDraft) => void; sections: Section[]; projects: Project[]; showStatus?: boolean; currentProjectId?: string }) {
   const { colors } = useAppTheme();
@@ -26,6 +26,7 @@ export function TaskForm({ draft, onChange, sections, projects, showStatus = fal
   return <Card title="Task details">
     <TextInput accessibilityLabel="Task title, required" value={draft.title} onChangeText={title => onChange({ ...draft, title })} placeholder="What needs doing?" placeholderTextColor={colors.muted} style={inputStyle} />
     <TextInput accessibilityLabel="Task description, optional" value={draft.description} onChangeText={description => onChange({ ...draft, description })} placeholder="Description (optional)" placeholderTextColor={colors.muted} multiline style={[inputStyle, { minHeight: 76, textAlignVertical: 'top' }]} />
+    <View style={{ gap: 7 }}><Muted>Notes · optional private detail; not shown on Today</Muted><TextInput accessibilityLabel="Task notes, optional" value={draft.notes} onChangeText={notes => onChange({ ...draft, notes })} placeholder="Notes (optional)" placeholderTextColor={colors.muted} multiline autoCorrect style={[inputStyle, { minHeight: 100, textAlignVertical: 'top' }]} /></View>
     {select('Section · required', 'sectionId', sections.map(s => ({ value: s.id, label: s.name })))}
     {select('Project · optional', 'projectId', [{ value: '', label: 'None' }, ...projectChoices])}
     {!activeProjects.length ? <Muted>No active projects available. Create or activate one in Projects, or choose None.</Muted> : null}

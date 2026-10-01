@@ -45,7 +45,7 @@ export function normalizeAppData(value: unknown): AppData {
   };
   const projectId = identities('project');
   const projects: Project[] = records(data.projects).map((p, i) => ({
-    id: projectId(p.id, i), name: text(p.name) ?? 'Untitled project', description: text(p.description) ?? '',
+    id: projectId(p.id, i), name: text(p.name) ?? 'Untitled project', description: text(p.description) ?? '', notes: text(p.notes),
     sectionId: text(p.sectionId) ? ensureSection(p.sectionId) : undefined,
     status: choice(p.status, ['active', 'paused', 'complete', 'archived'], 'active'),
     trackCompletion: bool(p.trackCompletion, true), useWeightedProgress: bool(p.useWeightedProgress, false),
@@ -57,7 +57,7 @@ export function normalizeAppData(value: unknown): AppData {
     const dueDate = date(t.dueDate);
     return compact({
       ...normalizeReminder(t),
-      id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description),
+      id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description), notes: text(t.notes),
       sectionId: ensureSection(t.sectionId), projectId: projects.some(p => p.id === t.projectId) ? text(t.projectId) : undefined,
       status: choice(t.status, ['backlog', 'scheduled', 'overdue', 'complete', 'deferred', 'archived'], dueDate ? 'scheduled' : 'backlog'),
       priority: choice(t.priority, ['low', 'normal', 'high'], 'normal'), owner: choice(t.owner, ['me', 'kellyn', 'shared', 'system'], 'me'),

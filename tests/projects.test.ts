@@ -13,6 +13,7 @@ test('project creation uses trimmed fields and product defaults with independent
   const project = makeProject();
   assert.equal(project.name, 'Build shed');
   assert.equal(project.description, '');
+  assert.equal(project.notes, undefined);
   assert.equal(project.sectionId, undefined);
   assert.equal(project.status, 'active');
   assert.equal(project.trackCompletion, true);
@@ -31,17 +32,19 @@ test('project validation rejects empty name, invalid settings/points/status and 
   assert.throws(() => insertProject(createDefaultAppData(), createProject({ name: 'X', sectionId: 'missing' })), /section/);
 });
 
-test('editing all project fields preserves identity and increases timestamp even within one millisecond', () => {
+test('editing all project fields, including optional notes, preserves identity and increases timestamp even within one millisecond', () => {
   const project = makeProject();
-  const edited = updateProject(project, { name: ' New name ', description: ' Notes ', sectionId: 'home', status: 'paused', trackCompletion: false, useWeightedProgress: true, defaultTaskPoints: 2.5, includeBacklogTasks: false }, now);
+  const edited = updateProject(project, { name: ' New name ', description: ' Notes ', notes: ' Private reference ', sectionId: 'home', status: 'paused', trackCompletion: false, useWeightedProgress: true, defaultTaskPoints: 2.5, includeBacklogTasks: false }, now);
   assert.equal(edited.id, project.id);
   assert.equal(edited.createdAt, project.createdAt);
   assert.ok(edited.updatedAt > project.updatedAt);
   assert.deepEqual([edited.name, edited.description, edited.sectionId, edited.status, edited.trackCompletion, edited.useWeightedProgress, edited.defaultTaskPoints, edited.includeBacklogTasks], ['New name', 'Notes', 'home', 'paused', false, true, 2.5, false]);
   assert.equal(project.name, 'Build shed');
+  assert.equal(edited.notes, 'Private reference');
   const cleared = updateProject(edited, { sectionId: '', description: '' });
   assert.equal(cleared.sectionId, undefined);
   assert.equal(cleared.description, '');
+  assert.equal(updateProject(edited, { notes: '   ' }).notes, undefined);
 });
 
 test('archive/unarchive retains linked tasks, settings and lifecycle independence', () => {

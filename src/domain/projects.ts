@@ -12,11 +12,11 @@ function validate(project: Project): Project {
   for (const key of ['trackCompletion', 'useWeightedProgress', 'includeBacklogTasks'] as const) {
     if (typeof project[key] !== 'boolean') throw new Error('Project settings must be on or off.');
   }
-  return { ...project, name: project.name.trim(), description: project.description.trim(), sectionId: project.sectionId || undefined };
+  return { ...project, name: project.name.trim(), description: project.description.trim(), notes: project.notes?.trim() || undefined, sectionId: project.sectionId || undefined };
 }
 
 export function createProject(input: ProjectInput, now = new Date()): Project {
-  return validate({ name: input.name, description: input.description ?? '', sectionId: input.sectionId,
+  return validate({ name: input.name, description: input.description ?? '', notes: input.notes, sectionId: input.sectionId,
     status: input.status ?? 'active', trackCompletion: input.trackCompletion ?? true,
     useWeightedProgress: input.useWeightedProgress ?? false, defaultTaskPoints: input.defaultTaskPoints ?? 1,
     includeBacklogTasks: input.includeBacklogTasks ?? true,

@@ -22,12 +22,13 @@ export function createTask(input: TaskInput, now = new Date()): Task {
   const timestamp = now.toISOString();
   const dueDate = input.dueDate || undefined;
   validateDueDate(dueDate);
-  return { ...normalizeReminder({ ...input }), id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
+  return { ...normalizeReminder({ ...input }), id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, notes: input.notes?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
 }
 
 export function updateTask(task: Task, changes: TaskChanges, now = new Date()): Task {
   const merged = { ...task, ...changes, title: changes.title?.trim() ?? task.title, updatedAt: now.toISOString() };
   if ('description' in changes) merged.description = changes.description?.trim() || undefined;
+  if ('notes' in changes) merged.notes = changes.notes?.trim() || undefined;
   if ('projectId' in changes) merged.projectId = changes.projectId || undefined;
   if (!merged.title) throw new Error('Title is required.');
   if (!merged.sectionId) throw new Error('Section is required.');

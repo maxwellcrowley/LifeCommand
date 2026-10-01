@@ -48,14 +48,24 @@ test('merge adds projects/tasks, links new projects, preserves all local collect
 });
 
 test('ID conflicts never overwrite local fields, including archived items; ID takes priority over names', () => {
-  const local = data([project('a', 'Alpha'), project('b', 'Beta')], [task('t', { status: 'archived' })]);
-  const incoming = data([project('a', 'Beta')], [task('t', { title: 'Conflicting title' }), task('new', { projectId: 'a' })]);
+  const local = data([{ ...project('a', 'Alpha'), notes: 'Local project note' }, project('b', 'Beta')], [{ ...task('t', { status: 'archived' }), notes: 'Local task note' }]);
+  const incoming = data([{ ...project('a', 'Beta'), notes: 'Imported project note' }], [{ ...task('t', { title: 'Conflicting title' }), notes: 'Imported task note' }, { ...task('new', { projectId: 'a' }), notes: 'New task note' }]);
   const result = planMergeImport(local, raw(incoming));
   assert.equal(result.data.projects[0], local.projects[0]);
   assert.equal(result.data.tasks[0], local.tasks[0]);
   assert.equal(result.data.tasks[1].projectId, 'a');
   assert.equal(result.counts.projectsSkipped, 1);
   assert.equal(result.counts.tasksSkipped, 1);
+  assert.equal(result.data.projects[0].notes, 'Local project note');
+  assert.equal(result.data.tasks[0].notes, 'Local task note');
+  assert.equal(result.data.tasks[1].notes, 'New task note');
+});
+
+test('merge retains notes on newly imported projects and tasks', () => {
+  const incoming = data([{ ...project('new-project'), notes: 'New project note' }], [{ ...task('new-task', { projectId: 'new-project' }), notes: 'New task note' }]);
+  const result = planMergeImport(data(), raw(incoming));
+  assert.equal(result.data.projects[0].notes, 'New project note');
+  assert.equal(result.data.tasks[0].notes, 'New task note');
 });
 
 test('normalized project names and section names map tasks to local IDs before fingerprinting', () => {

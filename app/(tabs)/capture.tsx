@@ -26,7 +26,7 @@ function CaptureForm() {
   const save = async () => {
     setError(''); setSaving(true);
     try {
-      await addTask({ ...reminderFromDraft(draft), title: draft.title, description: draft.description, sectionId: draft.sectionId, projectId: draft.projectId || undefined, priority: draft.priority, dueDate: draft.dueDate.trim() || undefined, owner: draft.owner, storyPoints: Number(draft.storyPoints) });
+      await addTask({ ...reminderFromDraft(draft), title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId || undefined, priority: draft.priority, dueDate: draft.dueDate.trim() || undefined, owner: draft.owner, storyPoints: Number(draft.storyPoints) });
       setDraft(blankTaskDraft(data.sections[0]?.id ?? ''));
       setPointsEdited(false);
       setReminderEdited(false);

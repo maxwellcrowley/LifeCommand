@@ -54,10 +54,10 @@ async function main() {
   const data = createDefaultAppData();
   data.settings.autoRollover = false;
   data.settings.defaultTaskReminder = 'morning-of';
-  const project = createProject({ name: 'Polish project', sectionId: 'home', defaultTaskPoints: 3 });
+  const project = createProject({ name: 'Polish project', notes: 'Project-only reference', sectionId: 'home', defaultTaskPoints: 3 });
   data.projects = [project];
   const task = (title, priority, dueDate = today) => createTask({ title, priority, dueDate, projectId: project.id, sectionId: 'home' });
-  data.tasks = [task('Low today', 'low'), task('Normal today', 'normal'), task('High today', 'high'), task('High second', 'high'), task('Low overdue', 'low', addDays(today, -1)), updateTask(task('Done high', 'high'), { status: 'complete' }), task('Future', 'normal', addDays(today, 1))];
+  data.tasks = [task('Low today', 'low'), task('Normal today', 'normal'), { ...task('High today', 'high'), description: 'Compact Today context', notes: 'Private task note' }, task('High second', 'high'), task('Low overdue', 'low', addDays(today, -1)), updateTask(task('Done high', 'high'), { status: 'complete' }), task('Future', 'normal', addDays(today, 1))];
   const event = (title, startTime, source = 'personal') => createEvent({ title, date: today, startTime, source, ...(source === 'family' ? { addedBy: 'Kellyn', category: 'Family Plan' } : {}), reminderEnabled: true });
   data.calendarEvents = [event('Local afternoon', '14:00'), event('Local all day')];
   data.familyEvents = [event('Family morning', '08:00', 'family'), event('Family evening', '18:00', 'family')];
@@ -85,6 +85,8 @@ async function main() {
   assert.deepEqual(await taskTitles(), ['High second', 'High today', 'Normal today', 'Low overdue', 'Low today']);
   const body = await a.evaluate('document.body.innerText');
   assert.ok(body.indexOf("Today's tasks") < body.indexOf("Today's calendar"));
+  assert.ok(body.includes('Compact Today context'));
+  assert.equal(body.includes('Private task note'), false);
   for (const hidden of ['Next event', 'Rollover summary', 'Reminders', 'Reminder:', "Today's family events", 'Top priorities']) assert.equal(body.includes(hidden), false, hidden);
   const timeline = await a.evaluate(`(() => { const card = [...document.querySelectorAll('[role=heading],h1,h2,h3,h4,h5,h6')].find(el => el.innerText === "Today's calendar").parentElement; return { events: [...card.querySelectorAll('[aria-label^="Edit "]')].map(el => el.getAttribute('aria-label')), text: card.innerText }; })()`);
   assert.deepEqual(timeline.events, ['Edit Local all day', 'Edit Family morning', 'Edit Local afternoon', 'Edit Family evening']);
@@ -92,12 +94,15 @@ async function main() {
   await bounds();
   await screenshot('today-polish');
   await choose('Edit task: High today'); await a.ready('Save changes');
+  assert.equal(await a.evaluate(`document.querySelector('textarea[aria-label="Task description, optional"]').value`), 'Compact Today context');
+  assert.equal(await a.evaluate(`document.querySelector('textarea[aria-label="Task notes, optional"]').value`), 'Private task note');
   await a.go('/', 'High today'); await choose('Complete High today');
   assert.equal((await read()).tasks.find(t => t.title === 'High today').status, 'complete');
   assert.equal((await taskTitles()).includes('High today'), false);
   console.log('PASS Today tasks first, priority order, all-day/combined timeline, attribution, hidden sections, mobile bounds and edit/complete');
 
   await a.go('/projects', 'Polish project'); await choose('Edit project: Polish project'); await a.ready('Project tasks');
+  assert.equal(await a.evaluate(`document.querySelector('textarea[aria-label="Project notes (optional)"]').value`), 'Project-only reference');
   assert.deepEqual(await taskTitles(), ['High second', 'Normal today', 'Future', 'Low overdue', 'Low today', 'Done high', 'High today']);
   const progress = () => a.evaluate(`Number(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'))`);
   assert.equal(await progress(), 29);

@@ -137,7 +137,7 @@ test('repair write failure retains both original and backup; later retry recover
 test('task and event create/edit/archive persist through real repository serialization and fresh instances', async () => {
   const mem = memory(JSON.stringify(persistedSnapshot(empty(), 1)));
   const repo = createRepository(mem.storage);
-  const task = createTask({ title: 'Persist me', sectionId: 'work', description: 'Notes', dueDate: '2026-09-29' }, now);
+  const task = createTask({ title: 'Persist me', sectionId: 'work', description: 'Today context', notes: 'Private notes', dueDate: '2026-09-29' }, now);
   const event = createEvent({ title: 'School', date: '2026-09-29', source: 'family', addedBy: 'Kellyn', category: 'School' }, now);
   await Promise.all([
     repo.changeAppData(data => ({ ...data, tasks: [task] })),
@@ -146,16 +146,28 @@ test('task and event create/edit/archive persist through real repository seriali
   ]);
   const restarted = createRepository(mem.storage);
   const loaded = await restarted.loadAppData();
-  assert.equal(loaded.tasks[0].description, 'Notes');
+  assert.equal(loaded.tasks[0].description, 'Today context');
+  assert.equal(loaded.tasks[0].notes, 'Private notes');
   assert.equal(loaded.familyEvents[0].addedBy, 'Kellyn');
   assert.equal(loaded.settings.appearance, 'dark');
   await restarted.changeAppData(data => changeEvent({ ...data, tasks: data.tasks.map(t => updateTask(t, { status: 'complete' }, now)) }, eventKey(event), 'archive', event.updatedAt, now));
   const final = await createRepository(mem.storage).loadAppData();
   assert.equal(final.tasks[0].completedAt, now.toISOString());
-  assert.equal(final.tasks[0].description, 'Notes');
+  assert.equal(final.tasks[0].description, 'Today context');
+  assert.equal(final.tasks[0].notes, 'Private notes');
   assert.deepEqual(eventsOnDate(final, '2026-09-29'), []);
   assert.ok(final.familyEvents[0].archivedAt);
   assert.equal(mem.backups().length, 0, 'ordinary saves must not produce recovery backups');
+});
+
+test('task notes are trimmed on create/edit and old task/project records without notes still normalize', () => {
+  const created = createTask({ title: 'Write', sectionId: 'work', notes: '  Detail  ' }, now);
+  assert.equal(created.notes, 'Detail');
+  assert.equal(updateTask(created, { notes: '  Revised detail  ' }, now).notes, 'Revised detail');
+  assert.equal(updateTask(created, { notes: '   ' }, now).notes, undefined);
+  const legacy = normalizeAppData({ tasks: [{ id: 'legacy-task', title: 'Old task', sectionId: 'work' }], projects: [{ id: 'legacy-project', name: 'Old project' }] });
+  assert.equal(legacy.tasks[0].notes, undefined);
+  assert.equal(legacy.projects[0].notes, undefined);
 });
 
 test('failed mutation/save does not poison subsequent writes or replace saved user data', async () => {

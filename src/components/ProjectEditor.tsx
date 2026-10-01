@@ -10,7 +10,7 @@ import { FormError } from './TaskForm';
 import { ProjectTasks } from './ProjectTasks';
 import { Card, Label, Muted, Page, Row } from './ui';
 
-const toDraft = (project?: Project) => ({ name: project?.name ?? '', description: project?.description ?? '', sectionId: project?.sectionId ?? '', status: project?.status ?? 'active', trackCompletion: project?.trackCompletion ?? true, useWeightedProgress: project?.useWeightedProgress ?? false, defaultTaskPoints: String(project?.defaultTaskPoints ?? 1), includeBacklogTasks: project?.includeBacklogTasks ?? true });
+const toDraft = (project?: Project) => ({ name: project?.name ?? '', description: project?.description ?? '', notes: project?.notes ?? '', sectionId: project?.sectionId ?? '', status: project?.status ?? 'active', trackCompletion: project?.trackCompletion ?? true, useWeightedProgress: project?.useWeightedProgress ?? false, defaultTaskPoints: String(project?.defaultTaskPoints ?? 1), includeBacklogTasks: project?.includeBacklogTasks ?? true });
 
 export function ProjectEditor({ project }: { project?: Project }) {
   const { data, addProject, editProject, deleteProject } = useAppData();
@@ -33,8 +33,8 @@ export function ProjectEditor({ project }: { project?: Project }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save project.'); }
     finally { busy.current = false; setSaving(false); }
   };
-  const field = (key: 'name' | 'description' | 'defaultTaskPoints', label: string) => <View style={{ gap: 6 }}>
-    <Muted>{label}</Muted><TextInput accessibilityLabel={label} editable={!saving} value={draft[key]} onChangeText={value => setDraft(current => ({ ...current, [key]: value }))} multiline={key === 'description'} keyboardType={key === 'defaultTaskPoints' ? 'decimal-pad' : 'default'} style={{ minHeight: key === 'description' ? 76 : 44, padding: 12, borderRadius: 10, fontSize: 15, color: colors.text, backgroundColor: colors.background, textAlignVertical: 'top' }} />
+  const field = (key: 'name' | 'description' | 'notes' | 'defaultTaskPoints', label: string) => <View style={{ gap: 6 }}>
+    <Muted>{label}</Muted><TextInput accessibilityLabel={label} editable={!saving} value={draft[key]} onChangeText={value => setDraft(current => ({ ...current, [key]: value }))} multiline={key === 'description' || key === 'notes'} keyboardType={key === 'defaultTaskPoints' ? 'decimal-pad' : 'default'} style={{ minHeight: key === 'notes' ? 100 : key === 'description' ? 76 : 44, padding: 12, borderRadius: 10, fontSize: 15, color: colors.text, backgroundColor: colors.background, textAlignVertical: 'top' }} />
   </View>;
   const choices = (key: 'sectionId' | 'status', label: string, options: { value: string; label: string }[]) => <View style={{ gap: 6 }}><Muted>{label}</Muted><View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{options.map(option => <Pressable key={option.value} disabled={saving} accessibilityRole="radio" accessibilityLabel={`${label}: ${option.label}`} aria-checked={draft[key] === option.value} accessibilityState={{ checked: draft[key] === option.value }} onPress={() => setDraft(current => ({ ...current, [key]: option.value }))} style={{ minHeight: 44, maxWidth: '100%', padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: draft[key] === option.value ? colors.soft : colors.background }}><Label>{option.label}</Label></Pressable>)}</View></View>;
   const toggle = (key: 'trackCompletion' | 'useWeightedProgress' | 'includeBacklogTasks', label: string) => <Row><Label>{label}</Label><Switch accessibilityLabel={label} disabled={saving} value={draft[key]} onValueChange={value => setDraft(current => ({ ...current, [key]: value }))} /></Row>;
@@ -42,6 +42,7 @@ export function ProjectEditor({ project }: { project?: Project }) {
   return <Page hasHeader title={project ? 'Edit project' : 'New project'} subtitle="Organize related tasks and choose how to track progress.">
     {project ? <ProjectTasks project={project} /> : null}
     <Card title="Project details">
+      {field('notes', 'Project notes (optional)')}
       {field('name', 'Project name · required')}{field('description', 'Project description · optional')}
       {choices('sectionId', 'Project section', [{ value: '', label: 'None' }, ...data.sections.map(section => ({ value: section.id, label: section.name }))])}
       {choices('status', 'Project status', projectStatuses.map(value => ({ value, label: projectStatusLabels[value] })))}

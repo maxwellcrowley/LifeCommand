@@ -1,5 +1,13 @@
 # Local Data Model
 
+## Task and project notes (Slice 25)
+
+Tasks have two distinct optional text fields. `description` is short, trimmed context and is shown beneath the title on Today (up to two visual lines, with a tail ellipsis). Empty descriptions render nothing. `notes` is longer private/reference detail: it is editable in Capture and the task editor, stored as trimmed optional text, and intentionally is not shown in Today task rows. Both remain fully available in the task editor.
+
+Projects retain their existing optional `description` and gain optional trimmed `notes`, editable only in the project editor/create form. Project notes are not rendered on project list cards, so list density and progress scanning are unchanged.
+
+`notes` is optional for both records. Missing or blank values normalize to absence; non-string supplied values fail strict import validation. Exports include populated notes automatically, replace imports accept them, and merge import keeps notes on newly appended records while its existing duplicate rule never overwrites local records or local notes. Existing snapshots and exports without notes remain valid. This is an additive optional-field change within schema 3: no schema-version bump, persisted migration, backup, or repair warning is needed. See [Story 025](../stories/STORY-025_TASK_PROJECT_NOTES.md).
+
 ## Additive project/task merge import (Slice 23)
 
 Settings provides a separate merge action alongside full replacement import. Both accept `lifecommand-export` schema 1–3 envelopes and use existing strict field validation and additive defaults. Merge alone permits unresolved task project IDs during parsing so they can resolve against local projects; unresolvable tasks are counted and skipped. Replace import continues rejecting dangling links. No schema or persisted metadata is added.
@@ -27,8 +35,8 @@ LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lif
 ## Collections
 
 - **Section**: stable ID, display name, color, and ordering. The seed contains Work, Army, Family, Home, Health, Finance, Projects, Personal, and Pets/Fosters.
-- **Task**: title, optional description, section/project references, lifecycle status, priority, due/original due dates, completion timestamps, owner, story points, rollover and manual-defer counters, and timestamps. Status includes `overdue`, retained when a missed task is moved forward. Today is derived from due date and incomplete state; there is no stored Today status. A passed due date also qualifies an active task as overdue, even when automatic rollover is off.
-- **Project**: name/description, optional section, lifecycle status, completion switches, default task points, backlog inclusion, and timestamps.
+- **Task**: title, optional short description and optional private notes, section/project references, lifecycle status, priority, due/original due dates, completion timestamps, owner, story points, rollover and manual-defer counters, and timestamps. Status includes `overdue`, retained when a missed task is moved forward. Today is derived from due date and incomplete state; there is no stored Today status. A passed due date also qualifies an active task as overdue, even when automatic rollover is off.
+- **Project**: name/description, optional private notes and section, lifecycle status, completion switches, default task points, backlog inclusion, and timestamps.
 - **CalendarEvent**: local date/time, source (`work`, `personal`, or `army`), optional location/notes, and audit/archive timestamps.
 - **FamilyEvent**: distinct `family` source with local date/time, attribution, category, family color, optional location/notes, and audit/archive timestamps. Stored separately in `familyEvents` so future shared-account attribution has its own boundary.
 - **AppSettings**: appearance preference (`system`, `light`, `dark`), rollover time and behavior toggles below, default story points, and ambient display settings below.

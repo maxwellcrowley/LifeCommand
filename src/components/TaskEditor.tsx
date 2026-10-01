@@ -30,7 +30,7 @@ export function TaskEditor({ task }: { task: Task }) {
     setSaving(true);
     try {
       setError('');
-      await editTask(task.id, { ...reminderFromDraft(draft), title: draft.title, description: draft.description, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status }, needsChoice ? choice : undefined, snapshot.updatedAt);
+      await editTask(task.id, { ...reminderFromDraft(draft), title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status }, needsChoice ? choice : undefined, snapshot.updatedAt);
       leave();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update task.'); }
     finally { setSaving(false); }

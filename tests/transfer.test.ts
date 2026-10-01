@@ -32,6 +32,8 @@ function memory(raw = json(persistedSnapshot(createDefaultAppData(), 1))) {
 
 test('export envelope includes version, timestamp, every collection/settings and rollover history; round trip is lossless', () => {
   const source = fixture();
+  source.tasks[0].notes = 'Task reference';
+  source.projects[0].notes = 'Project reference';
   const exported = createExport(source, new Date('2026-09-28T12:00:00Z'));
   assert.equal(exported.format, 'lifecommand-export');
   assert.equal(exported.schemaVersion, 3);
@@ -41,6 +43,8 @@ test('export envelope includes version, timestamp, every collection/settings and
   assert.equal(result.defaultsApplied, false);
   assert.deepEqual(result.data, normalizeAppData(source));
   assert.ok(result.data.tasks.some(t => t.status === 'archived'));
+  assert.equal(result.data.tasks[0].notes, 'Task reference');
+  assert.equal(result.data.projects[0].notes, 'Project reference');
 });
 
 test('missing optional fields receive safe defaults without changing identity or inventing current audit history', () => {
@@ -83,6 +87,8 @@ test('invalid supplied fields, dates, duplicate IDs, dangling links and unknown 
     d => { d.settings.rolloverTime = '24:99'; },
     d => { d.tasks[0].createdAt = '2026-02-30T00:00:00Z'; },
     d => { d.lastRolloverSummary!.movedTaskIds = ['missing']; },
+    d => { d.tasks[0].notes = 42 as never; },
+    d => { d.projects[0].notes = {} as never; },
   ];
   for (const mutate of mutations) { const data = fixture(); mutate(data); assert.throws(() => validateSnapshot(JSON.parse(json(data))), /data|section/); }
   assert.throws(() => validateSnapshot({ ...fixture(), futureData: 'unknown' }), /futureData/);

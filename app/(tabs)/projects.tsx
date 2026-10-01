@@ -1,3 +1,4 @@
+import { Action } from '@/src/components/TaskScheduling';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
@@ -28,7 +29,7 @@ export default function ProjectsScreen() {
           {project.description ? <Muted>{project.description}</Muted> : null}
           <Muted>{data.sections.find(section => section.id === project.sectionId)?.name ?? 'No section'}</Muted>
           <ProjectProgress project={project} tasks={data.tasks} />
-          <Pressable accessibilityRole="button" accessibilityLabel={`Edit project: ${project.name}`} onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} style={{ minHeight: 44, justifyContent: 'center' }}><Label>Edit project and linked tasks</Label></Pressable>
+          <Action label={`Edit project: ${project.name}`} text="Edit project and linked tasks" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} />
         </Card>)}
       </View>;
     })}

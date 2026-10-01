@@ -5,12 +5,12 @@ import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, reset
 import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError } from './storage';
-import { createTask, scheduleTasks, updateTaskSchedule, type ScheduleSelection, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
+import { changeTask, deleteTask as removeTask, createTask, scheduleTasks, type ScheduleSelection, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { applyReminderDefault, changeReminder, type ReminderAction, type ScheduledReminder } from '@/src/domain/reminders';
 import { rolloverAppData } from '@/src/domain/rollover';
 import { isRolloverTime, validateAmbientSetting } from '@/src/domain/settings';
 import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/domain/events';
-import { changeProject, createProject, insertProject, validateTaskProject, type ProjectInput, type ProjectChanges } from '@/src/domain/projects';
+import { deleteProject as removeProject, changeProject, createProject, insertProject, validateTaskProject, type ProjectInput, type ProjectChanges } from '@/src/domain/projects';
 
 type AppDataValue = {
   data: AppData | null;
@@ -23,6 +23,8 @@ type AppDataValue = {
   resetVersion: number;
   addProject: (input: ProjectInput) => Promise<void>;
   editProject: (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => Promise<void>;
+  deleteTask: (id: string, expectedUpdatedAt: string) => Promise<void>;
+  deleteProject: (id: string, expectedUpdatedAt: string) => Promise<void>;
   addEvent: (input: EventInput) => Promise<void>;
   editEvent: (key: string, input: EventInput, expectedUpdatedAt?: string) => Promise<void>;
   archiveEvent: (key: string, expectedUpdatedAt?: string) => Promise<void>;
@@ -119,15 +121,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return task;
   };
   const schedule = (selection: ScheduleSelection[], date: string, backlogOnly = false) => commit(current => scheduleTasks(current, selection, date, backlogOnly));
-  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => ({
-    ...current,
-    tasks: current.tasks.map(task => {
-      if (task.id !== id) return task;
-      if (expectedUpdatedAt && task.updatedAt !== expectedUpdatedAt) throw new Error('This task changed while you were editing. Reload the task before saving.');
-      validateTaskProject(current.projects, 'projectId' in changes ? changes.projectId : task.projectId, task.projectId);
-      return updateTaskSchedule(task, changes, current.settings, choice);
-    }),
-  }));
+  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => changeTask(current, id, changes, choice, expectedUpdatedAt));
+  const deleteTask = (id: string, expectedUpdatedAt: string) => commit(current => removeTask(current, id, expectedUpdatedAt));
+  const deleteProject = (id: string, expectedUpdatedAt: string) => commit(current => removeProject(current, id, expectedUpdatedAt));
   const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     if (key === 'rolloverTime' && !isRolloverTime(String(value))) throw new Error('Use HH:MM in 24-hour time, for example 00:00.');
     validateAmbientSetting(key, value);
@@ -156,7 +152,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

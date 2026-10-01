@@ -1,5 +1,15 @@
 # Local Data Model
 
+## Task organization and permanent deletion (Slice 20)
+
+Today, Review and project task lists share section grouping in saved section order and reuse each section's color. Within a section, unfinished tasks precede completed tasks, then priority sorts High / Normal / Low, due date (undated last), title, and ID. Project names are resolved from current project records. Color is accompanied by section and priority text. Today still selects only due/overdue incomplete tasks and retains its consolidated event timeline.
+
+`deleteTask` removes the task record and its ID from the latest rollover summary. The project remains; progress, Today, Review, Ambient and reminder scheduling derive from the remaining records. `deleteProject` permanently removes any project, including archived projects, and clears `projectId` on **all** linked tasks, including completed and archived tasks, in the same queued snapshot write. Task sections, status, dates, points and reminder fields are preserved. Each unlinked task gets a strictly newer `updatedAt`, preventing an open task draft from restoring the deleted link. Archive/restore remains a separate project lifecycle action.
+
+Both deletion actions require confirmation in the editor and compare the expected record timestamp inside the existing repository queue. Missing/stale records reject, failed storage writes leave the saved snapshot intact, and cross-tab revision guards continue to pause stale editors. Task edits now also explicitly reject missing IDs and advance timestamps monotonically. Deleted tasks cannot be recreated by a stale edit or scheduling action.
+
+No persisted shape, schema version, import validator, or migration changes are needed. Exports of the current snapshot omit deleted records and contain no dangling project links. Existing user exports, recovery backups, and manually managed cloud copies retain their existing restore semantics; this operation is not a purge of historical copies.
+
 Slice 14 adds validated notification tap routing and device QA to Slice 13's installation-local native preferences and OS scheduling. Local/portable app data stays at schema 3. The final sections define the current reminder and notification contracts; earlier slice descriptions retain their historical context.
 
 LifeCommand starts with a local-first snapshot stored in AsyncStorage under `lifecommand:data:v1`. `src/domain/models.ts` defines the TypeScript contracts; `src/domain/defaults.ts` provides clean defaults and standard sections; `src/domain/seed.ts` provides the first-run demonstration data; `src/data/repository.ts` is the persistence boundary. Screens read through `useAppData`. No backend or external calendar provider is involved.

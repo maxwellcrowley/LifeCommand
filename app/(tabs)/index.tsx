@@ -1,12 +1,13 @@
+import { TaskList, TaskRow } from '@/src/components/TaskList';
 import { AddFromBacklog } from '@/src/components/TaskScheduling';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { Card, Label, Muted, Page } from '@/src/components/ui';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { localDateKey } from '@/src/domain/dates';
-import { compareTaskPriority, getTodayTasks, isTaskOverdue } from '@/src/domain/tasks';
+import { getTodayTasks } from '@/src/domain/tasks';
 import { eventsOnDate, eventKey } from '@/src/domain/events';
 import { EventRow } from '@/src/components/EventRow';
 import { useLocalClock } from '@/src/hooks/useLocalClock';
@@ -20,7 +21,7 @@ export default function TodayScreen() {
   const today = localDateKey(now);
   const dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const events = eventsOnDate({ ...data, externalEvents }, today);
-  const todayTasks = getTodayTasks(data.tasks, today).sort(compareTaskPriority);
+  const todayTasks = getTodayTasks(data.tasks, today);
   const completedCount = data.tasks.filter(task => task.status === 'complete' && task.completedAt && localDateKey(new Date(task.completedAt)) === today).length;
 
   return <Page title="Today" subtitle={dateLabel}>
@@ -28,16 +29,9 @@ export default function TodayScreen() {
     <Card title={`Today's tasks · ${todayTasks.length}`}>
       <AddFromBacklog key={today} date={today} />
       {completedCount ? <Muted>{completedCount} completed today</Muted> : null}
-      {todayTasks.length ? todayTasks.map(task => <Row key={task.id}>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Link href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Edit task: ${task.title}`} style={{ minHeight: 44, justifyContent: 'center' }}><Label>{task.title}</Label></Pressable>
-          </Link>
-          <Label style={{ color: task.priority === 'high' ? colors.danger : colors.muted, fontWeight: '700' }}>{task.priority[0].toUpperCase() + task.priority.slice(1)} priority</Label>
-          {isTaskOverdue(task, today) ? <Muted>Overdue · {task.originalDueDate ?? task.dueDate}</Muted> : null}
-        </View>
+      {todayTasks.length ? <TaskList tasks={todayTasks} data={data} renderTask={task => <TaskRow task={task} data={data} date={today} action={
         <Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }, undefined, task.updatedAt).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 24 }}>○</Text></Pressable>
-      </Row>) : <Muted>No tasks due today.</Muted>}
+      } />} /> : <Muted>No tasks due today.</Muted>}
     </Card>
     <Card title="Today's calendar">
       {events.length ? events.map(event => <EventRow key={eventKey(event)} event={event} showReminder={false} />) : <Muted>No events today.</Muted>}

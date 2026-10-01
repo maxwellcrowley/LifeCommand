@@ -9,9 +9,9 @@ import { DateEntry } from './DateEntry';
 import { FormError } from './TaskForm';
 import { Label, Muted } from './ui';
 
-export function Action({ label, text = label, onPress, disabled = false }: { label: string; text?: string; onPress: () => void; disabled?: boolean }) {
+export function Action({ label, text = label, onPress, disabled = false, danger = false }: { label: string; text?: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   const { colors } = useAppTheme();
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={{ minHeight: 44, padding: 10, borderRadius: 10, justifyContent: 'center', backgroundColor: colors.soft, opacity: disabled ? 0.5 : 1 }}><Label>{text}</Label></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => ({ minHeight: 44, minWidth: 44, maxWidth: '100%', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: danger ? colors.danger : colors.border, justifyContent: 'center', backgroundColor: colors.soft, opacity: disabled ? 0.5 : pressed ? 0.7 : 1 })}><Label style={{ color: danger ? colors.danger : colors.text, fontWeight: '600' }}>{text}</Label></Pressable>;
 }
 
 export function QuickSchedule({ task }: { task: Task }) {

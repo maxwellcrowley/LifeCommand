@@ -1,6 +1,7 @@
 import type { AppData, AppSettings, Priority, Task, TaskOwner, TaskStatus } from './models';
 import { normalizeReminder, validateReminder } from './reminders';
 import { localDateKey } from './dates';
+import { validateTaskProject } from './projects';
 
 export type TaskInput = Pick<Task, 'title' | 'sectionId'> & Partial<Omit<Task, 'id' | 'title' | 'sectionId' | 'createdAt' | 'updatedAt'>>;
 export type TaskChanges = Partial<Omit<Task, 'id' | 'createdAt'>>;
@@ -55,6 +56,44 @@ export function compareTaskPriority(a: Task, b: Task): number {
   return priorityRank[a.priority] - priorityRank[b.priority];
 }
 
+// One ordering for operational lists: unfinished, priority, date, title, identity.
+export function compareTaskDisplay(a: Task, b: Task): number {
+  return Number(a.status === 'complete') - Number(b.status === 'complete') || compareTaskPriority(a, b)
+    || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
+    || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+}
+
+export function groupTasksBySection(data: Pick<AppData, 'sections'>, tasks: Task[]) {
+  const buckets = new Map<string, Task[]>();
+  for (const task of tasks) {
+    const bucket = buckets.get(task.sectionId) ?? [];
+    bucket.push(task);
+    buckets.set(task.sectionId, bucket);
+  }
+  return [...data.sections].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map(section => ({ section, tasks: (buckets.get(section.id) ?? []).sort(compareTaskDisplay) }));
+}
+
+function currentTask(data: AppData, id: string, expectedUpdatedAt?: string) {
+  const task = data.tasks.find(item => item.id === id);
+  if (!task) throw new Error('This task no longer exists. Return to your task list.');
+  if (expectedUpdatedAt && task.updatedAt !== expectedUpdatedAt) throw new Error('This task changed while you were editing. Reload the task before saving.');
+  return task;
+}
+
+export function changeTask(data: AppData, id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string, now = new Date()): AppData {
+  const task = currentTask(data, id, expectedUpdatedAt);
+  validateTaskProject(data.projects, 'projectId' in changes ? changes.projectId : task.projectId, task.projectId);
+  const next = updateTaskSchedule(task, changes, data.settings, choice, new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)));
+  return { ...data, tasks: data.tasks.map(item => item.id === id ? next : item) };
+}
+
+export function deleteTask(data: AppData, id: string, expectedUpdatedAt: string): AppData {
+  currentTask(data, id, expectedUpdatedAt);
+  return { ...data, tasks: data.tasks.filter(task => task.id !== id),
+    lastRolloverSummary: data.lastRolloverSummary ? { ...data.lastRolloverSummary, movedTaskIds: data.lastRolloverSummary.movedTaskIds.filter(taskId => taskId !== id) } : undefined };
+}
+
 export function getProjectTasks(tasks: Task[], projectId: string): Task[] {
   return tasks.filter(task => task.projectId === projectId && task.status !== 'archived')
     .sort((a, b) => Number(a.status === 'complete') - Number(b.status === 'complete') || compareTaskPriority(a, b)
@@ -80,7 +119,7 @@ export function scheduleTasks(data: AppData, selection: ScheduleSelection[], due
 }
 
 export function getBacklogBySection(data: AppData) {
-  return data.sections.map(section => ({ section, tasks: data.tasks.filter(task => task.sectionId === section.id && !task.dueDate && task.status !== 'complete' && task.status !== 'archived') })).sort((a, b) => a.section.order - b.section.order);
+  return groupTasksBySection(data, data.tasks.filter(task => !task.dueDate && task.status !== 'complete' && task.status !== 'archived'));
 }
 
 export { calculateProjectProgress } from './projects';

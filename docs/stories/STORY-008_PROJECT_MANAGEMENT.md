@@ -1,5 +1,7 @@
 # STORY-008: Project Management
 
+Slice 20 adds a separate confirmed **Delete project** action that keeps and unlinks all tasks, plus section-grouped linked task rows and visible Edit buttons. Archive/restore is preserved. See [STORY-020](STORY-020_TASK_SCANABILITY_AND_DELETION.md).
+
 ## Implementation and Max's workflow
 
 Open Projects and choose **Create project**. Enter a name, optional description and section, choose Active/Paused/Complete/Archived, and configure Track completion, Use weighted progress, Default task points and Include backlog tasks. Save project returns to the project list; Cancel discards the draft. Names are trimmed and required; default points must be finite and positive.

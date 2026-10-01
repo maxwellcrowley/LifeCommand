@@ -2,6 +2,8 @@
 
 Implemented September 29, 2026.
 
+Slice 20 supersedes the flat task presentation and equal-priority collection ordering described here with shared section groups, explicit Edit buttons, and confirmed permanent task/project deletion. See [STORY-020](STORY-020_TASK_SCANABILITY_AND_DELETION.md) for the current behavior and verification.
+
 ## Implementation and behavior
 
 Today now shows the date, one task card, and one calendar timeline. The task card includes incomplete tasks due today or earlier, with no duplicate priority/overdue cards. High, normal, then low priority dominates ordering; equal priorities retain collection order (normally newest captures first). Priority is explicit text, high priority is emphasized, and overdue tasks retain a date label. Task editing and completion remain available. A small completed-today count replaces the separate completed list. No tomorrow preview was present, so none was added.

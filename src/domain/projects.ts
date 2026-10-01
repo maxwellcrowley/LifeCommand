@@ -52,6 +52,16 @@ export function getActiveProjects(projects: Project[]) {
   return projects.filter(project => project.status === 'active');
 }
 
+// Unlink every task, including completed/archived tasks, in the same snapshot.
+export function deleteProject(data: AppData, id: string, expectedUpdatedAt: string, now = new Date()): AppData {
+  const project = data.projects.find(item => item.id === id);
+  if (!project) throw new Error('This project no longer exists. Return to Projects.');
+  if (project.updatedAt !== expectedUpdatedAt) throw new Error('This project changed while you were editing. Reload the project before deleting.');
+  return { ...data, projects: data.projects.filter(item => item.id !== id),
+    tasks: data.tasks.map(task => task.projectId === id ? { ...task, projectId: undefined,
+      updatedAt: new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)).toISOString() } : task) };
+}
+
 export function validateTaskProject(projects: Project[], projectId?: string, previousProjectId?: string) {
   if (!projectId) return;
   const project = projects.find(item => item.id === projectId);

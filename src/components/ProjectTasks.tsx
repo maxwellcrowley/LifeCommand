@@ -1,6 +1,6 @@
 import { QuickSchedule } from './TaskScheduling';
 import { useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { TaskList, TaskRow } from './TaskList';
 import { Pressable, TextInput, View } from 'react-native';
 import { useAppData } from '@/src/data/useAppData';
 import type { Priority, Project, Task } from '@/src/domain/models';
@@ -54,11 +54,8 @@ export function ProjectTasks({ project }: { project: Project }) {
       <TaskButton label="Add task to project" onPress={() => void add()} disabled={saving} />
     </View> : <Muted>Save this project as Active to add tasks.</Muted>}
     {error ? <FormError>{error}</FormError> : null}
-    {tasks.map(task => <View key={task.id} style={{ gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Edit task: ${task.title}`} disabled={saving} onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })} style={{ minHeight: 44, justifyContent: 'center' }}>
-        <Label style={{ fontWeight: '700', textDecorationLine: task.status === 'complete' ? 'line-through' : 'none' }}>{task.title}</Label>
-        <Muted>{task.priority[0].toUpperCase() + task.priority.slice(1)} priority · {task.status} · {task.storyPoints} points</Muted>
-      </Pressable>
+    <TaskList tasks={tasks} data={data} renderTask={task => <TaskRow task={task} data={data} disabled={saving}>
+      <Muted>{task.status} · {task.storyPoints} points</Muted>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Pressable accessibilityRole="checkbox" accessibilityLabel={`Complete task: ${task.title}`} accessibilityState={{ checked: task.status === 'complete', disabled: saving }} aria-checked={task.status === 'complete'} disabled={saving} onPress={() => void toggle(task)} style={{ minHeight: 44, padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: colors.soft }}><Label>{task.status === 'complete' ? '✓ Completed · undo' : 'Mark complete'}</Label></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`Archive task: ${task.title}`} disabled={saving} onPress={() => setArchiveId(task.id)} style={{ minHeight: 44, padding: 10, justifyContent: 'center' }}><Label style={{ color: colors.danger }}>Archive</Label></Pressable>
@@ -69,7 +66,7 @@ export function ProjectTasks({ project }: { project: Project }) {
         <TaskButton label="Confirm archive task" onPress={() => void archive(task)} disabled={saving} danger />
         <TaskButton label="Cancel archive" onPress={() => setArchiveId(undefined)} disabled={saving} />
       </View> : null}
-    </View>)}
+    </TaskRow>} />
   </Card>;
 }
 

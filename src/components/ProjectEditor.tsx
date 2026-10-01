@@ -1,3 +1,4 @@
+import { DeleteConfirmation } from './DeleteConfirmation';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Switch, TextInput, View } from 'react-native';
@@ -12,7 +13,7 @@ import { Card, Label, Muted, Page, Row } from './ui';
 const toDraft = (project?: Project) => ({ name: project?.name ?? '', description: project?.description ?? '', sectionId: project?.sectionId ?? '', status: project?.status ?? 'active', trackCompletion: project?.trackCompletion ?? true, useWeightedProgress: project?.useWeightedProgress ?? false, defaultTaskPoints: String(project?.defaultTaskPoints ?? 1), includeBacklogTasks: project?.includeBacklogTasks ?? true });
 
 export function ProjectEditor({ project }: { project?: Project }) {
-  const { data, addProject, editProject } = useAppData();
+  const { data, addProject, editProject, deleteProject } = useAppData();
   const { colors } = useAppTheme();
   const [snapshot, setSnapshot] = useState(project);
   const [draft, setDraft] = useState(() => toDraft(project));
@@ -58,6 +59,7 @@ export function ProjectEditor({ project }: { project?: Project }) {
     {error ? <FormError>{error}</FormError> : null}
     <EditorButton label={saving ? 'Saving…' : 'Save project'} onPress={() => void save()} disabled={saving || stale} />
     {project ? <Card><Muted>Archive and restore also save the details above. Restoring makes the project Active.</Muted><EditorButton label={project.status === 'archived' ? 'Unarchive project' : 'Archive project'} onPress={() => void save(project.status === 'archived' ? 'active' : 'archived')} disabled={saving || stale} /></Card> : null}
+    {snapshot ? <DeleteConfirmation kind="project" name={snapshot.name} disabled={saving || stale} onDelete={() => deleteProject(snapshot.id, snapshot.updatedAt)} onDeleted={leave} /> : null}
     <EditorButton label="Cancel" onPress={leave} disabled={saving} />
   </Page>;
 }

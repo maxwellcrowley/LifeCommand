@@ -5,6 +5,7 @@ import { migrateSnapshot, persistedSnapshot, snapshotData, snapshotRevision, sna
 import { seedData } from '../domain/seed';
 import { createDefaultAppData } from '../domain/defaults';
 import { createExport, parseTransferJSON, validateImport, validateSnapshot, type ImportPreview } from '../domain/transfer';
+import { planMergeImport, type MergeImportPreview } from '../domain/mergeImport';
 
 export const STORAGE_KEY = 'lifecommand:data:v1';
 export const RECOVERY_PREFIX = `${STORAGE_KEY}:recovery:`;
@@ -15,6 +16,7 @@ export interface RecoveryBackup {
   error?: string;
 }
 export interface RecoveryPreview extends ImportPreview { key: string; raw: string }
+export interface MergePreview extends MergeImportPreview { expectedRaw: string }
 export interface SnapshotStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -65,7 +67,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
     observedRaw = raw;
     revision += 1;
   };
-  async function backup(raw: string, reason: 'before-import' | 'before-restore') {
+  async function backup(raw: string, reason: 'before-import' | 'before-restore' | 'before-merge-import') {
     const createdAt = new Date().toISOString();
     let key = `${RECOVERY_PREFIX}${Date.now()}`;
     while (await storage.getItem(key) !== null) key += '-1';
@@ -115,10 +117,32 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
     }
     return data;
   }
+  async function previewMerge(raw: string): Promise<MergePreview> {
+    await assertCurrent();
+    const expectedRaw = await storage.getItem(STORAGE_KEY);
+    if (expectedRaw === null) throw Error('Current local data is missing. Reload LifeCommand before trying again.');
+    // Preview must never repair or write storage. Normal app loading owns migration.
+    const current = validateSnapshot(snapshotData(parseTransferJSON(expectedRaw))).data;
+    return { ...planMergeImport(current, raw), expectedRaw };
+  }
   return {
     exportAppData: () => enqueue(async () => { await assertCurrent(); return JSON.stringify(createExport(await read()), null, 2); }),
     hasExternalChange: () => enqueue(async () => observedRaw !== undefined && observedRaw !== await storage.getItem(STORAGE_KEY)),
     importAppData: (raw: string) => enqueue(() => replace(validateImport(raw).data, 'before-import')),
+    previewMergeImport: (raw: string) => enqueue(() => previewMerge(raw)),
+    mergeImportAppData: (raw: string, expectedRaw: string) => enqueue(async () => {
+      const preview = await previewMerge(raw);
+      if (preview.expectedRaw !== expectedRaw) throw Error('Local data changed since this preview. Cancel and preview the merge again before confirming.');
+      if (!preview.counts.projectsToAdd && !preview.counts.tasksToAdd) return preview.data;
+      try { await backup(expectedRaw, 'before-merge-import'); }
+      catch { throw Error('Could not create a recovery backup. Your current data was not changed. Free storage space and try again.'); }
+      try { await write(preview.data); }
+      catch (cause) {
+        if (cause instanceof ExternalDataChangeError) throw cause;
+        throw Error('Could not save merged data. The recovery backup is available; please retry.');
+      }
+      return preview.data;
+    }),
     listRecoveryBackups: () => enqueue(async (): Promise<RecoveryBackup[]> => {
       const keys = (await storage.getAllKeys()).filter(key => key.startsWith(RECOVERY_PREFIX)).sort().reverse();
       const items: RecoveryBackup[] = [];
@@ -130,7 +154,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
         try {
           const parsed = parseTransferJSON(raw) as Record<string, unknown> | null;
           if (parsed?.format === 'lifecommand-recovery') {
-            item.reason = parsed.reason === 'before-import' ? 'Before import' : parsed.reason === 'before-restore' ? 'Before restore' : 'Recovery copy';
+            item.reason = parsed.reason === 'before-import' ? 'Before import' : parsed.reason === 'before-restore' ? 'Before restore' : parsed.reason === 'before-merge-import' ? 'Before merge import' : 'Recovery copy';
             if (typeof parsed.createdAt === 'string' && Number.isFinite(Date.parse(parsed.createdAt))) item.createdAt = parsed.createdAt;
           }
           decodeBackup(raw);

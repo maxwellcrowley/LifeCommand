@@ -51,7 +51,7 @@ function compareSupplied(input: unknown, normalized: unknown, path: string): voi
   }
 }
 
-export function validateSnapshot(value: unknown): ImportPreview {
+export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = false): ImportPreview {
   const input = object(value, 'data');
   for (const name of collections) {
     if (!Array.isArray(input[name])) throw Error(`data.${name} must be an array (use [] when empty).`);
@@ -67,21 +67,34 @@ export function validateSnapshot(value: unknown): ImportPreview {
     });
   }
   object(input.settings, 'data.settings');
-  const data = normalizeAppData(input);
+  // Merge alone may resolve a task's project against local data. Validate every
+  // other supplied field strictly, then return the original unresolved link.
+  const projectIds = new Set((input.projects as RecordValue[]).map(project => project.id));
+  const unresolved = new Map<number, string>();
+  const checked = allowUnresolvedTaskProjects ? { ...input, tasks: (input.tasks as RecordValue[]).map((task, index) => {
+    if (typeof task.projectId === 'string' && task.projectId.trim() && !projectIds.has(task.projectId)) {
+      unresolved.set(index, task.projectId);
+      const { projectId: _projectId, ...rest } = task;
+      return rest;
+    }
+    return task;
+  }) } : input;
+  const data = normalizeAppData(checked);
   // Empty sections are intentionally upgraded to the standard sections.
-  const supplied = { ...input, sections: (input.sections as unknown[]).length ? input.sections : data.sections };
+  const supplied = { ...checked, sections: (input.sections as unknown[]).length ? input.sections : data.sections };
   compareSupplied(supplied, data, 'data');
   if (data.sections.length !== (supplied.sections as unknown[]).length) throw Error('A task or project references a missing section ID.');
   const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+  unresolved.forEach((projectId, index) => { data.tasks[index].projectId = projectId; });
   return { data, defaultsApplied: canonical(input) !== canonical(data) };
 }
 
-export function validateImport(raw: string): ImportPreview {
+export function validateImport(raw: string, allowUnresolvedTaskProjects = false): ImportPreview {
   const envelope = object(parseTransferJSON(raw), 'Export');
   if (envelope.format !== 'lifecommand-export') throw Error('Choose a LifeCommand export (format: lifecommand-export).');
   if (envelope.schemaVersion !== 1 && envelope.schemaVersion !== 2 && envelope.schemaVersion !== DATA_VERSION) throw Error(`Unsupported data version ${String(envelope.schemaVersion)}. This app supports version ${DATA_VERSION}; use a compatible LifeCommand release.`);
   timestamp(envelope.exportedAt, 'exportedAt');
-  return { ...validateSnapshot(envelope.data), exportedAt: envelope.exportedAt as string };
+  return { ...validateSnapshot(envelope.data, allowUnresolvedTaskProjects), exportedAt: envelope.exportedAt as string };
 }
 
 export function createExport(data: AppData, now = new Date()): DataExport {

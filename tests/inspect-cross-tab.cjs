@@ -62,7 +62,7 @@ async function main() {
   const envelope = require('../.test-build/src/domain/transfer.js').createExport(imported);
   const file = resolve('.test-build/cross-tab-import.json'); writeFileSync(file, JSON.stringify(envelope));
   const doImport = async () => {
-    await a.click('Import local data');
+    await a.click('Import and replace local data');
     const { root } = await a.send('DOM.getDocument');
     const { nodeId } = await a.send('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type=file]' });
     await a.send('DOM.setFileInputFiles', { nodeId, files: [file] });

@@ -1,5 +1,15 @@
 # Local Data Model
 
+## Additive project/task merge import (Slice 23)
+
+Settings provides a separate merge action alongside full replacement import. Both accept `lifecommand-export` schema 1–3 envelopes and use existing strict field validation and additive defaults. Merge alone permits unresolved task project IDs during parsing so they can resolve against local projects; unresolvable tasks are counted and skipped. Replace import continues rejecting dangling links. No schema or persisted metadata is added.
+
+Merge appends only projects/tasks and never updates existing records or imports settings, global rollover history, events, sections, external caches, installation preferences or cloud configuration. Text matches use Unicode NFKC, trimmed/collapsed whitespace and lowercase. Projects match local IDs first, then normalized names. Tasks match IDs first, then normalized title + mapped section ID + mapped project ID (or absent) + due date (or absent) + points + priority + owner. Existing IDs win even with conflicting content; status, description, audit and reminder history are not fingerprint fields. Archived/completed records also participate. Within-file duplicates use the same rules, first accepted record wins; ambiguous local names use first stored order. Deletion has no tombstones, so deleted records may re-import.
+
+Imported project IDs map to matched local IDs or newly appended project IDs before task matching. References to local-only projects resolve by exact ID. Sections map by exact ID or normalized name without importing their metadata. Unmatched task sections cause a counted skip; unmatched optional project sections are removed with a preview warning. Invalid references to sections absent from the file still reject validation. These rules prevent broken links without modifying local records.
+
+Preview and confirmation share a pure merge planner. Repository preview is read-only; confirmation revalidates and recomputes inside the existing queue/Web Lock and checks the exact previewed snapshot before writing. Nonempty merges save an exact `before-merge-import` recovery backup before one combined active-snapshot write/revision increment. No-op merges create no writes or backups. Failures preserve existing data; cross-tab conflicts retain the existing stale/reload behavior. Same-tab intervening changes require another preview. Merge publishes a normal local mutation without a reset/replacement marker, preserving drafts and calendar credentials. Cloud operations remain manual. See [Story 023](../stories/STORY-023_MERGE_IMPORT_PROJECTS_TASKS.md) for details and verification.
+
 ## Task organization and permanent deletion (Slice 20)
 
 Today, Review and project task lists share section grouping in saved section order and reuse each section's color. Within a section, unfinished tasks precede completed tasks, then priority sorts High / Normal / Low, due date (undated last), title, and ID. Project names are resolved from current project records. Color is accompanied by section and priority text. Today still selects only due/overdue incomplete tasks and retains its consolidated event timeline.

@@ -1,10 +1,10 @@
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { AppData, AppSettings, Task } from '@/src/domain/models';
-import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, resetAppData, importAppData, restoreRecoveryBackup } from './repository';
+import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, resetAppData, importAppData, previewMergeImport, mergeImportAppData, restoreRecoveryBackup } from './repository';
 import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
-import { ExternalDataChangeError, ResetCleanupError } from './storage';
+import { ExternalDataChangeError, ResetCleanupError, type MergePreview } from './storage';
 import { changeTask, deleteTask as removeTask, createTask, scheduleTasks, type ScheduleSelection, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { applyReminderDefault, changeReminder, type ReminderAction, type ScheduledReminder } from '@/src/domain/reminders';
 import { rolloverAppData } from '@/src/domain/rollover';
@@ -19,6 +19,8 @@ type AppDataValue = {
   retry: () => Promise<void>;
   startFresh: () => Promise<void>;
   importData: (raw: string) => Promise<void>;
+  previewMerge: (raw: string) => Promise<MergePreview>;
+  mergeData: (raw: string, expectedRaw: string) => Promise<void>;
   restoreBackup: (key: string, raw: string) => Promise<void>;
   resetVersion: number;
   addProject: (input: ProjectInput) => Promise<void>;
@@ -75,6 +77,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally { resetting.current = false; }
   }, [markStale]);
   const importData = useCallback((raw: string) => replaceData(() => importAppData(raw)), [replaceData]);
+  const previewMerge = async (raw: string) => {
+    if (stale.current) throw new ExternalDataChangeError();
+    try { return await previewMergeImport(raw); }
+    catch (cause) { if (cause instanceof ExternalDataChangeError) markStale(); throw cause; }
+  };
+  const mergeData = async (raw: string, expectedRaw: string) => {
+    if (stale.current) throw new ExternalDataChangeError();
+    if (resetting.current) throw new Error('A data operation is already in progress.');
+    resetting.current = true;
+    try {
+      setData(await mergeImportAppData(raw, expectedRaw));
+      setError('');
+      // This is an additive mutation. Do not publish a replacement/reset marker:
+      // calendar credentials, notification installation state and drafts survive.
+    } catch (cause) { if (cause instanceof ExternalDataChangeError) markStale(); throw cause; }
+    finally { resetting.current = false; }
+  };
   const restoreBackup = (key: string, raw: string) => replaceData(() => restoreRecoveryBackup(key, raw));
 
   const startFresh = async () => {
@@ -152,7 +171,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

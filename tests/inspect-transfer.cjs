@@ -76,7 +76,7 @@ async function main() {
   assert.deepEqual(await backupKeys(), []);
   console.log('PASS export blob contains all saved data and version without replacement');
   for (const raw of ['{bad', JSON.stringify({ ...envelope, schemaVersion: 4 }), JSON.stringify({ ...envelope, data: { ...incoming, tasks: [null] } })]) {
-    await click('Import local data');
+    await click('Import and replace local data');
     await choose(raw);
     assert.equal(await evaluate(`document.body.innerText.includes('Confirm import and replace data')`), false);
     assert.deepEqual(await read(), original);
@@ -86,7 +86,7 @@ async function main() {
   console.log('PASS malformed and incompatible imports reject before writes');
   for (const [width, height] of [[320,568],[390,844],[844,390]]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-    await click('Import local data');
+    await click('Import and replace local data');
     await choose(JSON.stringify(envelope));
     await ready('Import preview');
     assert.ok(await evaluate(`document.body.innerText.includes('does not merge')`));
@@ -97,13 +97,13 @@ async function main() {
     assert.deepEqual(await backupKeys(), []);
   }
   console.log('PASS phone/landscape preview controls and cancellation preserve data');
-  await click('Import local data');
+  await click('Import and replace local data');
   await choose(JSON.stringify(envelope));
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await pause(200);
   assert.equal(await evaluate('!!document.querySelector("[role=dialog]")'), false);
-  await click('Import local data');
+  await click('Import and replace local data');
   await choose(JSON.stringify(envelope));
   await evaluate(`window.__setItem = Storage.prototype.setItem; window.__failBackup = true; window.__writes = []; Storage.prototype.setItem = function(k,v) { if(window.__failBackup && k.startsWith(${JSON.stringify(prefix)})) throw Error('injected quota'); window.__writes.push(k); return window.__setItem.call(this,k,v); }`);
   await click('Confirm import and replace data');

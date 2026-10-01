@@ -61,10 +61,24 @@ export function TaskList({ tasks, data, renderTask, showEmptySections = false, c
         {heading}<Text style={{ color: colors.muted, fontSize: 18 }}>{expanded ? '⌄' : '›'}</Text>
       </Pressable> : <View accessibilityRole="header" style={{ borderLeftWidth: 3, borderLeftColor: section.color, paddingLeft: 10 }}>{heading}</View>}
       {!collapsibleGroups || expanded ? <>
-        {group.projectGroups ? group.projectGroups.map(projectGroup => <View key={projectGroup.project?.id ?? 'no-project'} style={{ gap: 6 }}>
-          <Text accessibilityRole="header" style={{ color: colors.muted, fontWeight: '600', fontSize: 13, paddingHorizontal: 10 }}>{projectGroup.project?.name ?? 'No project'}</Text>
-          {projectGroup.tasks.map(task => <View key={task.id}>{renderTask(task)}</View>)}
-        </View>) : grouped.map(task => <View key={task.id}>{renderTask(task)}</View>)}
+        {group.projectGroups ? group.projectGroups.map(projectGroup => {
+          const projectKey = `project:${section.id}:${projectGroup.project ? `linked:${projectGroup.project.id}` : 'unlinked'}`;
+          const projectExpanded = !(collapsed[projectKey] ?? false);
+          const projectName = projectGroup.project?.name ?? 'No project';
+          const count = projectGroup.tasks.length;
+          return <View key={projectGroup.project?.id ?? 'no-project'} testID={`task-project-group-${collapsibleGroups}-${section.id}-${projectGroup.project?.id ?? 'no-project'}`} style={{ gap: 6 }}>
+            <Pressable accessibilityRole="button"
+              accessibilityLabel={`${collapsibleGroups}, ${section.name}, ${projectName}, ${count} ${count === 1 ? 'task' : 'tasks'}`}
+              accessibilityHint={projectExpanded ? 'Collapse project tasks' : 'Expand project tasks'}
+              accessibilityState={{ expanded: projectExpanded }} aria-expanded={projectExpanded}
+              onPress={() => setCollapsed(current => ({ ...current, [projectKey]: projectExpanded }))}
+              style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: pressed ? 0.7 : 1 })}>
+              <Text accessibilityRole="header" style={{ color: colors.muted, fontWeight: '600', fontSize: 13, flex: 1, minWidth: 0 }}>{projectName} · {count}</Text>
+              <Text style={{ color: colors.muted, fontSize: 16 }}>{projectExpanded ? '⌄' : '›'}</Text>
+            </Pressable>
+            {projectExpanded ? projectGroup.tasks.map(task => <View key={task.id}>{renderTask(task)}</View>) : null}
+          </View>;
+        }) : grouped.map(task => <View key={task.id}>{renderTask(task)}</View>)}
         {!grouped.length ? <Muted>No backlog tasks.</Muted> : null}
       </> : null}
     </View>;

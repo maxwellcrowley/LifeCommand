@@ -252,7 +252,7 @@ async function main() {
   await a.go('/', 'Missed Alpha high A');
   assert.deepEqual(await listTitles('Today'), expected('Missed'));
   assert.equal(await expanded('Today, Work, 6 tasks'), 'true');
-  assert.deepEqual(await a.evaluate(`Array.from(document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]')).map(el => el.innerText)`), [alpha.name, zulu.name, 'No project']);
+  assert.deepEqual(await a.evaluate(`Array.from(document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]')).map(el => el.innerText)`), [`${alpha.name} · 4`, `${zulu.name} · 1`, 'No project · 1']);
   await bounds(); await screenshot('today-project-groups');
   await choose('Today, Work, 6 tasks');
   assert.equal(await expanded('Today, Work, 6 tasks'), 'false');
@@ -276,6 +276,22 @@ async function main() {
     assert.deepEqual(await listTitles(category), titles);
     const label = `${category}, Work, ${titles.length - 1} tasks`;
     assert.equal(await expanded(label), 'true', 'Today collapse must not affect Review');
+    const alphaCount = prefix === 'Missed' ? 3 : 4;
+    const alphaLabel = `${category}, Work, alpha project, ${alphaCount} tasks`;
+    const zuluLabel = `${category}, Work, ${zulu.name}, 1 task`;
+    const noProjectLabel = `${category}, Work, No project, 1 task`;
+    assert.equal(await expanded(alphaLabel), 'true', 'Review project groups start expanded');
+    assert.equal(await expanded(zuluLabel), 'true', 'Review project groups start expanded');
+    assert.equal(await expanded(noProjectLabel), 'true', 'Unlinked Review groups start expanded');
+    await choose(alphaLabel);
+    assert.equal(await expanded(alphaLabel), 'false');
+    assert.deepEqual(await listTitles(category), titles.filter(title => !title.includes('Alpha')));
+    await choose(label);
+    await choose(label);
+    assert.equal(await expanded(alphaLabel), 'false', 'Project collapse state survives section collapse and reopen');
+    assert.deepEqual(await listTitles(category), titles.filter(title => !title.includes('Alpha')));
+    await choose(alphaLabel);
+    assert.deepEqual(await listTitles(category), titles);
     await choose(label);
     assert.equal(await expanded(label), 'false');
     assert.deepEqual(await listTitles(category), [`${prefix} Home task`]);
@@ -327,6 +343,7 @@ async function main() {
     names: Array.from(group.querySelectorAll('[aria-label^="Edit project:"]')).map(el => el.getAttribute('aria-label').slice(14)),
     values: Array.from(group.querySelectorAll('[role=progressbar]')).map(el => Number(el.getAttribute('aria-valuenow')))
   }))`);
+  const toggleStatus = async status => { await a.evaluate(`document.querySelector('[data-testid="project-status-${status}"] [aria-expanded]').click()`); await pause(150); };
   await a.go('/projects', 'Active · 5');
   assert.deepEqual(await projectGroups(), [
     { status: 'active', heading: 'Active · 5', names: [weighted.name, simple.name, tied.name, zero.name, off.name], values: [90, 50, 50, 0] },
@@ -334,10 +351,21 @@ async function main() {
     { status: 'complete', heading: 'Complete · 1', names: [completed.name], values: [50] },
   ]);
   await a.ready('1 of 2 tasks · 9/10 story points'); await a.ready('Completion tracking is off.');
+  assert.equal(await a.evaluate(`Array.from(document.querySelectorAll('[data-testid^="project-status-"] [aria-expanded]')).every(button => button.getAttribute('aria-expanded') === 'true')`), true, 'Visible status groups start expanded');
   await bounds(); await screenshot('project-status-progress-groups');
+  await toggleStatus('active');
+  assert.equal(await a.evaluate(`document.querySelector('[data-testid="project-status-active"] [role=button]').getAttribute('aria-expanded')`), 'false');
+  assert.deepEqual((await projectGroups())[0].names, []);
+  assert.equal((await projectGroups())[1].names[0], paused.name, 'Collapsing Active leaves Paused visible');
+  await toggleStatus('active');
+  assert.deepEqual((await projectGroups())[0].names, [weighted.name, simple.name, tied.name, zero.name, off.name]);
   await a.click('Show archived projects (1)');
   assert.deepEqual((await projectGroups())[3], { status: 'archived', heading: 'Archived · 1', names: [archived.name], values: [50] });
+  await toggleStatus('archived');
+  assert.deepEqual((await projectGroups())[3].names, []);
   await a.click('Hide archived projects (1)'); assert.equal((await projectGroups()).length, 3);
+  await a.click('Show archived projects (1)');
+  assert.equal(await a.evaluate(`document.querySelector('[data-testid="project-status-archived"] [role=button]').getAttribute('aria-expanded')`), 'false', 'Archive visibility retains its collapse state');
   await choose(`Edit project: ${weighted.name}`); await a.ready('Project tasks');
   await choose(`Complete task: ${weighted.name} pending`); assert.equal(await progress(), 100);
   await a.click('Save project'); await a.ready('Active · 5');
@@ -345,7 +373,7 @@ async function main() {
   await choose(`Edit project: ${weighted.name}`); await a.ready('Project tasks');
   await a.click('Archive project'); await a.ready('Active · 4');
   assert.equal((await projectGroups())[0].names.includes(weighted.name), false);
-  await a.click('Show archived projects (2)');
+  await toggleStatus('archived');
   assert.deepEqual((await projectGroups())[3], { status: 'archived', heading: 'Archived · 2', names: [weighted.name, archived.name], values: [100, 50] });
   await choose(`Edit project: ${weighted.name}`); await a.ready('Unarchive project');
   await a.click('Unarchive project'); await a.ready('Active · 5');

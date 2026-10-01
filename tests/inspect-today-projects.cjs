@@ -134,7 +134,7 @@ async function main() {
   await a.go('/projects', '17%');
   await choose('Edit project: Polish project'); await a.ready('Project tasks');
   assert.equal(await progress(), 17);
-  await choose('Project status: Paused'); await a.click('Save project'); await a.ready('Paused projects');
+  await choose('Project status: Paused'); await a.click('Save project'); await a.ready('Paused · 1');
   await choose('Edit project: Polish project'); await a.ready('Save this project as Active to add tasks.');
   assert.equal(await a.evaluate(`!!document.querySelector('[aria-label="Add task to project"]')`), false);
   console.log('PASS project add/complete/reopen/archive/cancel, ordering, immediate progress, defaults, failed save/retry, double taps, persisted links, inactive projects and mobile bounds');
@@ -303,9 +303,63 @@ async function main() {
   await a.go('/review', 'Missed Alpha high Z');
   assert.equal(await expanded('Overdue, Work, 5 tasks'), 'true', 'Reload resets UI-only collapse state');
   console.log('PASS section/project/priority ordering, No project last, Today and all Review category collapse/expand, keyboard activation, independent categories/screens, live completion/deletion/scheduling counts, collapsed count updates, reload defaults and narrow layouts');
+
+  // Project status groups sort by exactly the percentage rendered on each card.
+  const projectsData = createDefaultAppData();
+  projectsData.settings.autoRollover = false;
+  const weighted = createProject({ name: 'Weighted project with a long name that wraps across a narrow mobile screen', useWeightedProgress: true });
+  const simple = createProject({ name: 'alpha simple' });
+  const tied = createProject({ name: 'Zulu simple' });
+  const paused = createProject({ name: 'Paused project', status: 'paused' });
+  const completed = createProject({ name: 'Complete project', status: 'complete' });
+  const archived = createProject({ name: 'Archived project', status: 'archived' });
+  const off = createProject({ name: 'A tracking disabled', trackCompletion: false });
+  const zero = createProject({ name: 'Zero tasks' });
+  projectsData.projects = [off, archived, completed, paused, zero, tied, simple, weighted];
+  projectsData.tasks = [weighted, simple, tied, paused, completed, archived, off].flatMap(p => [
+    updateTask(createTask({ title: `${p.name} done`, projectId: p.id, sectionId: 'home', storyPoints: 9 }), { status: 'complete' }),
+    createTask({ title: `${p.name} pending`, projectId: p.id, sectionId: 'home', storyPoints: 1 }),
+  ]);
+  await a.evaluate(`localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(projectsData, (await read()).revision + 1)))})`);
+  const projectGroups = () => a.evaluate(`Array.from(document.querySelectorAll('[data-testid^="project-status-"]')).map(group => ({
+    status: group.getAttribute('data-testid').slice(15),
+    heading: group.querySelector('[role=heading]').innerText,
+    names: Array.from(group.querySelectorAll('[aria-label^="Edit project:"]')).map(el => el.getAttribute('aria-label').slice(14)),
+    values: Array.from(group.querySelectorAll('[role=progressbar]')).map(el => Number(el.getAttribute('aria-valuenow')))
+  }))`);
+  await a.go('/projects', 'Active · 5');
+  assert.deepEqual(await projectGroups(), [
+    { status: 'active', heading: 'Active · 5', names: [weighted.name, simple.name, tied.name, zero.name, off.name], values: [90, 50, 50, 0] },
+    { status: 'paused', heading: 'Paused · 1', names: [paused.name], values: [50] },
+    { status: 'complete', heading: 'Complete · 1', names: [completed.name], values: [50] },
+  ]);
+  await a.ready('1 of 2 tasks · 9/10 story points'); await a.ready('Completion tracking is off.');
+  await bounds(); await screenshot('project-status-progress-groups');
+  await a.click('Show archived projects (1)');
+  assert.deepEqual((await projectGroups())[3], { status: 'archived', heading: 'Archived · 1', names: [archived.name], values: [50] });
+  await a.click('Hide archived projects (1)'); assert.equal((await projectGroups()).length, 3);
+  await choose(`Edit project: ${weighted.name}`); await a.ready('Project tasks');
+  await choose(`Complete task: ${weighted.name} pending`); assert.equal(await progress(), 100);
+  await a.click('Save project'); await a.ready('Active · 5');
+  assert.equal((await projectGroups())[0].values[0], 100);
+  await choose(`Edit project: ${weighted.name}`); await a.ready('Project tasks');
+  await a.click('Archive project'); await a.ready('Active · 4');
+  assert.equal((await projectGroups())[0].names.includes(weighted.name), false);
+  await a.click('Show archived projects (2)');
+  assert.deepEqual((await projectGroups())[3], { status: 'archived', heading: 'Archived · 2', names: [weighted.name, archived.name], values: [100, 50] });
+  await choose(`Edit project: ${weighted.name}`); await a.ready('Unarchive project');
+  await a.click('Unarchive project'); await a.ready('Active · 5');
+  assert.equal((await projectGroups())[0].names[0], weighted.name);
+  await choose(`Edit project: ${paused.name}`); await a.ready('Delete project');
+  await a.click('Delete project'); await a.click('Permanently delete project'); await a.ready('Active · 5');
+  assert.equal((await projectGroups()).some(group => group.status === 'paused'), false);
+  await a.go('/projects', 'Active · 5');
+  assert.deepEqual((await projectGroups()).map(group => group.status), ['active', 'complete'], 'Reload hides archived projects');
+  console.log('PASS Projects status/count headers, descending displayed weighted/simple progress, alphabetical ties, tracking disabled last, empty groups, archive visibility/reload, task completion, archive/unarchive/delete regrouping and narrow layouts');
   await a.go('/settings', 'Data Management');
   await a.click('Start Fresh'); await a.click('Delete local data and start fresh'); await a.ready('Start Fresh complete.');
   await a.go('/', 'No tasks due today.'); await a.ready('No events today.');
+  await a.go('/projects', 'No projects yet'); assert.deepEqual(await projectGroups(), []);
   assert.deepEqual(errors, []);
   console.log('PASS empty Today and no runtime exceptions');
 }

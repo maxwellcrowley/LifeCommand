@@ -81,3 +81,24 @@ export function getProjectProgress(tasks: Task[], project: Project) {
   const progress = calculateProjectProgress(tasks, project.id, project.includeBacklogTasks);
   return { ...progress, value: project.trackCompletion ? (project.useWeightedProgress ? progress.weighted : progress.simple) : null };
 }
+
+export function groupProjectsByStatus(data: Pick<AppData, 'projects' | 'tasks'>, showArchived = false) {
+  const tasksByProject = new Map<string, Task[]>();
+  for (const task of data.tasks) {
+    if (!task.projectId) continue;
+    const tasks = tasksByProject.get(task.projectId) ?? [];
+    tasks.push(task);
+    tasksByProject.set(task.projectId, tasks);
+  }
+  return projectStatuses.filter(status => showArchived || status !== 'archived').map(status => {
+    const ranked = data.projects.filter(project => project.status === status).map(project => ({
+      project,
+      // Use the rounded, configured value displayed by ProjectProgress, once per project.
+      value: getProjectProgress(tasksByProject.get(project.id) ?? [], project).value,
+    }));
+    ranked.sort((a, b) => (b.value ?? -1) - (a.value ?? -1)
+      || a.project.name.localeCompare(b.project.name, undefined, { sensitivity: 'base' })
+      || a.project.id.localeCompare(b.project.id));
+    return { status, projects: ranked.map(item => item.project) };
+  }).filter(group => group.projects.length > 0);
+}

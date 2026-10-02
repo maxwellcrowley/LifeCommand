@@ -1,8 +1,9 @@
 import { AddFromBacklog } from '@/src/components/TaskScheduling';
+import { TaskList, TaskRow } from '@/src/components/TaskList';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { useState } from 'react';
 import { Link } from 'expo-router';
-import { Pressable, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Card, Label, Muted, Page } from '@/src/components/ui';
 import { DateEntry } from '@/src/components/DateEntry';
 import { EventRow } from '@/src/components/EventRow';
@@ -14,7 +15,7 @@ import { useLocalClock } from '@/src/hooks/useLocalClock';
 
 export default function CalendarScreen() {
   const { events: externalEvents } = useCalendarSync();
-  const { data, error } = useAppData();
+  const { data, editTask, error } = useAppData();
   const { colors } = useAppTheme();
   const now = useLocalClock();
   const [view, setView] = useState<'Agenda' | 'Day' | 'Week'>('Agenda');
@@ -45,8 +46,9 @@ export default function CalendarScreen() {
       {day.events.length ? day.events.map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No events.</Muted>}
       <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, gap: 8 }}>
         <Muted>Scheduled tasks | {day.tasks.length}</Muted>
-        {day.tasks.map(task => <Link key={task.id} href={{ pathname: '/task/[id]', params: { id: task.id } }} asChild><Pressable accessibilityRole="button" style={{ paddingVertical: 8, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: data.sections.find(section => section.id === task.sectionId)?.color ?? colors.accent }}><Label>{task.title}</Label><Muted>Task | {data.sections.find(section => section.id === task.sectionId)?.name ?? 'Section'} | {task.priority}{task.status === 'overdue' ? ' | overdue' : ''}</Muted></Pressable></Link>)}
-        {!day.tasks.length ? <Muted>No scheduled tasks.</Muted> : null}
+        {day.tasks.length ? <TaskList collapsibleGroups={`Calendar tasks ${day.date}`} tasks={day.tasks} data={data} renderTask={task => <TaskRow task={task} data={data} date={day.date} action={
+          <Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }, undefined, task.updatedAt).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 24 }}>◯</Text></Pressable>
+        } />} /> : <Muted>No scheduled tasks.</Muted>}
       </View>
     </Card>)}
     {valid && !days.length ? <Card><Muted>No events or scheduled tasks in this range.</Muted></Card> : null}

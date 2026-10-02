@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createDefaultAppData } from '../src/domain/defaults';
 import { createProject, deleteProject } from '../src/domain/projects';
 import { changeTask, createTask, deleteTask, getTodayTasks, groupTasksBySectionAndProject, isTaskOverdue, scheduleTasks } from '../src/domain/tasks';
+import { calendarDays } from '../src/domain/events';
 
 const today = '2026-10-01';
 function fixture() {
@@ -31,6 +32,15 @@ test('Today groups saved sections, alphabetical projects, then priority/date/tit
   assert.deepEqual(groups[0].tasks.map(task => task.title), ['Alpha high A', 'Alpha high Z', 'Alpha normal', 'Alpha low', 'Zulu high', 'Unlinked high']);
   assert.deepEqual(groupTasksBySectionAndProject(data, [...data.tasks].reverse()), groupTasksBySectionAndProject(data, data.tasks));
   assert.deepEqual(data, before);
+});
+
+test('Calendar selected-day tasks use the same section, project, and priority grouping as Today', () => {
+  const data = fixture();
+  const selectedDay = calendarDays(data, today, today)[0];
+  const groups = groupTasksBySectionAndProject(data, selectedDay.tasks).filter(group => group.tasks.length);
+  assert.deepEqual(groups.map(group => group.section.id), ['work', 'home']);
+  assert.deepEqual(groups[0].projectGroups.map(group => group.project?.name ?? 'No project'), ['alpha', 'Zulu', 'No project']);
+  assert.deepEqual(groups[0].projectGroups[0].tasks.map(task => task.title), ['Alpha high A', 'Alpha high Z', 'Alpha normal', 'Alpha low']);
 });
 
 test('Review backlog, future, overdue and rolled-over selections share grouping', () => {

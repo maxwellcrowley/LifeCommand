@@ -6,12 +6,15 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
-import { AppDataProvider } from '@/src/data/useAppData';
+import { AppDataProvider, useAppData } from '@/src/data/useAppData';
 import { DevicePreferencesProvider } from '@/src/data/DevicePreferences';
 import { NotificationProvider } from '@/src/notifications/NotificationProvider';
+import { LocalDataChanged } from '@/src/components/LocalDataChanged';
+import { UndoFeedback } from '@/src/components/UndoFeedback';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -50,5 +53,13 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  return <AccountBoundary><AppDataProvider><AutomaticSyncProvider><DevicePreferencesProvider><CalendarSyncProvider><NotificationProvider><ThemeProvider><Onboarding /><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /><Stack.Screen name="project/new" options={{ title: 'New project', presentation: 'modal' }} /><Stack.Screen name="project/[id]" options={{ title: 'Edit project', presentation: 'modal' }} /><Stack.Screen name="event/new" options={{ title: 'New event', presentation: 'modal' }} /><Stack.Screen name="event/[id]" options={{ title: 'Edit event', presentation: 'modal' }} /></Stack></ThemeProvider></NotificationProvider></CalendarSyncProvider></DevicePreferencesProvider></AutomaticSyncProvider></AppDataProvider></AccountBoundary>;
+  return <AccountBoundary><AppDataProvider><AutomaticSyncProvider><DevicePreferencesProvider><CalendarSyncProvider><NotificationProvider><ThemeProvider><View style={{ flex: 1 }}><Onboarding /><Stack><Stack.Screen name="(tabs)" options={{ headerShown: false }} /><Stack.Screen name="ambient" options={{ headerShown: false, title: 'Ambient Display' }} /><Stack.Screen name="task/[id]" options={{ title: 'Edit task', presentation: 'modal' }} /><Stack.Screen name="project/new" options={{ title: 'New project', presentation: 'modal' }} /><Stack.Screen name="project/[id]" options={{ title: 'Edit project', presentation: 'modal' }} /><Stack.Screen name="event/new" options={{ title: 'New event', presentation: 'modal' }} /><Stack.Screen name="event/[id]" options={{ title: 'Edit event', presentation: 'modal' }} /></Stack><ApplicationFeedback /></View></ThemeProvider></NotificationProvider></CalendarSyncProvider></DevicePreferencesProvider></AutomaticSyncProvider></AppDataProvider></AccountBoundary>;
+}
+
+function ApplicationFeedback() {
+  const { externalChange, error, retry, feedback, undoLabel } = useAppData();
+  return <>
+    {feedback || undoLabel ? <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 76 }}><View pointerEvents="auto" style={{ alignSelf: 'center', width: '100%', maxWidth: 540 }}><UndoFeedback /></View></View> : null}
+    <LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} />
+  </>;
 }

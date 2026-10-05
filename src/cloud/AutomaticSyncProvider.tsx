@@ -7,7 +7,7 @@ import { accountStorage } from '../data/accountStorage';
 import { validateImport } from '../domain/transfer';
 import { createAutomaticSync, type AutoStatus } from './automatic';
 import { cloudGateway } from './client';
-import { useAccount } from './AccountBoundary';
+import { useAccount } from './accountContext';
 
 const initial: AutoStatus = { state: 'idle', pending: false, message: 'Automatic sync is off. Enable after reviewing this account’s data.' };
 function useAutomaticState() {

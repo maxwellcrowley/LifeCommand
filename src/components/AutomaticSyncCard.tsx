@@ -1,7 +1,7 @@
 import { fingerprint } from '../cloud/automatic';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState } from 'react';
-import { useAccount } from '../cloud/AccountBoundary';
+import { useAccount } from '../cloud/accountContext';
 import { useAutomaticSync } from '../cloud/AutomaticSyncProvider';
 import { useAppData } from '../data/useAppData';
 import { STORAGE_KEY } from '../data/storage';

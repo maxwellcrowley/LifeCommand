@@ -5,7 +5,6 @@ import type { AppData, AppSettings, Task, Section, RecurringSeries, SavedView } 
 import { saveSection, moveSection, reassignSection } from '../domain/sections';
 import { currentRepository } from './repository';
 import { subscribeToStorageChanges } from './coordination';
-import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError, type MergePreview } from './storage';
 import { changeTask, deleteTask as removeTask, createTask, scheduleTasks, type ScheduleSelection, type PushbackChoice, type TaskChanges, type TaskInput } from '@/src/domain/tasks';
 import { applyReminderDefault, changeReminder, type ReminderAction, type ScheduledReminder } from '@/src/domain/reminders';
@@ -24,6 +23,7 @@ type AppDataValue = {
   reassignSection: (source: string, target: string) => Promise<void>;
   data: AppData | null;
   error: string;
+  externalChange: boolean;
   recoveryNotice: string;
   retry: () => Promise<void>;
   startFresh: () => Promise<void>;
@@ -212,7 +212,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: view => commit(current => { if (!view.name.trim()) throw Error('Name is required.'); return { ...current, savedViews: [...(current.savedViews ?? []).filter(v => v.id !== view.id), view] }; }), deleteView: id => commit(current => ({ ...current, savedViews: (current.savedViews ?? []).filter(v => v.id !== id) })), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date())), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: view => commit(current => { if (!view.name.trim()) throw Error('Name is required.'); return { ...current, savedViews: [...(current.savedViews ?? []).filter(v => v.id !== view.id), view] }; }), deleteView: id => commit(current => ({ ...current, savedViews: (current.savedViews ?? []).filter(v => v.id !== id) })), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date())), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, externalChange, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment></AppDataContext.Provider>;
 }
 
 export function useAppData() {

@@ -7,7 +7,7 @@ import { cloudAuth, cloudGateway, config } from '../cloud/client';
 import { createCloudSync, type DownloadPreview, type UploadPreview } from '../cloud/sync';
 import { currentRepository } from '../data/repository';
 import { accountStorage } from '../data/accountStorage';
-import { useAccount } from '../cloud/AccountBoundary';
+import { useAccount } from '../cloud/accountContext';
 import { useAppData } from '../data/useAppData';
 import { dataSummary } from '../domain/transfer';
 import { useAppTheme } from '../theme/ThemeProvider';

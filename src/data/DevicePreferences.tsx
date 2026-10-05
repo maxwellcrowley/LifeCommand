@@ -1,13 +1,12 @@
-import { useAccount } from '../cloud/AccountBoundary';
+import { useAccount } from '../cloud/accountContext';
 import { accountStorage } from './accountStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { normalizePresentation, presentationDefaults, type Presentation } from '../domain/presentation';
 import { useAppData } from './useAppData';
+import { DevicePreferencesContext, type DevicePreferencesValue } from './devicePreferencesContext';
 
 const KEY = 'lifecommand:device:presentation:v1';
-type Value = { preferences: Presentation; ready: boolean; error: string; save: (patch: Partial<Presentation>) => Promise<void>; retry: () => void };
-const Context = createContext<Value | null>(null);
 export function DevicePreferencesProvider({ children }: { children: ReactNode }) {
   const { data } = useAppData();
   const { scope } = useAccount();
@@ -37,8 +36,7 @@ export function DevicePreferencesProvider({ children }: { children: ReactNode })
     queue.current = operation.catch(cause => { setError(String(cause)); });
     return operation;
   }, [ready, storage]);
-  return <Context.Provider value={{ preferences, ready, error, save, retry: () => { setReady(false); setAttempt(a => a + 1); } }}>{children}</Context.Provider>;
+  const value: DevicePreferencesValue = { preferences, ready, error, save, retry: () => { setReady(false); setAttempt(a => a + 1); } };
+  return <DevicePreferencesContext.Provider value={value}>{children}</DevicePreferencesContext.Provider>;
 }
-export function useDevicePreferences() { const value = useContext(Context); if (!value) throw Error('Missing device preferences provider.'); return value; }
-
-export function useOptionalDevicePreferences() { return useContext(Context); }
+export { useDevicePreferences, useOptionalDevicePreferences } from './devicePreferencesContext';

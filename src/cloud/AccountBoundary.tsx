@@ -1,15 +1,15 @@
 import { clearAccountNotifications } from '../notifications/NotificationProvider';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { cloudAuth, config } from './client';
 import { selectRepositoryAccount } from '../data/repository';
 import { googleAuth } from '../calendar/googleAuthAdapter';
 import { outlookAuth } from '../calendar/outlookAuthAdapter';
+import { AccountContext, type Account } from './accountContext';
 
-export const AccountContext = createContext({ scope: 'guest', userId: undefined as string | undefined, label: 'Guest · this device' });
-export const useAccount = () => useContext(AccountContext);
+export { useAccount } from './accountContext';
 export function AccountBoundary({ children }: { children: ReactNode }) {
-  const [account, setAccount] = useState<{ scope: string; userId: string | undefined; label: string }>(), [error, setError] = useState(''), [attempt, setAttempt] = useState(0);
+  const [account, setAccount] = useState<Account>(), [error, setError] = useState(''), [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true, generation = 0, selected: string | undefined;
     const accept = (user: { id: string; email?: string } | null) => {

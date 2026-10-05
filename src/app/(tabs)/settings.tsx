@@ -1,4 +1,4 @@
-import { useAccount } from '@/src/cloud/AccountBoundary';
+import { useAccount } from '@/src/cloud/accountContext';
 import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { AmbientProfiles } from '@/src/components/AmbientProfiles';
 import { RecurrenceSettings } from '@/src/components/RecurrenceSettings';

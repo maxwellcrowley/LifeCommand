@@ -1,4 +1,4 @@
-import { useAccount } from '../cloud/AccountBoundary';
+import { useAccount } from '../cloud/accountContext';
 import { useAutomaticSync } from '../cloud/AutomaticSyncProvider';
 import { Muted } from './ui';
 

@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 import { StyleSheet, Text, TextInput } from 'react-native';
-import { useOptionalDevicePreferences } from '../data/DevicePreferences';
+import { useOptionalDevicePreferences } from '../data/devicePreferencesContext';
 
 // Preference scaling is additive to the OS's own accessibility font scaling.
 // Never cap maxFontSizeMultiplier or disable allowFontScaling.

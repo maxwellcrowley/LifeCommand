@@ -10,7 +10,7 @@ import { Disclosure } from '@/src/components/Disclosure';
 import { Card, Muted, Page } from '@/src/components/ui';
 import { useDevicePreferences } from '@/src/data/DevicePreferences';
 import { useAppData } from '@/src/data/useAppData';
-import { useAccount } from '@/src/cloud/AccountBoundary';
+import { useAccount } from '@/src/cloud/accountContext';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { localDateKey } from '@/src/domain/dates';

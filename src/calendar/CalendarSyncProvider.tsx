@@ -1,5 +1,5 @@
 import { accountStorage } from '../data/accountStorage';
-import { useAccount } from '../cloud/AccountBoundary';
+import { useAccount } from '../cloud/accountContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useMemo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';

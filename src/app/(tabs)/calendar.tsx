@@ -1,10 +1,13 @@
-import { AddFromBacklog } from '@/src/components/TaskScheduling';
+import { AppText as Text } from '@/src/components/AppText';
+import { useDevicePreferences } from '@/src/data/DevicePreferences';
+import { Action, AddFromBacklog } from '@/src/components/TaskScheduling';
 import { TaskList, TaskRow } from '@/src/components/TaskList';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { useState } from 'react';
 import { Link } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
 import { Card, Label, Muted, Page } from '@/src/components/ui';
+import { FormError } from '@/src/components/TaskForm';
 import { DateEntry } from '@/src/components/DateEntry';
 import { EventRow } from '@/src/components/EventRow';
 import { useAppData } from '@/src/data/useAppData';
@@ -14,19 +17,34 @@ import { calendarDays, dateLabel, eventKey, eventSources, sourceColors, sourceLa
 import { useLocalClock } from '@/src/hooks/useLocalClock';
 
 export default function CalendarScreen() {
-  const { events: externalEvents } = useCalendarSync();
+  const calendarSync = useCalendarSync();
+  const { events: externalEvents, cache, hideEvent, unhideAllEvents, busy: visibilityBusy } = calendarSync;
   const { data, editTask, error } = useAppData();
   const { colors } = useAppTheme();
+  const { preferences } = useDevicePreferences();
   const now = useLocalClock();
   const [view, setView] = useState<'Agenda' | 'Day' | 'Week'>('Agenda');
   const [selected, setSelected] = useState<string>();
   const [agendaLength, setAgendaLength] = useState(30);
+  const [showHiddenEvents, setShowHiddenEvents] = useState(false);
+  const [restoreRequest, setRestoreRequest] = useState<{ id?: string; title: string; all: boolean }>();
+  const [visibilityError, setVisibilityError] = useState('');
   if (!data || !now) return <Page title="Calendar" subtitle={error || 'Loading your calendar...'} />;
   const date = selected ?? localDateKey(now);
   const valid = isDateKey(date);
-  const from = valid && view === 'Week' ? weekStart(date) : date;
+  const from = valid && view === 'Week' ? weekStart(date, preferences.weekStart) : date;
   const through = valid ? addDays(from, view === 'Week' ? 6 : view === 'Agenda' ? agendaLength - 1 : 0) : date;
   const days = valid ? calendarDays({ ...data, externalEvents }, from, through, view !== 'Agenda') : [];
+  const hiddenEvents = cache.events.filter(event => cache.hiddenEventIds?.includes(event.id));
+  const confirmRestore = async () => {
+    if (!restoreRequest || visibilityBusy) return;
+    setVisibilityError('');
+    try {
+      if (restoreRequest.all) await unhideAllEvents();
+      else if (restoreRequest.id) await hideEvent(restoreRequest.id, false);
+      setRestoreRequest(undefined);
+    } catch (cause) { setVisibilityError(cause instanceof Error ? cause.message : 'Could not save event visibility. Retry.'); }
+  };
   const shift = (direction: number) => setSelected(addDays(from, direction * (view === 'Week' ? 7 : view === 'Agenda' ? agendaLength : 1)));
   return <Page title="Calendar" subtitle="Events and scheduled tasks, together by date.">
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
@@ -37,16 +55,35 @@ export default function CalendarScreen() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}><Pressable accessibilityRole="button" disabled={!valid} onPress={() => shift(-1)} style={{ padding: 12 }}><Label>Previous</Label></Pressable><Pressable accessibilityRole="button" disabled={!valid} onPress={() => shift(1)} style={{ padding: 12 }}><Label>Next</Label></Pressable></View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>{([...eventSources, 'google', 'outlook'] as const).map(source => <View key={source} style={{ borderLeftWidth: 4, borderLeftColor: sourceColors[source], paddingLeft: 8 }}><Muted>{sourceLabels[source]}</Muted></View>)}</View>
     </Card>
+    <Card title="Hidden events">
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showHiddenEvents }} onPress={() => setShowHiddenEvents(value => !value)} style={{ minHeight: 44, justifyContent: 'center' }}><Label>{showHiddenEvents ? 'Hide hidden events' : `Show hidden events (${hiddenEvents.length})`}</Label></Pressable>
+      {showHiddenEvents ? hiddenEvents.length ? <>
+        <Muted>These read-only external events are hidden across Today, Calendar, and Ambient.</Muted>
+        {hiddenEvents.map(event => <EventRow key={`hidden:${event.id}`} event={event} showDate hidden onUnhide={() => { setVisibilityError(''); setRestoreRequest({ id: event.id, title: event.title, all: false }); }} />)}
+        <Pressable accessibilityRole="button" disabled={visibilityBusy} onPress={() => { setVisibilityError(''); setRestoreRequest({ title: `${hiddenEvents.length} hidden ${hiddenEvents.length === 1 ? 'event' : 'events'}`, all: true }); }} style={{ minHeight: 44, justifyContent: 'center' }}><Label>{visibilityBusy ? 'Saving…' : 'Unhide all hidden events'}</Label></Pressable>
+      </> : <Muted>No hidden events.</Muted> : null}
+    </Card>
+    <Modal visible={!!restoreRequest} transparent animationType="none" onRequestClose={() => { if (!visibilityBusy) { setRestoreRequest(undefined); setVisibilityError(''); } }}>
+      <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#0008' }}>
+        <View accessibilityViewIsModal style={{ width: '100%', maxWidth: 520, alignSelf: 'center', backgroundColor: colors.surface, borderRadius: 16, padding: 18, gap: 12 }}>
+          <Label style={{ fontWeight: '700' }}>{restoreRequest?.all ? 'Unhide all events?' : 'Unhide event?'}</Label>
+          <Muted>“{restoreRequest?.title}” will appear in Today, Calendar, and Ambient where its date and calendar are active.</Muted>
+          {visibilityError ? <FormError>{visibilityError}</FormError> : null}
+          <Action label="Cancel unhide" disabled={visibilityBusy} onPress={() => { setRestoreRequest(undefined); setVisibilityError(''); }} />
+          <Action label={visibilityBusy ? 'Saving event visibility' : visibilityError ? 'Retry unhide event' : restoreRequest?.all ? 'Confirm unhide all events' : 'Confirm unhide event'} text={visibilityBusy ? 'Saving…' : visibilityError ? 'Retry' : restoreRequest?.all ? 'Unhide all' : 'Unhide'} disabled={visibilityBusy} onPress={() => void confirmRestore()} />
+        </View>
+      </View>
+    </Modal>
     {valid ? <AddFromBacklog key={date} date={date} /> : null}
     {valid ? <Muted>{dateLabel(from)}{from !== through ? ` to ${dateLabel(through)}` : ''}</Muted> : null}
     {view === 'Week' && valid ? <Card title="Week summary"><Label>{days.reduce((count, day) => count + day.events.length, 0)} events | {days.reduce((count, day) => count + day.tasks.length, 0)} tasks</Label>{days.map(day => <Pressable key={day.date} accessibilityRole="button" accessibilityLabel={`Open ${day.date}`} onPress={() => { setSelected(day.date); setView('Day'); }} style={{ paddingVertical: 12 }}><Label>{dateLabel(day.date)}</Label><Muted>{day.events.length} events | {day.events.filter(event => event.source === 'family').length} family | {day.tasks.length} tasks</Muted></Pressable>)}</Card> : null}
-    {days.map(day => <Card key={day.date} title={dateLabel(day.date)}>
+    {view !== 'Week' && days.map(day => <Card key={day.date} title={dateLabel(day.date)}>
       {day.date !== date ? <AddFromBacklog date={day.date} /> : null}
       <Muted>Events | {day.events.length}</Muted>
       {day.events.length ? day.events.map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No events.</Muted>}
       <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, gap: 8 }}>
         <Muted>Scheduled tasks | {day.tasks.length}</Muted>
-        {day.tasks.length ? <TaskList collapsibleGroups={`Calendar tasks ${day.date}`} tasks={day.tasks} data={data} renderTask={task => <TaskRow task={task} data={data} date={day.date} action={
+        {day.tasks.length ? <TaskList collapsibleGroups={`Calendar tasks ${day.date}`} tasks={day.tasks} data={data} renderTask={task => <TaskRow grouped task={task} data={data} date={day.date} action={
           <Pressable accessibilityRole="button" accessibilityLabel={`Complete ${task.title}`} onPress={() => void editTask(task.id, { status: 'complete' }, undefined, task.updatedAt).catch(() => undefined)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.accent, fontSize: 24 }}>◯</Text></Pressable>
         } />} /> : <Muted>No scheduled tasks.</Muted>}
       </View>

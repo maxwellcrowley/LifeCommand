@@ -1,7 +1,8 @@
-import type { AppData, Task } from './models';
+import type { AppData, Task, RecurringSeries } from './models';
 import { validateImport } from './transfer';
 
 export interface MergeCounts {
+  seriesChanged?: number;
   projectsToAdd: number;
   projectsSkipped: number;
   tasksToAdd: number;
@@ -56,10 +57,25 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
     projectLinks.set(project.id, project.id);
     counts.projectsToAdd++;
   }
+  const recurringSeries: RecurringSeries[] = [...(current.recurringSeries ?? [])];
+  for (const series of incoming.recurringSeries ?? []) {
+    const existing = recurringSeries.find(s => s.id === series.id);
+    if (existing) {
+      if ((series.generatedThrough ?? '') > (existing.generatedThrough ?? '')) { recurringSeries[recurringSeries.indexOf(existing)] = { ...existing, generatedThrough: series.generatedThrough }; counts.seriesChanged = (counts.seriesChanged ?? 0) + 1; }
+    } else {
+      const sectionId = sections.get(series.sectionId), projectId = series.projectId ? projectLinks.get(series.projectId) : undefined;
+      if (!sectionId || (series.projectId && !projectId)) { warnings.push(`Series ${series.title} skipped because its section or project is unavailable.`); continue; }
+      recurringSeries.push({ ...series, sectionId, projectId }); counts.seriesChanged = (counts.seriesChanged ?? 0) + 1;
+    }
+  }
   const tasks = [...current.tasks];
   const taskIds = new Set(tasks.map(task => task.id));
   const fingerprints = new Set(tasks.map(fingerprint));
   for (const task of incoming.tasks) {
+    if (task.recurrenceId) {
+      const existing = current.recurringSeries?.find(s => s.id === task.recurrenceId);
+      if (!recurringSeries.some(s => s.id === task.recurrenceId) || (!taskIds.has(task.id) && existing?.generatedThrough && task.occurrenceDate! <= existing.generatedThrough)) { counts.tasksSkipped++; continue; }
+    }
     if (taskIds.has(task.id)) { counts.tasksSkipped++; continue; }
     const projectId = task.projectId ? projectLinks.get(task.projectId) ?? (projectIds.has(task.projectId) ? task.projectId : undefined) : undefined;
     if (task.projectId && !projectId) { counts.tasksMissingProject++; continue; }
@@ -76,5 +92,5 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
   if (counts.tasksMissingProject) warnings.push(`${counts.tasksMissingProject} task(s) skipped because their project is missing locally and from the file.`);
   if (counts.tasksMissingSection) warnings.push(`${counts.tasksMissingSection} task(s) skipped because their section has no local ID or name match.`);
   if (projectsWithoutSection) warnings.push(`${projectsWithoutSection} new project(s) added without a section because their section has no local match.`);
-  return { data: counts.projectsToAdd || counts.tasksToAdd ? { ...current, projects, tasks } : current, counts, warnings, exportedAt: imported.exportedAt, defaultsApplied: imported.defaultsApplied };
+  return { data: counts.projectsToAdd || counts.tasksToAdd || counts.seriesChanged ? { ...current, projects, tasks, ...(recurringSeries.length ? { recurringSeries } : {}) } : current, counts, warnings, exportedAt: imported.exportedAt, defaultsApplied: imported.defaultsApplied };
 }

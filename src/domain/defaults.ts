@@ -8,6 +8,7 @@ export const sections: Section[] = names.map((name, order) => ({ id: name.toLowe
 // Fresh objects on every call; defaults never depend on demonstration records.
 export function createDefaultAppData(): AppData {
   return {
+    onboardingComplete: true,
     sections: sections.map(section => ({ ...section })),
     tasks: [], projects: [], calendarEvents: [], familyEvents: [],
     settings: { ...defaultSettings },

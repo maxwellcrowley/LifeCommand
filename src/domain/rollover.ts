@@ -16,7 +16,7 @@ export function rolloverTasks(tasks: Task[], rolloverDay: string, settings: AppS
   const rolledTaskIds: string[] = [];
   const movedTaskIds: string[] = [];
   const timestamp = now.toISOString();
-  if (!settings.autoRollover) return { tasks, rolledTaskIds, movedTaskIds };
+  if (settings.rolloverMode === 'morning-review' || settings.rolloverMode === 'stay-overdue' || !settings.autoRollover) return { tasks, rolledTaskIds, movedTaskIds };
   const next = tasks.map(task => {
     if (task.status === 'complete' || task.status === 'archived' || !task.dueDate || task.dueDate > rolloverDay || (task.lastRolloverDate && task.lastRolloverDate >= rolloverDay)) return task;
     rolledTaskIds.push(task.id);
@@ -30,7 +30,7 @@ export function rolloverTasks(tasks: Task[], rolloverDay: string, settings: AppS
       dueDate: settings.moveIncompleteTasksToNextDay ? nextDay : task.dueDate,
       lastRolledOverAt: timestamp,
       lastRolloverDate: rolloverDay,
-      updatedAt: timestamp,
+      updatedAt: new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)).toISOString(),
     };
   });
   return { tasks: rolledTaskIds.length ? next : tasks, rolledTaskIds, movedTaskIds };

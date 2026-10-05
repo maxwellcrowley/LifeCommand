@@ -2,16 +2,23 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import type { AppSettings } from '@/src/domain/models';
 import { useAppData } from '@/src/data/useAppData';
-import { defaultSettings } from '@/src/domain/settings';
+import { defaultSettings, validateAmbientSetting } from '@/src/domain/settings';
 import { palettes } from './palettes';
+import { useDevicePreferences } from '../data/DevicePreferences';
 export { palettes } from './palettes';
 
 type ThemeValue = { colors: typeof palettes.light; settings: AppSettings; updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>; ready: boolean };
 const ThemeContext = createContext<ThemeValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
-  const { data, updateSetting } = useAppData();
-  const settings = data?.settings ?? defaultSettings;
+  const { data, updateSetting: updateSyncedSetting } = useAppData();
+  const { preferences, save } = useDevicePreferences();
+  const settings = { ...(data?.settings ?? defaultSettings), ...preferences.ambient, appearance: preferences.appearance };
+  const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    if (key === 'appearance') return save({ appearance: value as AppSettings['appearance'] });
+    if (key.startsWith('ambient')) { validateAmbientSetting(key, value); return save({ ambient: { ...preferences.ambient, [key]: value } }); }
+    return updateSyncedSetting(key, value);
+  };
   const ready = !!data;
   const dark = settings.appearance === 'dark' || (settings.appearance === 'system' && system === 'dark');
   const value = { colors: dark ? palettes.dark : palettes.light, settings, updateSetting, ready };

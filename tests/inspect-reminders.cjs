@@ -4,7 +4,7 @@ const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { seedData } = require('../.test-build/src/domain/seed.js');
-const root = resolve('dist');
+const root = resolve(process.env.POLISH_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -57,7 +57,7 @@ async function main() {
   await choose('Default event reminder: 15 minutes before');
   assert.equal((await read()).settings.defaultTaskReminder, 'morning-of');
   assert.equal((await read()).settings.defaultEventReminder, '15-minutes');
-  await a.go('/capture', 'Save task');
+  await a.go('/capture', 'Save task'); await choose('Optional task details');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Enable reminder"]').checked`), true);
   await a.fill('Task title, required', 'Reminder harness task');
   await choose('Reminder: Custom date and time');
@@ -68,7 +68,7 @@ async function main() {
   let saved = (await read()).tasks[0];
   assert.equal(saved.reminderEnabled, true); assert.ok(saved.reminderAt);
   await a.go('/', "Today's tasks");
-  assert.equal(await a.evaluate(`document.body.innerText.includes('Due: Reminder harness task')`), false);
+  assert.equal(await a.evaluate(`document.body?.innerText.includes('Due: Reminder harness task')`), false);
   assert.equal((await read()).tasks[0].reminderEnabled, true);
   await a.go('/task/' + saved.id, 'Save changes');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Reminder time, HH:MM"]').value`), '08:30');
@@ -90,11 +90,11 @@ async function main() {
   await choose('Reminder: Custom date and time'); await a.fill('Reminder date, YYYY-MM-DD', '2020-01-01');
   await a.click('Save changes'); await pause(300);
   await a.go('/', "Today's tasks");
-  assert.equal(await a.evaluate(`document.body.innerText.includes('Due: Reminder harness task')`), false);
+  assert.equal(await a.evaluate(`document.body?.innerText.includes('Due: Reminder harness task')`), false);
   assert.equal((await read()).tasks[0].reminderEnabled, true);
   await a.go('/task/' + saved.id, 'Save changes'); await choose('Status: complete'); await a.click('Save changes'); await pause(300);
-  await a.go('/', "Today's calendar");
-  assert.equal(await a.evaluate(`document.body.innerText.includes('Reminders')`), false);
+  await a.go('/', 'Schedule');
+  assert.equal(await a.evaluate(`document.body?.innerText.includes('Reminders')`), false);
   console.log('PASS task defaults, custom validation, Today reminder hiding, persistence, responsive controls, failed save/retry, relative clearing and completion exclusion');
   await a.go('/event/new', 'Save event');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Reminder: 15 minutes before"]').getAttribute('aria-checked')`), 'true');
@@ -111,8 +111,8 @@ async function main() {
   await a.go('/event/' + encodeURIComponent('family:' + family.id), 'Save event');
   await a.click('Archive event'); await a.click('Confirm archive'); await pause(300);
   assert.ok((await read()).familyEvents[0].archivedAt);
-  await a.go('/', "Today's calendar");
-  assert.equal(await a.evaluate(`document.body.innerText.includes('Reminders')`), false);
+  await a.go('/', 'Schedule');
+  assert.equal(await a.evaluate(`document.body?.innerText.includes('Reminders')`), false);
   await a.go('/settings', 'Reminder defaults');
   assert.equal((await read()).settings.defaultEventReminder, '15-minutes');
   assert.deepEqual(errors, []);

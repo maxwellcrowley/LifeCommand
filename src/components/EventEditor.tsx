@@ -1,8 +1,10 @@
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { ReminderEditor } from './ReminderEditor';
 import { applyReminderDefault, reminderFromDraft, reminderToDraft, type ReminderDraft } from '@/src/domain/reminders';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { localDateKey } from '@/src/domain/dates';
@@ -20,7 +22,9 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
   const [draft, setDraft] = useState(() => ({ ...toDraft(event, initialDate), ...(!event ? reminderToDraft(applyReminderDefault({}, data?.settings.defaultEventReminder ?? 'off')) : {}) }));
   const [snapshot, setSnapshot] = useState(event);
   const [error, setError] = useState('');
+  const [initialDraft] = useState(draft);
   const [saving, setSaving] = useState(false);
+  const unsaved = useUnsavedChanges(JSON.stringify(draft) !== JSON.stringify(initialDraft));
   const [confirmArchive, setConfirmArchive] = useState(false);
   const busy = useRef(false);
   const stale = event?.updatedAt !== snapshot?.updatedAt;
@@ -41,11 +45,12 @@ export function EventEditor({ event, initialDate }: { event?: LocalEvent; initia
         if (snapshot) await editEvent(eventKey(snapshot), input, snapshot.updatedAt);
         else await addEvent(input);
       }
-      leave();
+      unsaved.allowLeave(); leave();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save event.'); }
     finally { busy.current = false; setSaving(false); }
   };
   return <Page hasHeader title={event ? 'Edit event' : 'New event'} subtitle="Plan a local calendar or family event.">
+    {unsaved.prompt}
     <Card title="Event details">
       {field('title', 'Title · required', 'What is happening?')}
       <DateEntry required value={draft.date} onChange={date => setDraft(current => ({ ...current, date }))} />

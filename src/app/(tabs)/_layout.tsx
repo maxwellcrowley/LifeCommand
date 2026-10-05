@@ -1,6 +1,7 @@
+import { AppText as Text } from '@/src/components/AppText';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 
 const tabs = [

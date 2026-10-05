@@ -35,14 +35,16 @@ async function connect(target) {
   const fill = async (label, value) => evaluate(`(() => { const el = [...document.querySelectorAll('input,textarea')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) throw Error('Missing input'); Object.getOwnPropertyDescriptor(el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
   const go = async (path, text) => { await send('Page.navigate', { url: 'http://127.0.0.1:4187' + path }); await ready(text); };
   await send('Runtime.enable'); await send('Page.enable');
-  const client = { ws, send, evaluate, ready, click, fill, go }; clients.push(client); return client;
+  const client = { ws, send, evaluate, ready, click, fill, go }; clients.push(client); console.log('PASS headless browser connected'); return client;
 }
 async function main() {
+  console.log('Starting isolated headless browser harness');
   await new Promise(r => server.listen(4187, '127.0.0.1', r));
-  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=9237', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-gpu', '--user-data-dir=' + resolve('.test-build/calendar-sync-chrome'), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=9237', '--no-sandbox', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-gpu', '--in-process-gpu', '--disable-features=Vulkan', '--user-data-dir=' + resolve('.test-build/calendar-sync-chrome'), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   let targets;
   for (let i = 0; i < 60; i++) { try { targets = await (await fetch('http://127.0.0.1:9237/json', { signal: AbortSignal.timeout(1000) })).json(); break; } catch { await pause(250); } }
   assert.ok(targets, 'Chrome DevTools reachable');
+  console.log('PASS browser DevTools reachable');
   const a = await connect(targets.find(t => t.type === 'page'));
   const { createDefaultAppData } = require('../.test-build/src/domain/defaults.js');
   const { createTask } = require('../.test-build/src/domain/tasks.js');
@@ -84,6 +86,7 @@ async function main() {
     }
   };
   await a.go('/settings', 'Calendar Connections');
+  console.log('PASS test app loaded');
   await a.evaluate(`Object.keys(localStorage).filter(k=>k.startsWith('lifecommand:')).forEach(k=>localStorage.removeItem(k)); localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))})`);
   await a.go('/', 'Family morning');
   await choose(`Add from backlog · ${today}`);
@@ -163,6 +166,21 @@ async function main() {
   assert.ok(text.indexOf('Family morning') < text.indexOf('Demo imported meeting') && text.indexOf('Demo imported meeting') < text.indexOf('Local afternoon'));
   assert.equal(await a.evaluate(`!!document.querySelector('[aria-label="Edit Demo imported meeting"]')`), false);
   assert.ok(text.includes('read-only') && text.includes('Demo calendar (manual)'));
+  await choose('Hide event: Demo imported meeting');
+  assert.ok(!(await body()).includes('Demo imported meeting'));
+  await a.go('/settings','Calendar Connections');await a.click('Sync now');
+  await a.go('/','Local afternoon');assert.ok(!(await body()).includes('Demo imported meeting'));
+  await a.go('/calendar', 'Events and scheduled tasks');
+  console.log('PASS calendar route loaded for hidden-event interaction');
+  await a.click('Show hidden events (1)'); await a.ready('Unhide all hidden events');
+  await choose('Unhide event: Demo imported meeting'); await a.ready('Unhide event?');
+  await choose('Confirm unhide event'); await a.ready('Demo imported meeting');
+  assert.ok(!(await body()).includes('Hidden from Today, Calendar, and Ambient'));
+  cache = await readCache(); assert.ok(!cache.hiddenEventIds?.includes(cache.events[0].id));
+  await a.go('/', 'Demo imported meeting'); await a.go('/calendar', 'Demo imported meeting');
+  assert.ok(!(await body()).includes('Hidden from Today, Calendar, and Ambient'));
+  assert.equal((await readCache()).accounts.length,1);
+  await a.go('/settings','Calendar Connections');await a.click('Sync now');
   await a.go('/calendar', 'Demo imported meeting');
   await a.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1100, deviceScaleFactor: 1, mobile: false });
   await a.go('/ambient', 'Demo imported meeting');

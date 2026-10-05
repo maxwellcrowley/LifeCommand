@@ -36,7 +36,7 @@ test('export envelope includes version, timestamp, every collection/settings and
   source.projects[0].notes = 'Project reference';
   const exported = createExport(source, new Date('2026-09-28T12:00:00Z'));
   assert.equal(exported.format, 'lifecommand-export');
-  assert.equal(exported.schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 4);
   assert.equal(exported.exportedAt, '2026-09-28T12:00:00.000Z');
   assert.deepEqual(JSON.parse(json(exported.data)), JSON.parse(json(source)));
   const result = validateImport(json(exported));
@@ -69,7 +69,7 @@ test('malformed roots/JSON, non-exports and absent collections cannot erase curr
 
 test('incompatible and incorrectly typed versions are rejected before any writes', async () => {
   const mem = memory();
-  for (const schemaVersion of [0, 4, -1, '1', null]) await assert.rejects(mem.repo.importAppData(json({ ...createExport(fixture()), schemaVersion })), /Unsupported data version/);
+  for (const schemaVersion of [0, 5, -1, '1', null]) await assert.rejects(mem.repo.importAppData(json({ ...createExport(fixture()), schemaVersion })), /Unsupported data version/);
   assert.deepEqual(mem.writes, []);
 });
 

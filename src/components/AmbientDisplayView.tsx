@@ -1,8 +1,10 @@
+import { AppText as Text } from '@/src/components/AppText';
+import { useDevicePreferences } from '../data/DevicePreferences';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
 import type { DisplayEvent } from '../domain/externalCalendars';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
@@ -15,6 +17,7 @@ import type { Task } from '@/src/domain/models';
 export function AmbientDisplayView() {
   const { events: externalEvents } = useCalendarSync();
   const { data, error, recoveryNotice, retry } = useAppData();
+  const { preferences } = useDevicePreferences();
   const { colors, settings } = useAppTheme();
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -40,15 +43,16 @@ export function AmbientDisplayView() {
     {data && !settings.ambientDisplayEnabled ? <Text style={[styles.meta, muted]}>Enable ambient display in Settings to show your day here.</Text> : null}
   </ScrollView>;
 
-  const selection = selectAmbient({ ...data, externalEvents }, now, layout);
+  const selection = selectAmbient({ ...data, settings, externalEvents }, now, layout);
   const family = settings.ambientMode === 'family';
   const board = settings.ambientMode === 'today' || family;
-  const itemSize = layout.wide ? 24 : 20;
+  const itemSize = preferences.ambientProfile === 'tv' ? 28 : layout.wide ? 24 : 20;
+  const privateTitle = (title: string) => preferences.hideSensitiveTitles ? 'Private item' : title;
   const renderEvent = (event: DisplayEvent, spotlight = false) => {
     const compact = settings.ambientEventDensity === 'compact' && !spotlight;
     return <View key={eventKey(event)} style={[styles.event, { borderLeftColor: eventSourceColor(event), paddingVertical: compact ? 4 : 8 }]}>
       <Text numberOfLines={1} style={[styles.meta, text]}>{ambientEventTime(event, settings.ambientClockFormat)} · {eventSourceLabel(event)}</Text>
-      <Text accessibilityLabel={event.title} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: '600' }}>{event.title}</Text>
+      <Text accessibilityLabel={privateTitle(event.title)} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: '600' }}>{privateTitle(event.title)}</Text>
     </View>;
   };
   const renderTask = (task: Task) => {
@@ -57,7 +61,7 @@ export function AmbientDisplayView() {
     const completed = task.status === 'complete';
     const urgent = !completed && (overdue || task.priority === 'high');
     return <View key={task.id} style={[styles.event, { borderLeftColor: urgent ? colors.danger : completed ? colors.border : colors.accent, paddingVertical: compact ? 4 : 8 }]}>
-      <Text accessibilityLabel={task.title} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: urgent ? colors.danger : completed ? colors.muted : colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: urgent ? '700' : '500', textDecorationLine: completed ? 'line-through' : 'none' }}>{task.title}</Text>
+      <Text accessibilityLabel={privateTitle(task.title)} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: urgent ? colors.danger : completed ? colors.muted : colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: urgent ? '700' : '500', textDecorationLine: completed ? 'line-through' : 'none' }}>{privateTitle(task.title)}</Text>
       <Text numberOfLines={1} style={[styles.meta, { color: urgent ? colors.danger : colors.muted }]}>{completed ? 'Completed today' : `${overdue ? 'Overdue · ' : ''}${task.priority === 'high' ? 'High priority' : task.priority === 'low' ? 'Low priority' : 'Normal priority'}`}</Text>
     </View>;
   };
@@ -102,7 +106,7 @@ export function AmbientDisplayView() {
     {selection.tomorrow ? <View onLayout={event => measure('tomorrow', event.nativeEvent.layout.height)} style={[styles.panel, surface]}>
       <Text style={[styles.title, text]}>Tomorrow{family ? ' · Family' : ''}</Text>
       <Text style={[styles.meta, muted]}>{selection.tomorrow.events} events · {selection.tomorrow.tasks} tasks · {selection.tomorrow.high} high priority</Text>
-      {selection.tomorrow.firstEvent ? <Text numberOfLines={1} style={[styles.meta, text]}>First: {ambientEventTime(selection.tomorrow.firstEvent, settings.ambientClockFormat)} · {selection.tomorrow.firstEvent.title}</Text> : null}
+      {selection.tomorrow.firstEvent ? <Text numberOfLines={1} style={[styles.meta, text]}>First: {ambientEventTime(selection.tomorrow.firstEvent, settings.ambientClockFormat)} · {privateTitle(selection.tomorrow.firstEvent.title)}</Text> : null}
     </View> : null}
   </ScrollView>;
 }

@@ -85,10 +85,10 @@ for (const raw of ['{broken', 'null', '[]', '42', '']) {
   });
 }
 
-test('first launch seeds once; intentionally empty collections remain empty after restart', async () => {
+test('first launch is empty; intentionally empty collections remain empty after restart', async () => {
   const mem = memory();
   const repo = createRepository(mem.storage);
-  assert.ok((await repo.loadAppData()).tasks.length);
+  assert.equal((await repo.loadAppData()).tasks.length, 0);
   await repo.saveAppData(empty());
   assert.deepEqual((await createRepository(mem.storage).loadAppData()).tasks, []);
   assert.equal(mem.backups().length, 0);

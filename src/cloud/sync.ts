@@ -18,7 +18,7 @@ export interface RevisionStorage {
 }
 export interface UploadPreview {
   kind: 'upload'; userId: string; raw: string; preview: ImportPreview;
-  expectedRevision: number; stale: boolean; updatedAt?: string;
+  expectedRevision: number; stale: boolean; updatedAt?: string; payloadBytes: number;
 }
 export interface DownloadPreview {
   kind: 'download'; userId: string; raw: string; preview: ImportPreview;
@@ -26,6 +26,15 @@ export interface DownloadPreview {
 }
 export class CloudConflictError extends Error {
   constructor() { super('Cloud data changed after this preview. Cancel and preview again before overwriting. Download it first to preserve the other device’s changes.'); }
+}
+
+export function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const char of value) {
+    const code = char.codePointAt(0)!;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
 }
 
 export function serializeUpload(raw: string): DataExport {
@@ -74,9 +83,15 @@ export function createCloudSync(gateway: CloudGateway, revisions: RevisionStorag
       const known = Number(await revisions.getItem(key(userId)) ?? 0);
       await assertAccount(userId);
       return { kind: 'upload', userId, raw, preview: validateImport(raw), expectedRevision: row?.revision ?? 0,
-        stale: !!row && (!Number.isSafeInteger(known) || known < row.revision), updatedAt: row?.updated_at };
+        stale: !!row && (!Number.isSafeInteger(known) || known < row.revision), updatedAt: row?.updated_at,
+        payloadBytes: utf8ByteLength(raw) };
     },
     async upload(selection: UploadPreview) {
+      await assertAccount(selection.userId);
+      // The RPC compare-and-swap is authoritative; this read makes a changed
+      // revision actionable before attempting an overwrite from a stale preview.
+      const latest = await gateway.read(selection.userId);
+      if ((latest?.revision ?? 0) !== selection.expectedRevision) throw new CloudConflictError();
       await assertAccount(selection.userId);
       const row = await gateway.write(selection.userId, serializeUpload(selection.raw), selection.expectedRevision);
       validateRow(row, selection.userId);

@@ -1,7 +1,9 @@
+import { materializeRecurrences, saveSeries } from '../domain/recurrence';
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import type { AppData, AppSettings, Task } from '@/src/domain/models';
-import { hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, resetAppData, importAppData, previewMergeImport, mergeImportAppData, restoreRecoveryBackup } from './repository';
+import type { AppData, AppSettings, Task, Section, RecurringSeries, SavedView } from '@/src/domain/models';
+import { saveSection, moveSection, reassignSection } from '../domain/sections';
+import { currentRepository } from './repository';
 import { subscribeToStorageChanges } from './coordination';
 import { LocalDataChanged } from '../components/LocalDataChanged';
 import { ExternalDataChangeError, ResetCleanupError, type MergePreview } from './storage';
@@ -13,6 +15,13 @@ import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/do
 import { deleteProject as removeProject, changeProject, createProject, insertProject, validateTaskProject, type ProjectInput, type ProjectChanges } from '@/src/domain/projects';
 
 type AppDataValue = {
+  finishSetup: () => Promise<void>;
+  saveView: (view: SavedView) => Promise<void>; deleteView: (id: string) => Promise<void>; saveRecurringSeries: (series: RecurringSeries, expected?: string) => Promise<void>;
+  acceptCloud: (next: AppData, expected: string) => Promise<void>;
+  undoLabel?: string; undo: () => Promise<void>; feedback: string;
+  saveSection: (section: Section, expected?: Section) => Promise<void>;
+  moveSection: (id: string, direction: -1 | 1) => Promise<void>;
+  reassignSection: (source: string, target: string) => Promise<void>;
   data: AppData | null;
   error: string;
   recoveryNotice: string;
@@ -39,7 +48,12 @@ type AppDataValue = {
 const AppDataContext = createContext<AppDataValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
+  const [repository] = useState(currentRepository);
+  const { getUndo, undoAppData, hasExternalChange, loadAppData, changeAppData, getRecoveryNotice, resetAppData, importAppData, previewMergeImport, mergeImportAppData, restoreRecoveryBackup } = repository;
+  const [feedback, setFeedback] = useState('');
   const [data, setData] = useState<AppData | null>(null);
+  const hydration = useRef<Promise<AppData> | null>(null);
+  const hydrated = useRef(false);
   const [error, setError] = useState('');
   const [recoveryNotice, setRecoveryNotice] = useState('');
   const [resetVersion, setResetVersion] = useState(0);
@@ -48,12 +62,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const stale = useRef(false);
   const [externalChange, setExternalChange] = useState(false);
   const markStale = useCallback(() => { stale.current = true; setExternalChange(true); }, []);
-  const commit = useCallback(async (change: (current: AppData) => AppData) => {
+  const commit = useCallback(async (change: (current: AppData) => AppData, undoLabel?: string) => {
+    if (!hydrated.current) throw new Error('Your data is still loading. Please retry after loading finishes.');
     if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Data replacement is in progress. Please wait.');
     try {
-      const next = await changeAppData(change);
+      const next = await changeAppData(change, undoLabel);
       setData(next);
+      if (undoLabel) setFeedback(`${undoLabel}. Saved.`);
       setRecoveryNotice(getRecoveryNotice());
       setError('');
     } catch (cause) {
@@ -61,7 +77,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setError(cause instanceof Error ? cause.message : 'Could not save or load your local data. Please try again.');
       throw cause;
     }
-  }, [markStale]);
+  }, [markStale, changeAppData, getRecoveryNotice]);
 
   const replaceData = useCallback(async (operation: () => Promise<AppData>) => {
     if (stale.current) throw new ExternalDataChangeError();
@@ -76,7 +92,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw cause;
     } finally { resetting.current = false; }
   }, [markStale]);
-  const importData = useCallback((raw: string) => replaceData(() => importAppData(raw)), [replaceData]);
+  const importData = useCallback((raw: string) => replaceData(() => importAppData(raw)), [replaceData, importAppData]);
   const previewMerge = async (raw: string) => {
     if (stale.current) throw new ExternalDataChangeError();
     try { return await previewMergeImport(raw); }
@@ -119,19 +135,40 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => subscribeToStorageChanges(() => {
     void hasExternalChange().then(changed => { if (changed) markStale(); }).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not check local data.'));
-  }), [markStale]);
+  }), [markStale, hasExternalChange]);
 
+  // Load the captured account repository before any startup mutation can run.
+  // AccountBoundary remounts this provider when the selected account changes.
   useEffect(() => {
-    const check = () => { void commit(current => rolloverAppData(current, new Date())).catch(() => undefined); };
+    let active = true;
+    // Reuse the read during effect replay, but attach a fresh active subscriber.
+    hydration.current ??= loadAppData();
+    void hydration.current.then(next => {
+      if (!active) return;
+      hydrated.current = true;
+      setData(next);
+      setRecoveryNotice(getRecoveryNotice());
+      setError('');
+    }).catch(cause => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Could not load your local data. Please try again.');
+    });
+    return () => { active = false; };
+  }, [loadAppData, getRecoveryNotice]);
+
+  const dataReady = !!data;
+  useEffect(() => {
+    if (!dataReady) return;
+    const check = () => { void commit(current => rolloverAppData(materializeRecurrences(current, new Date()), new Date())).catch(() => undefined); };
     check();
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') check(); });
     const timer = setInterval(() => { if (AppState.currentState !== 'background' && AppState.currentState !== 'inactive') check(); }, 30_000);
     return () => { subscription.remove(); clearInterval(timer); };
-  }, [commit]);
+  }, [commit, dataReady]);
 
   const addTask = async (input: TaskInput) => {
     let task!: Task;
     await commit(current => {
+      if (!current.sections.some(s => s.id === input.sectionId && !s.archived)) throw Error('Choose an active section.');
       validateTaskProject(current.projects, input.projectId);
       const project = current.projects.find(item => item.id === input.projectId);
       task = createTask({ ...applyReminderDefault(input, current.settings.defaultTaskReminder), storyPoints: input.storyPoints ?? project?.defaultTaskPoints ?? current.settings.defaultStoryPoints });
@@ -139,24 +176,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
     return task;
   };
-  const schedule = (selection: ScheduleSelection[], date: string, backlogOnly = false) => commit(current => scheduleTasks(current, selection, date, backlogOnly));
-  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => changeTask(current, id, changes, choice, expectedUpdatedAt));
-  const deleteTask = (id: string, expectedUpdatedAt: string) => commit(current => removeTask(current, id, expectedUpdatedAt));
+  const schedule = (selection: ScheduleSelection[], date: string, backlogOnly = false) => commit(current => scheduleTasks(current, selection, date, backlogOnly), 'Schedule tasks');
+  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => changeTask(current, id, changes, choice, expectedUpdatedAt), 'Update task');
+  const deleteTask = (id: string, expectedUpdatedAt: string) => commit(current => removeTask(current, id, expectedUpdatedAt), 'Delete task');
   const deleteProject = (id: string, expectedUpdatedAt: string) => commit(current => removeProject(current, id, expectedUpdatedAt));
   const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     if (key === 'rolloverTime' && !isRolloverTime(String(value))) throw new Error('Use HH:MM in 24-hour time, for example 00:00.');
     validateAmbientSetting(key, value);
-    await commit(current => rolloverAppData({ ...current, settings: { ...current.settings, [key]: value } }, new Date()));
+    await commit(current => rolloverAppData({ ...current, settings: { ...current.settings, [key]: value, ...(key === 'rolloverMode' ? { autoRollover: value === 'automatic' } : {}) } }, new Date()));
   };
   const addEvent = async (input: EventInput) => {
-    await commit(current => insertEvent(current, createEvent(applyReminderDefault(input, current.settings.defaultEventReminder))));
+    await commit(current => insertEvent(current, createEvent(applyReminderDefault(input, current.settings.defaultEventReminder))), 'Save event');
   };
   const addProject = async (input: ProjectInput) => {
     const project = createProject(input);
-    await commit(current => insertProject(current, project));
+    await commit(current => insertProject(current, project), 'Save project');
   };
-  const editProject = async (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => commit(current => changeProject(current, id, changes, expectedUpdatedAt));
-  const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt));
+  const editProject = async (id: string, changes: ProjectChanges, expectedUpdatedAt: string) => commit(current => changeProject(current, id, changes, expectedUpdatedAt), 'Save project');
+  const editEvent = async (key: string, input: EventInput, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, input, expectedUpdatedAt), 'Save event');
   const archiveEvent = async (key: string, expectedUpdatedAt?: string) => commit(current => changeEvent(current, key, 'archive', expectedUpdatedAt));
   const actOnReminder = async (reminder: ScheduledReminder, action: ReminderAction) => commit(current => changeReminder(current, reminder, action, new Date()));
   const retry = async () => {
@@ -164,14 +201,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     resetting.current = true;
     try {
       const next = await loadAppData();
+      hydrated.current = true;
       setData(next); setRecoveryNotice(getRecoveryNotice()); setError('');
-      setResetVersion(version => version + 1);
-      setReloadVersion(version => version + 1);
+      // An ordinary I/O retry must not discard editors or calendar credentials.
+      if (stale.current) {
+        setResetVersion(version => version + 1);
+        setReloadVersion(version => version + 1);
+      }
       stale.current = false; setExternalChange(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ data, error, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: view => commit(current => { if (!view.name.trim()) throw Error('Name is required.'); return { ...current, savedViews: [...(current.savedViews ?? []).filter(v => v.id !== view.id), view] }; }), deleteView: id => commit(current => ({ ...current, savedViews: (current.savedViews ?? []).filter(v => v.id !== id) })), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date())), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment><LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} /></AppDataContext.Provider>;
 }
 
 export function useAppData() {

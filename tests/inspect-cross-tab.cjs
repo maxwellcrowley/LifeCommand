@@ -4,7 +4,7 @@ const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { seedData } = require('../.test-build/src/domain/seed.js');
-const root = resolve('dist');
+const root = resolve(process.env.POLISH_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -31,7 +31,7 @@ async function connect(target) {
   });
   const send = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; pending.set(key, { resolve, reject }); ws.send(JSON.stringify({ id: key, method, params })); });
   const evaluate = async expression => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
-  const ready = async text => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`)) return; await pause(100); } throw Error('Missing ' + text + ': ' + await evaluate('document.body.innerText')); };
+  const ready = async text => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body?.innerText.includes(${JSON.stringify(text)})`)) return; await pause(100); } throw Error('Missing ' + text + ': ' + await evaluate('document.body.innerText')); };
   const click = async text => { assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button: ' + text); await pause(150); };
   const fill = async (label, value) => evaluate(`(() => { const el = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) throw Error('Missing input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
   const go = async (path, text) => { await send('Page.navigate', { url: 'http://127.0.0.1:4178' + path }); await ready(text); };
@@ -51,7 +51,7 @@ async function main() {
   const prefix = key + ':recovery:';
   const data = require('../.test-build/src/domain/normalize.js').normalizeAppData(seedData);
   data.settings.autoRollover = false;
-  const raw = JSON.stringify({ ...data, schemaVersion: 3, revision: 1 });
+  const raw = JSON.stringify({ ...data, schemaVersion: 4, revision: 1 });
   await a.go('/settings', 'Data Management');
   await a.evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(raw)})`);
   await a.go('/settings', 'Data Management');

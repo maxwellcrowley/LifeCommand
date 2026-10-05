@@ -4,7 +4,7 @@ const { readFileSync, writeFileSync, existsSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
-const root = resolve('dist');
+const root = resolve(process.env.POLISH_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -59,7 +59,7 @@ async function main() {
   await evaluate(`document.querySelector('[aria-label="Enable native notifications"]').scrollIntoView({block:'center'})`);
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync('.test-build/notifications-web.png', Buffer.from(screenshot.data, 'base64'));
-  await go('/', "Today's calendar");
+  await go('/', 'Schedule');
   assert.equal(await evaluate(`document.querySelector('[aria-label^="Snooze"]') !== null`), false);
   assert.equal(await evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1')).tasks[0].reminderEnabled`), true);
   await go('/settings', 'Native notifications unavailable on web');

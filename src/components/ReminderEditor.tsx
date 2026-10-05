@@ -1,4 +1,5 @@
-import { Pressable, Switch, TextInput, View } from 'react-native';
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { Pressable, Switch, View } from 'react-native';
 import { reminderLabels, reminderOffsets, type ReminderDraft } from '@/src/domain/reminders';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Label, Muted, Row } from './ui';

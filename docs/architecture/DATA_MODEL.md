@@ -1,5 +1,78 @@
 # Local Data Model
 
+## Current contract: usability upgrade, schema 4
+
+This section supersedes historical slice descriptions below. Routes now live in
+`src/app/`. The portable envelope and active snapshot use schema 4; schemas 1-3
+remain readable. A migration writes an exact recovery copy before replacing old
+data. Strict validation rejects unsupported versions, malformed rules, duplicate
+occurrence identities and dangling references. Failed backups prevent replacement.
+
+- Sections have arbitrary nonblank names and optional `archived`. Archive retains
+  references. Reassignment moves tasks, projects and recurring templates atomically.
+- `recurringSeries` contains explicit IANA timezone, start/end dates, frequency,
+  selected weekdays, month-end `last-day`/`skip`, template fields and
+  `generatedThrough`. Tasks carry optional `recurrenceId` and `occurrenceDate`.
+  IDs derive from series ID and occurrence date. Cursor and generated tasks persist
+  together. Generation runs through the series-local current date, at most 366
+  calendar days per foreground pass. It does not schedule background generation.
+  Individual task changes never rewind the cursor. Template edits apply after the
+  cursor and keep the original anchor. Deleting a project unlinks its templates.
+- `savedViews` stores named query/filter combinations. `onboardingComplete` defaults
+  true when absent from existing data. Only a newly initialized empty repository
+  gets false. Sample tasks/events require an explicit setup action.
+- Rollover modes are automatic, stay-overdue and morning-review. Missing mode retains
+  legacy `autoRollover` behavior and escalation preferences. Manual review stays
+  explicit; rollover keeps its date guard and monotonic task timestamps.
+- Presentation lives outside portable data in account-scoped device storage:
+  appearance, density, text size, week/date/clock formats, Today layout/sections,
+  completed visibility, collapsed groups and ambient profiles/privacy. Existing
+  snapshot appearance/ambient values remain readable compatibility defaults; changing
+  presentation no longer updates those synced fields. Native OS font scaling is
+  uncapped. Notification installation preferences remain device-local.
+
+Storage captures an account namespace for each mounted provider/repository. Guest
+keys are retained; authenticated keys use a Supabase URL/user namespace. Data,
+recovery copies, undo journal, calendar cache, sync baseline and calendar token vault
+cannot retarget an in-flight operation to another account. Calendar tokens are
+memory-only on web and scoped SecureStore entries on native. Sign-out clears active
+provider authorization and notification schedules, retains isolated local copies,
+and opens the guest store. Guest adoption is an explicit previewed copy into an
+empty signed-in store. Credentials never enter portable snapshots or exports.
+
+Undo journals are local active-snapshot metadata, excluded from export/cloud data.
+Up to ten task mutations record affected before/after records. Undo verifies current
+records still equal the recorded result and verifies references inside the storage
+queue. It restores only those tasks, with newer timestamps; unrelated changes remain.
+Conflicting edits reject Undo. Replacement/reset clears the journal.
+
+Automatic sync is opt-in per account/device. One serialized engine uses the existing
+Supabase compare-and-swap revision RPC and persists a common snapshot baseline.
+Unchanged local data can accept a remote copy only after a second fingerprint check
+inside the repository queue and a recovery backup. Competing changes, removed remote
+snapshots and unknown differing baselines pause for explicit cloud preview/upload
+resolution. There is no automatic record merge or implicit deletion resurrection.
+Failures retain local data and retry with bounded backoff while foregrounded.
+The current snapshot is the durable pending-write source. UI shows pending state,
+last success and connection/failure guidance. The schema-4 SQL contract must be
+applied by the backend operator before new clients can upload to an older backend.
+
+External calendar cache keeps `visible` independently of sync-enabled state and
+stable `hiddenEventIds`. Refresh retains hide choices even if an event temporarily
+disappears. External events remain read-only. These cache choices are device/account
+local and separate from provider credentials.
+
+Replacement import restores the complete portable snapshot with a backup. Additive
+merge keeps existing task/project rules and local saved views/settings; adds mapped
+recurring templates and advances matching cursors without overwriting templates.
+An occurrence already covered by a local cursor cannot be reintroduced by additive
+merge. Explicit replacement can restore historical data. Ordinary tasks have no
+tombstones in explicit additive imports; the preview explains possible restoration.
+Recurrence records serve scheduling/history, not task-completion analytics.
+
+See [Story 027](../stories/STORY-027_USABILITY_PERSONALIZATION.md) and the
+[delivery report](../USABILITY_UPGRADE_DELIVERY.md) for scope and validation.
+
 ## Task and project notes (Slice 25)
 
 Tasks have two distinct optional text fields. `description` is short, trimmed context and is shown beneath the title on Today (up to two visual lines, with a tail ellipsis). Empty descriptions render nothing. `notes` is longer private/reference detail: it is editable in Capture and the task editor, stored as trimmed optional text, and intentionally is not shown in Today task rows. Both remain fully available in the task editor.
@@ -399,3 +472,33 @@ Complete bounded provider snapshots replace only the selected account's imported
 Google uses GIS on web and SDK-owned sign-in on native. Outlook uses AuthSession authorization code/S256 PKCE with delegated Calendars.ReadBasic and OIDC identity scopes. Account-bound access tokens never enter this cache, AppData, exports or cloud data. Each provider checks identity before syncing. Reconnecting an account requires the original identity; Connect may add another identity. Missing configuration keeps local-only use available. Source-aware display selectors include imports in Today, Calendar and Ambient; local mutation and notification functions continue to accept local/family records only.
 
 Slice 019 adds a separate native SecureStore contract: `lifecommand.oauth.<provider>.index` contains account IDs and `lifecommand.oauth.<provider>.<hex-account-id>` stores `{ value, expiresAt }`. Operations are serialized; index entries are written before credentials so interrupted writes remain discoverable. iOS uses WHEN_UNLOCKED_THIS_DEVICE_ONLY; Android SecureStore data is excluded from backups by the plugin. Web uses memory only. Tokens have a maximum reuse window of 50 minutes, bounded sooner by provider expiry when available; no refresh tokens. Disconnect, data replacement and Start Fresh delete credentials; startup prunes orphaned entries. Storage failures never fall back to public storage. This does not change the AppData/export schema or external calendar cache version.
+# October 2026 polish implementation notes
+
+This pass does not change portable schema 4. Account repositories are captured at
+provider mount; account switches remount the subtree. Initial hydration shares one
+read across effect replay, ignores unmounted subscribers, and sets readiness on
+both initial success and explicit retry. Rollover/recurrence start only after data
+exists. Every automatic sync entry point (debounce, interval, resume and Retry)
+checks both app hydration and sync-preference readiness. Upload acknowledgments
+must match the account, next revision, schema and exported data. Ordinary I/O retry
+keeps drafts; explicit stale-tab reload retains its discard confirmation.
+
+Today uses the established due-on-or-before-local-today rule for open tasks.
+Completed today means `status === complete` with `completedAt` on the current
+local date, including tasks finished early or from backlog. Filters apply to both
+sets; completed tasks never increase the remaining count. Reopening returns to
+the saved due date or backlog and announces that destination. The persisted
+`normal` priority is displayed as Medium in task rows.
+
+Device presentation migrates legacy `next-event` visibility to `calendar`, with
+duplicates removed. Tasks precede Schedule on phones and occupy the left column
+on wide screens; auxiliary area order/visibility is retained. Completed and past
+event expansion uses the existing device collapse dictionary. Reset Today layout
+does not touch account records, ambient privacy or planning settings.
+
+Schedule counts all-day events plus timed events that have not ended. Without an
+end time, a timed event becomes past at its start; no duration is invented. The
+next emphasis uses the next future timed start. Overlapping events retain separate
+rows and external multi-day clipping uses the existing conversion functions.
+
+See [polish QA](../qa/POLISH_RELIABILITY_QA.md) for verification and device limits.

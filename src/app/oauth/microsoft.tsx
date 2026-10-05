@@ -2,7 +2,7 @@ import { Link, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
-import { Label, Muted } from '../../src/components/ui';
+import { Label, Muted } from '@/src/components/ui';
 
 // Runs in the web popup; AuthSession verifies the pending request in its opener.
 WebBrowser.maybeCompleteAuthSession();

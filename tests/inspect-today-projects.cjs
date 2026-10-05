@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync, existsSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
-const root = resolve('dist');
+const root = resolve(process.env.TODAY_HARNESS_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -27,21 +27,22 @@ async function connect(target) {
     const message = JSON.parse(data);
     if (message.id) { const p = pending.get(message.id); pending.delete(message.id); message.error ? p.reject(message.error) : p.resolve(message.result); }
     else if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails);
+    else if (message.method === 'Page.javascriptDialogOpening') { console.error('Unexpected browser dialog',message.params);void send('Page.handleJavaScriptDialog',{accept:false}); }
   });
   const send = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; pending.set(key, { resolve, reject }); ws.send(JSON.stringify({ id: key, method, params })); });
   const evaluate = async expression => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
   const ready = async text => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body?.innerText.includes(${JSON.stringify(text)})`)) return; await pause(100); } throw Error('Missing ' + text + ': ' + await evaluate('document.body.innerText')); };
   const click = async text => { assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button: ' + text); await pause(150); };
   const fill = async (label, value) => evaluate(`(() => { const el = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) throw Error('Missing input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
-  const go = async (path, text) => { await send('Page.navigate', { url: 'http://127.0.0.1:4182' + path }); await ready(text); };
+  const go = async (path, text) => { if(process.env.DEBUG_HARNESS)console.log('GO',path,text); await send('Page.navigate', { url: 'http://127.0.0.1:4199' + path }); await ready(text); };
   await send('Runtime.enable'); await send('Page.enable');
   const client = { ws, send, evaluate, ready, click, fill, go }; clients.push(client); return client;
 }
 async function main() {
-  await new Promise(r => server.listen(4182, '127.0.0.1', r));
-  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=9232', '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--user-data-dir=' + resolve('.test-build/today-projects-chrome'), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  await new Promise(r => server.listen(4199, '127.0.0.1', r));
+  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=9259', '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-extensions', '--disable-background-networking', '--user-data-dir=' + resolve('.test-build/today-projects-chrome-' + process.pid), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   let targets;
-  for (let i = 0; i < 60; i++) { try { targets = await (await fetch('http://127.0.0.1:9232/json', { signal: AbortSignal.timeout(1000) })).json(); break; } catch { await pause(250); } }
+  for (let i = 0; i < 60; i++) { try { targets = await (await fetch('http://127.0.0.1:9259/json', { signal: AbortSignal.timeout(1000) })).json(); break; } catch { await pause(250); } }
   assert.ok(targets, 'Chrome DevTools reachable');
   const a = await connect(targets.find(t => t.type === 'page'));
   const { createDefaultAppData } = require('../.test-build/src/domain/defaults.js');
@@ -64,6 +65,7 @@ async function main() {
   data.lastRolloverSummary = { rolloverDate: addDays(today, -1), performedAt: new Date().toISOString(), movedTaskIds: [data.tasks[4].id] };
   const read = () => a.evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1'))`);
   const choose = async label => {
+    if(process.env.DEBUG_HARNESS)console.log('CHOOSE',label);
     assert.ok(await a.evaluate(`(() => { const el = [...document.querySelectorAll('[aria-label]')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) return false; el.click(); return true; })()`), label);
     await pause(150);
   };
@@ -84,11 +86,11 @@ async function main() {
   await a.go('/', 'Family morning');
   assert.deepEqual(await taskTitles(), ['High second', 'High today', 'Normal today', 'Low overdue', 'Low today']);
   const body = await a.evaluate('document.body.innerText');
-  assert.ok(body.indexOf("Today's tasks") < body.indexOf("Today's calendar"));
+  assert.ok(await a.evaluate(`document.querySelector('[data-testid="today-tasks"]').compareDocumentPosition(document.querySelector('[data-testid="today-schedule"]')) & Node.DOCUMENT_POSITION_FOLLOWING`));
   assert.ok(body.includes('Compact Today context'));
   assert.equal(body.includes('Private task note'), false);
   for (const hidden of ['Next event', 'Rollover summary', 'Reminders', 'Reminder:', "Today's family events", 'Top priorities']) assert.equal(body.includes(hidden), false, hidden);
-  const timeline = await a.evaluate(`(() => { const card = [...document.querySelectorAll('[role=heading],h1,h2,h3,h4,h5,h6')].find(el => el.innerText === "Today's calendar").parentElement; return { events: [...card.querySelectorAll('[aria-label^="Edit "]')].map(el => el.getAttribute('aria-label')), text: card.innerText }; })()`);
+  const timeline = await a.evaluate(`(() => { const card = [...document.querySelectorAll('[role=heading],h1,h2,h3,h4,h5,h6')].find(el => el.innerText.startsWith('Schedule ·')).parentElement; return { events: [...card.querySelectorAll('[aria-label^="Edit "]')].map(el => el.getAttribute('aria-label')), text: card.innerText }; })()`);
   assert.deepEqual(timeline.events, ['Edit Local all day', 'Edit Family morning', 'Edit Local afternoon', 'Edit Family evening']);
   assert.ok(timeline.text.includes('All day') && timeline.text.includes('Added by Kellyn'));
   await bounds();
@@ -101,6 +103,7 @@ async function main() {
   assert.equal((await taskTitles()).includes('High today'), false);
   console.log('PASS Today tasks first, priority order, all-day/combined timeline, attribution, hidden sections, mobile bounds and edit/complete');
 
+  await a.evaluate(`localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify({...JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')),showCompleted:true}))`);
   await a.go('/projects', 'Polish project'); await choose('Edit project: Polish project'); await a.ready('Project tasks');
   assert.equal(await a.evaluate(`document.querySelector('textarea[aria-label="Project notes (optional)"]').value`), 'Project-only reference');
   assert.deepEqual(await taskTitles(), ['High second', 'Normal today', 'Future', 'Low overdue', 'Low today', 'Done high', 'High today']);
@@ -154,21 +157,22 @@ async function main() {
   organized.tasks.push(createTask({ title: 'Backlog cleanup', sectionId: 'home', projectId: cleanupProject.id }));
   organized.tasks.push(createTask({ title: 'Future cleanup', sectionId: 'work', dueDate: addDays(today, 1), projectId: cleanupProject.id }));
   organized.tasks.push(updateTask(createTask({ title: 'Archived cleanup', sectionId: 'home', projectId: cleanupProject.id }), { status: 'archived' }));
-  await a.evaluate(`localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(organized, (await read()).revision + 1)))})`);
+  await a.evaluate(`localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify({...JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')),showCompleted:false}));localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(organized, (await read()).revision + 1)))})`);
   await a.go('/', 'Scan task 00');
   const { groupTasksBySection } = require('../.test-build/src/domain/tasks.js');
   assert.deepEqual(await taskTitles(), groupTasksBySection(organized, organized.tasks.slice(0, 30)).flatMap(group => group.tasks.map(task => task.title)));
   const rowInfo = () => a.evaluate(`Array.from(document.querySelectorAll('[data-testid^="task-row-"]')).map(el => ({ text: el.innerText, color: getComputedStyle(el).borderLeftColor, edit: el.querySelector('[aria-label^="Edit task:"]').innerText }))`);
   const todayRows = await rowInfo();
   assert.equal(todayRows.length, 30);
-  assert.ok(todayRows.every(row => row.text.includes('Cleanup project') && row.text.includes('priority') && row.edit === 'Edit'));
+  assert.ok(todayRows.every(row => row.text.includes('priority') && row.edit === 'Edit'));
   assert.equal(new Set(todayRows.map(row => row.color)).size, 2);
   await bounds(); await screenshot('today-section-scanability');
   await a.go('/review', 'Backlog cleanup');
   let reviewRows = await rowInfo();
   assert.equal(reviewRows.length, 2);
-  assert.ok(reviewRows.every(row => row.text.includes('Cleanup project') && row.text.includes('priority') && row.edit === 'Edit'));
+  assert.ok(reviewRows.every(row => row.text.includes('priority') && row.edit === 'Edit'));
   await bounds(); await screenshot('review-section-scanability');
+  await a.evaluate(`localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify({...JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')),showCompleted:true}))`);
   await a.go('/projects', 'Cleanup project'); await choose('Edit project: Cleanup project'); await a.ready('Project tasks');
   const projectRows = await rowInfo();
   assert.equal(projectRows.length, 32);
@@ -178,28 +182,29 @@ async function main() {
   assert.equal(await progress(), 3);
   await choose('Edit task: Scan task 00'); await a.ready('Save changes');
   let deletionRevision = (await read()).revision;
-  await a.click('Delete task'); await a.ready('will be permanently deleted.');
+  await a.click('Delete task'); await a.ready('will be deleted.');
   await a.click('Cancel deletion'); assert.equal((await read()).revision, deletionRevision);
   await a.click('Delete task'); await bounds(); await screenshot('task-delete-confirmation');
   await a.evaluate(`window.originalSet = Storage.prototype.setItem; Storage.prototype.setItem = function(k,v) { if(k === 'lifecommand:data:v1') throw Error('Delete write failure'); return window.originalSet.call(this,k,v); }`);
-  await a.click('Permanently delete task'); await a.ready('Delete write failure');
+  await a.click('Confirm delete task'); await a.ready('Delete write failure');
   assert.equal((await read()).revision, deletionRevision);
   await a.evaluate('Storage.prototype.setItem = window.originalSet');
-  await a.evaluate(`const remove = document.querySelector('[aria-label="Permanently delete task"]'); remove.click(); remove.click();`);
+  await a.evaluate(`const remove = document.querySelector('[aria-label="Confirm delete task"]'); remove.click(); remove.click();`);
   await a.ready('Project tasks');
   assert.equal((await read()).revision, deletionRevision + 1);
   assert.equal((await read()).tasks.some(t => t.title === 'Scan task 00'), false);
   assert.equal(await progress(), 0);
   await a.go('/', 'Scan task 01'); assert.equal((await taskTitles()).includes('Scan task 00'), false);
+  await a.evaluate(`const p=JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1'));p.ambient={...p.ambient,ambientDisplayEnabled:true};localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify(p))`);
   await a.go('/ambient', 'Scan task');
   assert.equal((await a.evaluate('document.body.innerText')).includes('Scan task 00'), false);
   await a.go('/review', 'Backlog cleanup'); await choose('Edit task: Backlog cleanup'); await a.ready('Save changes');
-  await a.click('Delete task'); await a.click('Permanently delete task'); await a.ready('Section backlogs');
+  await a.click('Delete task'); await a.click('Confirm delete task'); await a.ready('Section backlogs');
   assert.equal((await taskTitles()).includes('Backlog cleanup'), false);
   assert.equal(await a.evaluate(`document.querySelector('[aria-label="Section backlogs, Home, 0 tasks"]').getAttribute('aria-expanded')`), 'false');
 
   // Keep a stale task editor open while the other tab deletes its project.
-  const target = await (await fetch('http://127.0.0.1:9232/json/new?about:blank', { method: 'PUT' })).json();
+  const target = await (await fetch('http://127.0.0.1:9259/json/new?about:blank', { method: 'PUT' })).json();
   const b = await connect(target);
   const linked = (await read()).tasks.find(t => t.title === 'Scan task 01');
   await b.go('/task/' + linked.id, 'Save changes');
@@ -246,7 +251,7 @@ async function main() {
     ...makeGroup('Backlog', undefined),
     ...makeGroup('Future', addDays(today, 1)),
   ];
-  await a.evaluate(`localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(grouped, (await read()).revision + 1)))})`);
+  await a.evaluate(`localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify({...JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')),showCompleted:false}));localStorage.setItem('lifecommand:data:v1', ${JSON.stringify(JSON.stringify(persistedSnapshot(grouped, (await read()).revision + 1)))})`);
   const expected = prefix => ['Alpha high A', 'Alpha high Z', 'Alpha normal', 'Alpha low', 'Zulu high', 'No project high', 'Home task'].map(title => `${prefix} ${title}`);
   const listTitles = category => a.evaluate(`Array.from(document.querySelector('[data-testid="task-list-${category}"]').querySelectorAll('[aria-label^="Edit task:"]')).map(el => el.getAttribute('aria-label').slice(11))`);
   const expanded = label => a.evaluate(`document.querySelector(${JSON.stringify(`[aria-label="${label}"]`)}).getAttribute('aria-expanded')`);
@@ -257,7 +262,7 @@ async function main() {
   await a.go('/', 'Missed Alpha high A');
   assert.deepEqual(await listTitles('Today'), expected('Missed'));
   assert.equal(await expanded('Today, Work, 6 tasks'), 'true');
-  assert.deepEqual(await a.evaluate(`Array.from(document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]')).map(el => el.innerText)`), [`${alpha.name} · 4`, `${zulu.name} · 1`, 'No project · 1']);
+  assert.deepEqual(await a.evaluate(`Array.from(document.querySelector('[data-testid="task-section-work"]').querySelectorAll('[role=heading]')).map(el => el.innerText)`), [`${alpha.name} · 4`, `${zulu.name} · 1`, 'Other tasks · 1']);
   await bounds(); await screenshot('today-project-groups');
   await choose('Today, Work, 6 tasks');
   assert.equal(await expanded('Today, Work, 6 tasks'), 'false');
@@ -284,7 +289,7 @@ async function main() {
     const alphaCount = prefix === 'Missed' ? 3 : 4;
     const alphaLabel = `${category}, Work, alpha project, ${alphaCount} tasks`;
     const zuluLabel = `${category}, Work, ${zulu.name}, 1 task`;
-    const noProjectLabel = `${category}, Work, No project, 1 task`;
+    const noProjectLabel = `${category}, Work, Other tasks, 1 task`;
     assert.equal(await expanded(alphaLabel), 'true', 'Review project groups start expanded');
     assert.equal(await expanded(zuluLabel), 'true', 'Review project groups start expanded');
     assert.equal(await expanded(noProjectLabel), 'true', 'Unlinked Review groups start expanded');
@@ -317,13 +322,14 @@ async function main() {
   await choose('Scheduled later, Work, 7 tasks');
   assert.ok((await listTitles('Scheduled later')).includes('Backlog Alpha high A'));
   await choose('Edit task: Backlog Alpha high Z'); await a.ready('Save changes');
-  await a.click('Delete task'); await a.click('Permanently delete task'); await a.ready('Section backlogs');
+  await a.click('Delete task'); await a.click('Confirm delete task'); await a.ready('Section backlogs');
   assert.equal(await expanded('Section backlogs, Work, 4 tasks'), 'true');
   assert.equal((await listTitles('Section backlogs')).includes('Backlog Alpha high Z'), false);
   await choose('Overdue, Work, 5 tasks');
-  await a.go('/review', 'Missed Alpha high Z');
-  assert.equal(await expanded('Overdue, Work, 5 tasks'), 'true', 'Reload resets UI-only collapse state');
-  console.log('PASS section/project/priority ordering, No project last, Today and all Review category collapse/expand, keyboard activation, independent categories/screens, live completion/deletion/scheduling counts, collapsed count updates, reload defaults and narrow layouts');
+  await a.go('/review', 'Overdue');
+  for(let i=0;i<100 && await expanded('Overdue, Work, 5 tasks')!=='false';i++) await pause(100);
+  assert.equal(await expanded('Overdue, Work, 5 tasks'), 'false', 'Reload preserves collapsed section state');
+  console.log('PASS section/project/priority ordering, No project last, Today and all Review category collapse/expand, keyboard activation, independent categories/screens, live completion/deletion/scheduling counts, collapsed count updates, persistent collapse and narrow layouts');
 
   // Project status groups sort by exactly the percentage rendered on each card.
   const projectsData = createDefaultAppData();

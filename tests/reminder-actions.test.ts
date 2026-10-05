@@ -140,7 +140,7 @@ test('schema 2 migrates once with exact backup, legacy imports and recovery work
   assert.equal(migrated.settings.quietHoursEnabled, false); assert.equal(migrated.settings.quietHoursStart, '22:00');
   assert.equal(migrated.tasks[0].lastReminderAcknowledgedAt, undefined);
   assert.ok(writes[0].startsWith(RECOVERY_PREFIX)); assert.equal(values.get(writes[0]), raw);
-  assert.equal(JSON.parse(values.get(STORAGE_KEY)!).schemaVersion, 3); assert.equal(JSON.parse(values.get(STORAGE_KEY)!).revision, 8);
+  assert.equal(JSON.parse(values.get(STORAGE_KEY)!).schemaVersion, 4); assert.equal(JSON.parse(values.get(STORAGE_KEY)!).revision, 8);
   await repo.loadAppData(); assert.equal(writes.length, 2);
   assert.deepEqual((await repo.previewRecoveryBackup(writes[0])).data, migrated);
   for (const schemaVersion of [1, 2]) assert.deepEqual(validateImport(JSON.stringify({ format: 'lifecommand-export', exportedAt: now.toISOString(), schemaVersion, data: old })).data, migrated);
@@ -148,7 +148,7 @@ test('schema 2 migrates once with exact backup, legacy imports and recovery work
     const state = changeReminder(migrated, current(migrated), action, now);
     state.settings.quietHoursEnabled = true;
     const portable = createExport(state);
-    assert.equal(portable.schemaVersion, 3);
+    assert.equal(portable.schemaVersion, 4);
     assert.deepEqual(validateImport(JSON.stringify(portable)).data, validateSnapshot(JSON.parse(JSON.stringify(state))).data);
   }
   for (const fields of [{ snoozedUntil: 'bad' }, { lastReminderAcknowledgedAt: '2026-02-30T09:00:00Z' }, { reminderDismissedForOccurrence: 123 }]) {

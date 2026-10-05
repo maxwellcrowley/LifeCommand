@@ -1,12 +1,13 @@
 // Uses the exported app and the real Supabase JS client. Only HTTP is mocked.
 // node tests/inspect-cloud.cjs [--configured]
 const { createServer } = require('node:http');
-const { readFileSync, existsSync } = require('node:fs');
+const { readFileSync, existsSync, readdirSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const configured = process.argv.includes('--configured');
-const root = resolve(configured ? '.test-build/cloud-dist' : 'dist');
+const root = resolve(process.env.POLISH_DIST || (configured ? '.test-build/cloud-dist' : 'dist'));
+if (configured) assert.ok(readdirSync(resolve(root,'_expo/static/js/web')).filter(f=>f.endsWith('.js')).some(f=>readFileSync(resolve(root,'_expo/static/js/web',f),'utf8').includes('https://cloud-test.supabase.co')), 'Refusing cloud harness: export must contain the mock endpoint');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -46,11 +47,11 @@ async function main() {
     const mock = function (payload) {
       const nativeFetch = window.fetch.bind(window);
       const user = { id: '11111111-1111-4111-8111-111111111111', email: 'max@example.test', aud: 'authenticated', role: 'authenticated', created_at: new Date().toISOString(), app_metadata: {}, user_metadata: {} };
-      window.__cloud = { user_id: user.id, payload, schema_version: 3, revision: 2, updated_at: '2026-09-29T12:00:00Z' };
+      window.__cloud = { user_id: user.id, payload, schema_version: payload.schemaVersion, revision: 2, updated_at: '2026-09-29T12:00:00Z' };
       window.__writes = 0;
       window.fetch = async (input, options = {}) => {
         const url = String(input);
-        if (!url.startsWith('https://cloud-test.supabase.co')) return nativeFetch(input, options);
+        if (!url.startsWith('https://cloud-test.supabase.co')) { if (url.includes('/auth/v1/') || url.includes('/rest/v1/')) throw Error('Non-mock provider request blocked'); return nativeFetch(input, options); }
         const respond = (data, status = 200) => Promise.resolve(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }));
         if (url.includes('/signup')) return respond({ user, session: null });
         if (url.includes('/token')) {
@@ -67,7 +68,7 @@ async function main() {
           window.__cloud = { ...window.__cloud, payload: args.p_payload, revision: window.__cloud.revision + 1, updated_at: new Date().toISOString() };
           return respond(window.__cloud);
         }
-        if (url.includes('/cloud_snapshots')) return respond([window.__cloud]);
+        if (url.includes('/cloud_snapshots')) { window.__cloudReads = (window.__cloudReads || 0) + 1; return respond([window.__cloud]); }
         throw Error('Unexpected cloud request: ' + url);
       };
     };
@@ -76,7 +77,12 @@ async function main() {
   await go('/settings', 'Cloud Sync');
   await evaluate(`Object.keys(localStorage).filter(k => k.startsWith('lifecommand:') || k.startsWith('sb-')).forEach(k => localStorage.removeItem(k))`);
   await go('/settings', 'Cloud Sync');
-  const original = await evaluate(`localStorage.getItem('lifecommand:data:v1')`);
+  await evaluate(`const d=JSON.parse(localStorage.getItem('lifecommand:data:v1'));d.onboardingComplete=true;localStorage.setItem('lifecommand:data:v1',JSON.stringify(d));`);
+  await go('/settings','Cloud Sync');
+  const guestOriginal = await evaluate(`localStorage.getItem('lifecommand:data:v1')`);
+  const accountPrefix = 'lifecommand:account:' + encodeURIComponent('https://cloud-test.supabase.co:11111111-1111-4111-8111-111111111111') + ':';
+  const accountKey = accountPrefix + 'lifecommand:data:v1';
+  let original = guestOriginal;
   if (!configured) {
     await ready('Not configured · Local-only mode');
     assert.equal(await evaluate(`!!document.querySelector('input[aria-label="Cloud email"]')`), false);
@@ -88,7 +94,9 @@ async function main() {
     await fill('Cloud password', 'wrong'); await click('Sign in'); await ready('Invalid login credentials');
     await fill('Cloud password', 'password123'); await click('Sign in'); await ready('Signed in as max@example.test');
     await ready('Last cloud update:');
-    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), original);
+    if(await evaluate(`document.body.innerText.includes('Skip setup')`)) await click('Skip setup');
+    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), guestOriginal);
+    original = await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`);
     await go('/settings', 'Signed in as max@example.test');
     await ready('Last cloud update:');
     console.log('PASS signed-out UI, signup confirmation, sign-in error/retry, signed-in state; auth does not replace data');
@@ -110,18 +118,18 @@ async function main() {
       assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[role=dialog] [role=button]')).filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.left < -1 || r.right > innerWidth + 1 || r.height < 44); }).map(el => el.innerText)`), []);
     }
     await click('Cancel');
-    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), original);
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`), original);
     await fill('Rollover time, 24-hour HH:MM', '09:45');
     await click('Download cloud data to this device'); await ready('Cloud download preview');
-    await evaluate(`window.__setItem = Storage.prototype.setItem; window.__failBackup = true; window.__localWrites = []; Storage.prototype.setItem = function(k,v) { if (window.__failBackup && k.startsWith('lifecommand:data:v1:recovery:')) throw Error('quota'); window.__localWrites.push(k); return window.__setItem.call(this,k,v); }`);
+    await evaluate(`window.__setItem = Storage.prototype.setItem; window.__failBackup = true; window.__localWrites = []; Storage.prototype.setItem = function(k,v) { if (window.__failBackup && k.startsWith(${JSON.stringify(accountKey + ':recovery:')})) throw Error('quota'); window.__localWrites.push(k); return window.__setItem.call(this,k,v); }`);
     await click('Confirm cloud restore and replace data'); await ready('Could not create a recovery backup');
-    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), original);
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`), original);
     await evaluate('window.__failBackup = false');
     await click('Confirm cloud restore and replace data'); await ready('Cloud restore complete');
     const writes = await evaluate('window.__localWrites');
-    assert.ok(writes[0].startsWith('lifecommand:data:v1:recovery:')); assert.equal(writes[1], 'lifecommand:data:v1');
+    assert.ok(writes[0].startsWith(accountKey + ':recovery:')); assert.equal(writes[1], accountKey);
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(writes[0])})).raw`), original);
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1')).settings.appearance`), 'dark');
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(accountKey)})).settings.appearance`), 'dark');
     assert.equal(await evaluate(`document.querySelector('input[aria-label="Rollover time, 24-hour HH:MM"]').value`), '00:00');
     await ready('View recovery backups (1)');
     console.log('PASS invalid cloud data rejected, responsive preview/cancel, backup failure/retry, backup-before-replacement, live refresh and stale Settings draft cleared');
@@ -129,9 +137,47 @@ async function main() {
     assert.equal(await evaluate(`document.body.innerText.includes('Newer cloud revision:')`), false);
     await click('Confirm upload'); await ready('Upload complete');
     assert.equal(await evaluate('window.__writes'), 1);
+    await click('Enable automatic sync');await ready('Synchronized.');
+    await fill('Rollover time, 24-hour HH:MM','05:00');await click('Save time');
+    for(let i=0;i<100 && await evaluate('window.__writes')<2;i++) await pause(100);
+    assert.equal(await evaluate('window.__writes'),2);
+    assert.equal(await evaluate('window.__cloud.payload.data.settings.rolloverTime'),'05:00');
+    await evaluate(`window.__cloud.payload.data.settings.rolloverTime='07:00';window.__cloud.revision++`);
+    await fill('Rollover time, 24-hour HH:MM','06:00');await click('Save time');await ready('Both copies need review.');
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(accountKey)})).settings.rolloverTime`),'06:00');
+    assert.equal(await evaluate('window.__cloud.payload.data.settings.rolloverTime'),'07:00');
+    await click('Disable automatic sync');
+    console.log('PASS automatic sync durable local writes, remote update and explicit competing-change conflict');
     await click('Sign out'); await ready('Signed out');
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('lifecommand:data:v1')).settings.appearance`), 'dark');
-    console.log('PASS confirmed upload acknowledges revision and sign-out preserves local data');
+    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), guestOriginal);
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(accountKey)})).settings.appearance`),'dark');
+    console.log('PASS confirmed upload acknowledges revision and sign-out returns to guest and retains isolated account data');
+    // Hold repository hydration while interval and foreground signals fire.
+    await fill('Cloud email', 'max@example.test'); await fill('Cloud password', 'password123');
+    await click('Sign in'); await ready('Signed in as max@example.test');
+    await evaluate(`localStorage.setItem(${JSON.stringify(accountPrefix + 'automatic-sync-enabled')},'true')`);
+    const heldOriginal = await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`);
+    const hold = await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+      const request = navigator.locks.request.bind(navigator.locks);
+      window.__heldLocks = []; window.__holdHydration = true;
+      navigator.locks.request = (...args) => window.__holdHydration && args[0]==='lifecommand:data:v1:write' ? new Promise((resolve,reject)=>window.__heldLocks.push(()=>request(...args).then(resolve,reject))) : request(...args);
+      const interval=window.setInterval.bind(window); window.setInterval=(fn,ms,...args)=>interval(fn,ms===30000?50:ms,...args);
+    ` });
+    await send('Page.navigate', { url: 'http://127.0.0.1:4183/settings' }); await ready('Loading settings');
+    await evaluate(`window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange'));`);
+    await pause(400);
+    assert.equal(await evaluate('window.__cloudReads || 0'), 0, 'no timer/resume cloud reads before hydration');
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`), heldOriginal, 'no startup mutation before hydration');
+    // Supabase uses this channel for cross-tab sign-out. It reaches the real auth subscriber.
+    await evaluate(`localStorage.removeItem('sb-cloud-test-auth-token');window.__signoutChannel=new BroadcastChannel('sb-cloud-test-auth-token');window.__signoutChannel.postMessage({event:'SIGNED_OUT',session:null});`);
+    await pause(200);
+    await evaluate('window.__holdHydration=false;window.__heldLocks.splice(0).forEach(run=>run());');
+    await ready('Signed out');
+    assert.equal(await evaluate(`localStorage.getItem('lifecommand:data:v1')`), guestOriginal);
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(accountKey)})`), heldOriginal);
+    assert.equal(await evaluate('window.__writes'),0);
+    await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:hold.identifier});
+    console.log('PASS timer/foreground hydration barrier and account switch during pending hydration; old results cannot replace guest data');
   }
   await go('/', 'Today');
   await go('/projects', 'Projects');

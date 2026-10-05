@@ -12,3 +12,5 @@ const storage = {
   async removeItem(key: string) { const { sdk, options } = await secureStorage(); await sdk.deleteItemAsync(key, options); },
 };
 export const calendarTokens = { google: createStoredTokenVault(storage, 'google'), outlook: createStoredTokenVault(storage, 'outlook') };
+
+export function getCalendarTokens(scope: string) { if (scope === 'guest') return calendarTokens; const ns = Array.from(scope, c => c.codePointAt(0)!.toString(16)).join('-'); return { google: createStoredTokenVault(storage, `google.${ns}`), outlook: createStoredTokenVault(storage, `outlook.${ns}`) }; }

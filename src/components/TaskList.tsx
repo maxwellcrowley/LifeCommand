@@ -1,6 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { AppText as Text } from '@/src/components/AppText';
+import { useDevicePreferences } from '../data/DevicePreferences';
+import { TaskActions } from './TaskActions';
+import { type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import type { AppData, Task } from '@/src/domain/models';
 import { groupTasksBySection, groupTasksBySectionAndProject, isTaskOverdue } from '@/src/domain/tasks';
 import { localDateKey } from '@/src/domain/dates';
@@ -10,24 +13,25 @@ import { Label, Muted, Row } from './ui';
 
 type ListData = Pick<AppData, 'sections' | 'projects'>;
 
-export function TaskRow({ task, data, date, history = false, disabled = false, action, children }: {
-  task: Task; data: ListData; date?: string; history?: boolean; disabled?: boolean; action?: ReactNode; children?: ReactNode;
+export function TaskRow({ task, data, date, history = false, disabled = false, action, children, grouped = false }: {
+  task: Task; data: ListData; date?: string; history?: boolean; disabled?: boolean; action?: ReactNode; children?: ReactNode; grouped?: boolean;
 }) {
   const { colors } = useAppTheme();
+  const { preferences } = useDevicePreferences();
   const section = data.sections.find(item => item.id === task.sectionId);
   const project = data.projects.find(item => item.id === task.projectId);
-  return <View testID={`task-row-${task.id}`} style={{ borderLeftWidth: 3, borderLeftColor: section?.color ?? colors.border, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.background, padding: 10, gap: 6 }}>
+  return <View testID={`task-row-${task.id}`} style={{ borderLeftWidth: 3, borderLeftColor: section?.color ?? colors.border, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.background, padding: preferences.density === 'compact' ? 8 : 12, gap: 6 }}>
     <Row>
-      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+      <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0, gap: 4 }}>
         <Label style={{ fontWeight: '700', textDecorationLine: task.status === 'complete' ? 'line-through' : 'none' }}>{task.title}</Label>
         {task.description ? <Text numberOfLines={2} ellipsizeMode="tail" style={{ color: colors.muted, flexShrink: 1, fontSize: 14, lineHeight: 20 }}>{task.description}</Text> : null}
-        <Muted>{section?.name ?? 'No section'}{project ? ` · ${project.name}` : ''}</Muted>
+        {!grouped ? <Muted>{section?.name ?? 'No section'}{project ? ` · ${project.name}` : ''}</Muted> : null}
       </View>
-      <Action label={`Edit task: ${task.title}`} text="Edit" disabled={disabled} onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })} />
-      {action}
+      <Row><Action label={`Edit task: ${task.title}`} text="Edit" disabled={disabled} onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })} />
+      {action}<TaskActions task={task} /></Row>
     </Row>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      <Label style={{ color: task.priority === 'high' ? colors.danger : colors.muted, fontWeight: task.priority === 'high' ? '800' : '500' }}>{task.priority === 'high' ? '! ' : ''}{task.priority[0].toUpperCase() + task.priority.slice(1)} priority</Label>
+      <Label style={{ color: task.priority === 'high' ? colors.danger : colors.muted, fontWeight: task.priority === 'high' ? '800' : '500' }}>{task.priority === 'high' ? '! ' : ''}{task.priority === 'normal' ? 'Medium' : task.priority[0].toUpperCase() + task.priority.slice(1)} priority</Label>
       {task.status === 'complete' ? <Muted>Completed</Muted> : isTaskOverdue(task, date) ? <Label style={{ color: colors.danger }}>Overdue · {task.originalDueDate ?? task.dueDate}</Label> : null}
     </View>
     {history ? <>
@@ -46,7 +50,10 @@ export function TaskList({ tasks, data, renderTask, showEmptySections = false, c
 }) {
   const { colors } = useAppTheme();
   // Local to this list instance: Today and each Review category are independent.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const { preferences, save } = useDevicePreferences();
+  const scope = (collapsibleGroups ?? 'tasks').replace(/\d{4}-\d{2}-\d{2}/g, 'day');
+  const collapsed = Object.fromEntries(Object.entries(preferences.collapsed).filter(([key]) => key.startsWith(scope + ':')).map(([key, value]) => [key.slice(scope.length + 1), value]));
+  const collapse = (key: string, value: boolean) => { void save({ collapsed: { [scope + ':' + key]: value } }).catch(() => undefined); };
   const groups = collapsibleGroups ? groupTasksBySectionAndProject(data, tasks)
     : groupTasksBySection(data, tasks).map(group => ({ ...group, projectGroups: undefined }));
   return <View testID={collapsibleGroups ? `task-list-${collapsibleGroups}` : undefined} style={{ gap: 16 }}>{groups.filter(group => showEmptySections || group.tasks.length).map(group => {
@@ -57,7 +64,7 @@ export function TaskList({ tasks, data, renderTask, showEmptySections = false, c
       {collapsibleGroups ? <Pressable accessibilityRole="button"
         accessibilityLabel={`${collapsibleGroups}, ${section.name}, ${grouped.length} ${grouped.length === 1 ? 'task' : 'tasks'}`}
         accessibilityHint={expanded ? 'Collapse section' : 'Expand section'} accessibilityState={{ expanded }} aria-expanded={expanded}
-        onPress={() => setCollapsed(current => ({ ...current, [section.id]: expanded }))}
+        onPress={() => collapse(section.id, expanded)}
         style={({ pressed }) => ({ minHeight: 44, borderLeftWidth: 3, borderLeftColor: section.color, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.soft, opacity: pressed ? 0.7 : 1 })}>
         {heading}<Text style={{ color: colors.muted, fontSize: 18 }}>{expanded ? '⌄' : '›'}</Text>
       </Pressable> : <View accessibilityRole="header" style={{ borderLeftWidth: 3, borderLeftColor: section.color, paddingLeft: 10 }}>{heading}</View>}
@@ -65,14 +72,14 @@ export function TaskList({ tasks, data, renderTask, showEmptySections = false, c
         {group.projectGroups ? group.projectGroups.map(projectGroup => {
           const projectKey = `project:${section.id}:${projectGroup.project ? `linked:${projectGroup.project.id}` : 'unlinked'}`;
           const projectExpanded = !(collapsed[projectKey] ?? false);
-          const projectName = projectGroup.project?.name ?? 'No project';
+          const projectName = projectGroup.project?.name ?? 'Other tasks';
           const count = projectGroup.tasks.length;
           return <View key={projectGroup.project?.id ?? 'no-project'} testID={`task-project-group-${collapsibleGroups}-${section.id}-${projectGroup.project?.id ?? 'no-project'}`} style={{ gap: 6 }}>
             <Pressable accessibilityRole="button"
               accessibilityLabel={`${collapsibleGroups}, ${section.name}, ${projectName}, ${count} ${count === 1 ? 'task' : 'tasks'}`}
               accessibilityHint={projectExpanded ? 'Collapse project tasks' : 'Expand project tasks'}
               accessibilityState={{ expanded: projectExpanded }} aria-expanded={projectExpanded}
-              onPress={() => setCollapsed(current => ({ ...current, [projectKey]: projectExpanded }))}
+              onPress={() => collapse(projectKey, projectExpanded)}
               style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: pressed ? 0.7 : 1 })}>
               <Text accessibilityRole="header" style={{ color: colors.muted, fontWeight: '600', fontSize: 13, flex: 1, minWidth: 0 }}>{projectName} · {count}</Text>
               <Text style={{ color: colors.muted, fontSize: 16 }}>{projectExpanded ? '⌄' : '›'}</Text>

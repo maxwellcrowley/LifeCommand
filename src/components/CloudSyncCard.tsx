@@ -1,10 +1,13 @@
+import { AppText as Text, AppTextInput as TextInput } from '@/src/components/AppText';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, Text, TextInput } from 'react-native';
+import { Modal, Pressable } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { cloudAuth, cloudGateway, config } from '../cloud/client';
 import { createCloudSync, type DownloadPreview, type UploadPreview } from '../cloud/sync';
-import { exportAppData } from '../data/repository';
+import { currentRepository } from '../data/repository';
+import { accountStorage } from '../data/accountStorage';
+import { useAccount } from '../cloud/AccountBoundary';
 import { useAppData } from '../data/useAppData';
 import { dataSummary } from '../domain/transfer';
 import { useAppTheme } from '../theme/ThemeProvider';
@@ -24,7 +27,10 @@ type User = { id: string; email?: string };
 export function CloudSyncCard({ disabled }: { disabled: boolean }) {
   const { colors } = useAppTheme();
   const { importData, resetVersion } = useAppData();
-  const sync = useMemo(() => createCloudSync(cloudGateway, AsyncStorage, config?.url ?? '', exportAppData, importData), [importData]);
+  const { scope, label: accountLabel } = useAccount();
+  const [repository] = useState(currentRepository);
+  const revisions = useMemo(() => accountStorage(AsyncStorage, scope), [scope]);
+  const sync = useMemo(() => createCloudSync(cloudGateway, revisions, config?.url ?? '', repository.exportAppData, importData), [importData, repository, revisions]);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!config);
   const [email, setEmail] = useState('');
@@ -88,7 +94,7 @@ export function CloudSyncCard({ disabled }: { disabled: boolean }) {
   const close = () => { if (!inFlight.current) { setSelection(undefined); setError(''); } };
   const inputStyle = { minHeight: 48, padding: 12, borderRadius: 10, color: colors.text, backgroundColor: colors.background };
   return <Card title="Cloud Sync">
-    <Muted>Manual backup and restore across your devices. Local data stays in use until you confirm a cloud download. Signing in does not transfer data.</Muted>
+    <Muted>Manual backup and restore across your devices. Use explicit previews to resolve conflicts. Signing in opens isolated account data; guest data is kept separately.</Muted>
     {!config ? <Muted>Not configured · Local-only mode. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env.local and restart Expo to enable Cloud Sync.</Muted> : <>
       <Label>{!authReady ? 'Checking sign-in…' : user ? `Signed in as ${user.email ?? user.id}` : 'Signed out'}</Label>
       {!user ? <>
@@ -104,7 +110,7 @@ export function CloudSyncCard({ disabled }: { disabled: boolean }) {
         <Action label="Upload this device’s local data to cloud" disabled={blocked} onPress={() => void prepare('upload')} />
         <Action label="Download cloud data to this device" disabled={blocked} onPress={() => void prepare('download')} />
         <Action label="Refresh cloud status" disabled={blocked} onPress={() => { setError(''); setStatusAttempt(value => value + 1); }} />
-        <Action label="Sign out" disabled={blocked} onPress={() => void run('Signing out…', async () => { await cloudAuth.signOut(); setMessage('Signed out. Local data remains on this device.'); })} />
+        <Action label="Sign out" disabled={blocked} onPress={() => void run('Signing out…', async () => { await cloudAuth.signOut(); setMessage('Signed out. Account data is retained separately; guest data is now active.'); })} />
       </>}
     </>}
     {busy ? <Text accessibilityLiveRegion="polite" style={{ color: colors.text }}>{busy}</Text> : null}
@@ -113,6 +119,7 @@ export function CloudSyncCard({ disabled }: { disabled: boolean }) {
     <Modal visible={!!selection} onRequestClose={close} animationType="none">
       <SafeAreaProvider><SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
         <Page title={selection?.kind === 'upload' ? 'Cloud upload preview' : 'Cloud download preview'}>
+          <Muted>Account: {accountLabel}. Destination: {selection?.kind === 'upload' ? 'this account’s cloud snapshot' : 'this account on this device'}.</Muted>
           {selection ? <>
             <Card title="Snapshot summary"><Muted>{dataSummary(selection.preview.data)}</Muted>
               <Muted>Exported: {selection.preview.exportedAt ? new Date(selection.preview.exportedAt).toLocaleString() : 'Unknown'}</Muted>
@@ -124,6 +131,7 @@ export function CloudSyncCard({ disabled }: { disabled: boolean }) {
                 <Muted>This uploads the saved local snapshot shown above and replaces your account’s cloud copy. It does not merge data. Changes saved after this preview are not included.</Muted>
                 {selection.stale ? <FormError>Newer cloud revision: another device may have uploaded changes this device has not restored. Download first to preserve them, or explicitly overwrite below.</FormError> : null}
                 <Muted>Cloud revision: {selection.expectedRevision}. {selection.updatedAt ? `Updated: ${new Date(selection.updatedAt).toLocaleString()}.` : 'First upload.'}</Muted>
+                <Muted>Serialized upload: {selection.payloadBytes.toLocaleString()} UTF-8 bytes of 10,485,760 allowed.</Muted>
               </> : <>
                 <Muted>This replaces all local tasks, projects, events, sections, settings and rollover history. It does not merge data. Unsaved drafts will be discarded. A local recovery backup must succeed first.</Muted>
                 <Muted>Cloud revision: {selection.revision}. Updated: {new Date(selection.updatedAt).toLocaleString()}. Other tabs must reload; automatic local rollover resumes after replacement.</Muted>

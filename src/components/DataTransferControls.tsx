@@ -1,7 +1,8 @@
+import { AppText as Text } from '@/src/components/AppText';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, Text } from 'react-native';
+import { Modal, Pressable } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { exportAppData, listRecoveryBackups, previewRecoveryBackup } from '@/src/data/repository';
+import { currentRepository } from '@/src/data/repository';
 import type { MergePreview, RecoveryBackup, RecoveryPreview } from '@/src/data/storage';
 import { useAppData } from '@/src/data/useAppData';
 import { dataSummary, validateImport, type ImportPreview } from '@/src/domain/transfer';
@@ -9,6 +10,7 @@ import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { DataFilePicker, downloadData, supportsDataFiles } from './DataFiles';
 import { Card, Muted, Page } from './ui';
 import { FormError } from './TaskForm';
+import { DataDestination } from './DataDestination';
 
 function Action({ label, disabled, onPress, destructive = false }: { label: string; disabled: boolean; onPress: () => void; destructive?: boolean }) {
   const { colors } = useAppTheme();
@@ -19,8 +21,10 @@ function Action({ label, disabled, onPress, destructive = false }: { label: stri
 }
 
 type Selection = { kind: 'import'; raw: string; preview: ImportPreview } | { kind: 'merge'; raw: string; preview: MergePreview } | { kind: 'restore'; preview: RecoveryPreview };
-const mergeScope = 'Adds missing projects and tasks without deleting or overwriting existing data. Keeps your sections, settings, rollover history, calendar and family events, external calendar data, notification preferences and cloud configuration. No cloud upload is performed.';
+const mergeScope = 'Adds missing projects, tasks and recurring series. Existing series templates win; generation cursors advance to prevent duplicate occurrences. Keeps your sections, saved views, settings, rollover history, events and device preferences. Automatic sync, if enabled, can subsequently synchronize the merged data.';
 export function DataTransferControls({ disabled, onReplace }: { disabled: boolean; onReplace: () => void }) {
+  const [repository] = useState(currentRepository);
+  const { exportAppData, listRecoveryBackups, previewRecoveryBackup } = repository;
   const { colors } = useAppTheme();
   const { importData, previewMerge, mergeData, restoreBackup, resetVersion } = useAppData();
   const [screen, setScreen] = useState<'import' | 'merge' | 'backups' | null>(null);
@@ -34,7 +38,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
     let active = true;
     listRecoveryBackups().then(items => { if (active) setBackups(items); }).catch(() => { if (active) setError('Could not read recovery backups. Use Refresh recovery backups to retry.'); });
     return () => { active = false; };
-  }, [resetVersion]);
+  }, [resetVersion, listRecoveryBackups]);
   const run = async (operation: () => Promise<void>) => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(''); setMessage('');
@@ -59,7 +63,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
   });
   const blocked = busy || disabled;
   return <>
-    <Muted>Save a JSON copy outside this browser. Replace imports and restores replace all active data after saving a local recovery copy. Merge import only adds missing projects and tasks. Files and backups contain unencrypted personal data.</Muted>
+    <Muted>Save a JSON copy outside this browser. Replace imports and restores replace all active data after saving a local recovery copy. Merge import adds missing projects, tasks and recurring series. Files and backups contain unencrypted personal data.</Muted>
     <Action label="Export local data" disabled={blocked || !supportsDataFiles} onPress={() => void run(async () => { downloadData(await exportAppData()); setMessage('Export download requested. Keep the JSON file somewhere safe.'); })} />
     <Action label="Import and replace local data" destructive disabled={blocked || !supportsDataFiles} onPress={() => { setError(''); setMessage(''); setSelection(undefined); setScreen('import'); }} />
     <Action label="Merge import projects/tasks" disabled={blocked || !supportsDataFiles} onPress={() => { setError(''); setMessage(''); setSelection(undefined); setScreen('merge'); }} />
@@ -71,6 +75,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
     <Modal visible={screen !== null} onRequestClose={close} animationType="none">
       <SafeAreaProvider><SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
         <Page title={selection ? (selection.kind === 'merge' ? 'Merge import preview' : selection.kind === 'import' ? 'Import preview' : 'Restore preview') : screen === 'merge' ? 'Merge import projects/tasks' : screen === 'import' ? 'Import and replace local data' : 'Recovery backups'}>
+          <DataDestination />
           {error ? <FormError>{error}</FormError> : null}
           {selection?.kind === 'merge' ? <>
             <Card title="Projects and tasks to merge">
@@ -87,7 +92,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
             <Card title="Preserve existing local data">
               <Muted>{mergeScope}</Muted>
               <Muted>Existing IDs always win, including conflicting edits. Projects also match by normalized name. Tasks also match by normalized title, mapped section and project, due date, points, priority and owner. Duplicates are skipped, including archived records.</Muted>
-              <Muted>Previously deleted items may be added again because deletion history is not stored. Sections map by ID or name; tasks with missing links are skipped.</Muted>
+              <Muted>{selection.preview.counts.seriesChanged ?? 0} recurring series added or generation cursors advanced. Deleted recurring occurrences covered by a local cursor stay deleted. Previously deleted ordinary tasks may be added again by this explicit import. Sections map by ID or name; tasks with missing links are skipped.</Muted>
               <Muted>A recovery backup must succeed before any additions are saved. If nothing is new, no data or backup is written. Other open tabs will ask you to reload. Existing local data will be preserved.</Muted>
             </Card>
             <Action label="Confirm merge import" disabled={busy} onPress={() => void confirm()} />

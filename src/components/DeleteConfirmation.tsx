@@ -1,5 +1,6 @@
+import { AppText as Text } from '@/src/components/AppText';
 import { useRef, useState } from 'react';
-import { Modal, ScrollView, Text, View } from 'react-native';
+import { Modal, ScrollView, View } from 'react-native';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Action } from './TaskScheduling';
 import { FormError } from './TaskForm';
@@ -24,16 +25,16 @@ export function DeleteConfirmation({ kind, name, disabled, onDelete, onDeleted }
   };
   return <View style={{ paddingTop: 16 }}>
     <Action label={`Delete ${kind}`} danger disabled={disabled} onPress={() => { setError(''); setOpen(true); }} />
-    <Modal visible={open} transparent animationType="fade" onRequestClose={cancel}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={cancel}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#0008' }}>
         <View accessibilityViewIsModal style={{ maxHeight: '85%', width: '100%', maxWidth: 520, alignSelf: 'center', backgroundColor: colors.surface, borderRadius: 16, padding: 16 }}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 16 }}>
             <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>Delete {kind}?</Text>
-            <Muted>“{name}” will be permanently deleted. This cannot be undone.</Muted>
+            <Muted>“{name}” will be deleted. {kind === 'task' ? 'Undo is available until a conflicting change or data replacement.' : 'Project deletion cannot be undone.'}</Muted>
             <Muted>{kind === 'project' ? 'All linked tasks will be kept and unlinked from this project. Their sections, schedules, status, and reminders will stay the same.' : 'This task will be removed from all task lists and project progress. Its project will be kept.'}</Muted>
             {error ? <FormError>{error}</FormError> : null}
             <Action label="Cancel deletion" disabled={saving} onPress={cancel} />
-            <Action label={`Permanently delete ${kind}`} text={saving ? 'Deleting…' : `Permanently delete ${kind}`} danger disabled={saving || disabled} onPress={() => void remove()} />
+            <Action label={kind === 'task' ? 'Confirm delete task' : 'Permanently delete project'} text={saving ? 'Deleting…' : kind === 'task' ? 'Confirm delete task' : 'Permanently delete project'} danger disabled={saving || disabled} onPress={() => void remove()} />
           </ScrollView>
         </View>
       </View>

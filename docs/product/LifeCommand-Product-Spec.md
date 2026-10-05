@@ -1,5 +1,27 @@
 # LifeCommand Product Spec
 
+## Implemented usability and personalization upgrade
+
+Story 027 extends the established mobile/web design with personal sections and
+device presentation, accessible task quick actions and guarded Undo, configurable
+Today/group visibility and rollover, isolated accounts and optional automatic
+snapshot sync, read-only calendar visibility, search/saved views, recurring task
+series, ambient privacy/profiles and skippable empty-data onboarding. Advanced
+choices live in Settings. System text scaling remains enabled and section/priority
+meaning always has text labels as well as color.
+
+Existing installations keep their data and rollover behavior and bypass first-run
+setup. New installations start empty; samples require an explicit choice. Today
+defaults to tasks and calendar, with Next Event, rollover and reminders hidden.
+Device appearance/layout/ambient preferences are excluded from synchronization.
+Competing cloud edits require explicit resolution; recovery backups precede data
+replacement. Recurring occurrences retain independent completion/edit history;
+task-completion analytics remain on the backlog.
+
+See [Story 027](../stories/STORY-027_USABILITY_PERSONALIZATION.md),
+[current data contracts](../architecture/DATA_MODEL.md) and
+[verification and device QA](../USABILITY_UPGRADE_DELIVERY.md).
+
 ## Working Name
 
 LifeCommand is a personal operations app for managing daily tasks, section backlogs, projects, calendars, family events, and an ambient household display.
@@ -510,3 +532,24 @@ The first milestone should prove:
 ```text
 Create task -> assign section/date -> show on Today -> miss rollover -> mark overdue -> move to next day -> show on ambient display
 ```
+# Today and workflow polish — October 5, 2026
+
+The current Today design supersedes the historical dashboard proposal below:
+Tasks and Schedule are separate, with tasks first on phones and side-by-side
+columns where content fits. A pinned phone jump control keeps appointments
+reachable. Add task uses today as its initial date; Choose from backlog retains
+atomic bulk scheduling. Tasks group by saved section order, alphabetical project,
+then priority; Other tasks is last. Completed today has a separate collapsed group.
+
+Schedule combines visible local, family and external events, all-day first, with
+a current-time marker and subtle upcoming emphasis. Past events can collapse.
+There is no separate Next Event panel. Explicit reminder/rollover visibility is
+retained, and both start hidden. Existing Next Event visibility migrates to Schedule.
+
+Settings separates account/data, calendar refresh, account planning and device
+display/notification/ambient controls. Destination previews name the active account
+and explain automatic sync consequences. Capture starts with title, section and
+date; optional details remain available. Analytics, shared projects and task
+time-blocking are not part of this pass.
+
+Acceptance and remaining device/provider checks: [QA checklist](../qa/POLISH_RELIABILITY_QA.md).

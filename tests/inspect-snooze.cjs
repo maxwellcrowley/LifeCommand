@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync, existsSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
-const root = resolve('dist');
+const root = resolve(process.env.POLISH_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -58,7 +58,7 @@ async function main() {
   await a.evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))})`);
   // Today no longer exposes reminder actions. Their lifecycle remains covered by
   // reminder-actions.test.ts; keep browser coverage for quiet hours and storage.
-  await a.go('/', "Today's calendar");
+  await a.go('/', 'Schedule');
   assert.equal(await a.evaluate(`document.querySelector('[aria-label^="Snooze"], [aria-label^="Acknowledge:"]') !== null`), false);
   let saved = await read();
   assert.equal(saved.tasks.filter(task => task.reminderEnabled).length, 4);

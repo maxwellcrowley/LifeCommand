@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { cloudConfig } from '../src/cloud/config';
-import { CloudConflictError, createCloudSync, serializeUpload, type CloudSnapshot } from '../src/cloud/sync';
+import { CloudConflictError, createCloudSync, serializeUpload, utf8ByteLength, type CloudSnapshot } from '../src/cloud/sync';
 import { createDefaultAppData } from '../src/domain/defaults';
 import { normalizeAppData } from '../src/domain/normalize';
 import { seedData } from '../src/domain/seed';
 import { createExport, validateImport } from '../src/domain/transfer';
 import { persistedSnapshot } from '../src/domain/migrations';
+import { MAX_TRANSFER_BYTES } from '../src/domain/transfer';
 import { createRepository, RECOVERY_PREFIX, STORAGE_KEY } from '../src/data/storage';
 
 function fixture() {
@@ -32,7 +33,7 @@ function fixture() {
     write: async (id: string, payload: ReturnType<typeof createExport>, revision: number) => {
       if ((row?.revision ?? 0) !== revision) throw new CloudConflictError();
       cloudWrites++;
-      row = { user_id: id, payload, revision: revision + 1, schema_version: 3, updated_at: new Date().toISOString() };
+      row = { user_id: id, payload, revision: revision + 1, schema_version: 4, updated_at: new Date().toISOString() };
       return row;
     },
   };
@@ -40,7 +41,7 @@ function fixture() {
   return { original, values, writes, storage, repo, sync, gateway,
     setUser: (id: string) => { userId = id; }, failBackup: () => { failBackup = true; },
     row: () => row!, cloudWrites: () => cloudWrites,
-    setCloud: (overrides: Partial<CloudSnapshot> = {}) => { row = { user_id: userId, payload: createExport(normalizeAppData(seedData)), revision: 1, schema_version: 3, updated_at: '2026-09-29T12:00:00Z', ...overrides }; },
+    setCloud: (overrides: Partial<CloudSnapshot> = {}) => { row = { user_id: userId, payload: createExport(normalizeAppData(seedData)), revision: 1, schema_version: 4, updated_at: '2026-09-29T12:00:00Z', ...overrides }; },
   };
 }
 
@@ -55,6 +56,32 @@ test('upload serialization is the validated export envelope including all app da
   assert.deepEqual(serializeUpload(raw), JSON.parse(raw));
   assert.deepEqual(validateImport(raw).data, normalizeAppData(seedData));
   assert.throws(() => serializeUpload('{broken'), /JSON/);
+});
+test('current schema upload contract has the required envelope and measures UTF-8 without exposing data', async () => {
+  const raw = JSON.stringify(createExport(createDefaultAppData()));
+  const contract = serializeUpload(raw);
+  assert.equal(contract.format, 'lifecommand-export');
+  assert.equal(contract.schemaVersion, 4);
+  assert.equal(typeof contract.exportedAt, 'string');
+  assert.equal(typeof contract.data, 'object');
+  assert.equal(utf8ByteLength('{"x":"界"}'), 11);
+  assert.ok(utf8ByteLength(raw) > 0);
+});
+test('older portable schemas remain compatible for restore while upload requires current schema', async () => {
+  const data = createDefaultAppData();
+  for (const schemaVersion of [1, 2, 3]) {
+    const raw = JSON.stringify({ format: 'lifecommand-export', schemaVersion, exportedAt: new Date().toISOString(), data });
+    assert.doesNotThrow(() => validateImport(raw));
+    assert.throws(() => serializeUpload(raw), /Export local data again/);
+  }
+});
+test('oversized cloud upload is rejected by the client byte limit before any cloud write', async () => {
+  const f = fixture();
+  const selection = await f.sync.prepareUpload();
+  const oversized = { ...selection, raw: `{"format":"lifecommand-export","schemaVersion":4,"exportedAt":"2026-10-04T00:00:00Z","data":{}}${' '.repeat(MAX_TRANSFER_BYTES)}` };
+  await assert.rejects(f.sync.upload(oversized), /10 MB/);
+  assert.equal(f.cloudWrites(), 0);
+  assert.equal(f.values.get(STORAGE_KEY), f.original);
 });
 test('upload preview is read-only and confirmed upload saves per-account known revision', async () => {
   const f = fixture();
@@ -87,6 +114,17 @@ test('concurrent upload and first-upload races reject without overwriting', asyn
     assert.equal(f.cloudWrites(), 0);
     assert.deepEqual(f.writes, []);
   }
+});
+test('overwrite preview conflict requires a fresh preview and preserves the newer cloud copy', async () => {
+  const f = fixture(); f.setCloud({ revision: 2 });
+  const selection = await f.sync.prepareUpload();
+  assert.equal(selection.stale, true);
+  f.setCloud({ revision: 3 });
+  const preserved = f.row();
+  await assert.rejects(f.sync.upload(selection), CloudConflictError);
+  assert.equal(f.row().revision, 3);
+  assert.deepEqual(f.row(), preserved);
+  assert.equal(f.cloudWrites(), 0);
 });
 test('invalid downloads and future schemas are rejected before replacement or backup', async () => {
   for (const overrides of [{ payload: {} }, { payload: { ...createExport(createDefaultAppData()), schemaVersion: 99 } }, { schema_version: 2 }, { revision: 0 }, { user_id: 'other' }]) {

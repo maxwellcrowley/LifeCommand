@@ -1,4 +1,5 @@
-import { Platform, Pressable, Switch, TextInput, View } from 'react-native';
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { Platform, Pressable, Switch, View } from 'react-native';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
 import { config, manualSample } from '../calendar/provider';
 import { sourceColors } from '../domain/events';
@@ -35,10 +36,12 @@ export function CalendarSyncCard() {
         <Action label="Disconnect account" disabled={sync.busy || !sync.ready} onPress={() => void sync.disconnect(account.id)} />
       </View>
       {sync.accountErrors[account.id] ? <><FormError>{sync.accountErrors[account.id]}</FormError><Action label="Retry sync" disabled={sync.busy || !sync.ready || (account.mode === 'manual' ? !config.manualEnabled : !sync.support[account.provider].configured)} onPress={() => void sync.sync(account.id)} /></> : null}
+      {sync.cache.events.filter(event => event.accountId === account.id && sync.cache.hiddenEventIds?.includes(event.id)).map(event => <Action key={event.id} label={`Unhide event: ${event.title}`} disabled={sync.busy} onPress={() => void sync.hideEvent(event.id, false)} />)}
       <Label>Calendars to show · {sync.cache.calendars.filter(calendar => calendar.accountId === account.id && calendar.syncEnabled).length} selected</Label>
       {!sync.cache.calendars.some(calendar => calendar.accountId === account.id) ? <Muted>{account.lastSyncedAt ? 'No readable calendars were found for this account.' : 'Your calendars will appear after a successful sync. Use Sync now to retry.'}</Muted> : null}
       {sync.cache.calendars.filter(calendar => calendar.accountId === account.id).map(calendar => <View key={calendar.id} style={{ gap: 4, paddingLeft: 10, borderLeftWidth: 4, borderLeftColor: calendar.colorOverride ?? calendar.color ?? sourceColors[account.provider] }}>
         <Row><View style={{ flex: 1 }}><Label>{calendar.name}</Label></View><Switch accessibilityLabel={`Import calendar: ${calendar.name}`} value={calendar.syncEnabled} disabled={sync.busy} onValueChange={value => void sync.updateCalendar(account.id, calendar.id, { syncEnabled: value })} /></Row>
+        <Row><Label>Visible in app</Label><Switch accessibilityLabel={`Show calendar: ${calendar.name}`} value={calendar.visible !== false} disabled={sync.busy} onValueChange={value => void sync.updateCalendar(account.id, calendar.id, { visible: value })} /></Row>
         <Row><View style={{ flex: 1 }}><Muted>Show in Family mode</Muted></View><Switch accessibilityLabel={`Family calendar: ${calendar.name}`} value={!!calendar.family} disabled={sync.busy} onValueChange={value => void sync.updateCalendar(account.id, calendar.id, { family: value })} /></Row>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
           {palette.map(option => <Pressable key={option.color} accessibilityRole="radio" accessibilityLabel={`${calendar.name} color: ${option.name}`} accessibilityState={{ checked: calendar.colorOverride === option.color, disabled: sync.busy }} disabled={sync.busy} onPress={() => void sync.updateCalendar(account.id, calendar.id, { colorOverride: option.color })} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: calendar.colorOverride === option.color ? 2 : 0, borderColor: colors.text }}><View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: option.color }} /></Pressable>)}

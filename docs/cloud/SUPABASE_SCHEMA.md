@@ -27,17 +27,21 @@ Supabase Auth owns `auth.users`; LifeCommand does not create a password table. `
 | --- | --- |
 | `user_id uuid primary key` | References `auth.users(id)`; deleting the account cascades to its snapshot. |
 | `payload jsonb` | Complete `lifecommand-export` envelope: format, schemaVersion, exportedAt, data. |
-| `schema_version integer` | Matches the payload's version; uploads currently require version 3. |
+| `schema_version integer` | Matches the payload's version; current uploads use version 4. Versions 1–4 remain readable for compatibility. |
 | `revision bigint` | Starts at 1; server increments each successful write. Restricted to JavaScript safe integers. |
 | `updated_at timestamptz` | Server timestamp for the last successful upload. |
 
-Snapshots include sections, tasks (including archived tasks), projects, personal/family events, app settings, and rollover history. Auth sessions, device notification settings, local recovery copies, and cloud revision metadata are excluded. The app data/export contract stays at version 3; `docs/architecture/DATA_MODEL.md` is unchanged.
+Snapshots include sections, tasks (including archived tasks), projects, personal/family events, app settings, and rollover history. Auth sessions, device notification settings, local recovery copies, and cloud revision metadata are excluded. The current app data/export contract is schema 4; older compatible exports remain readable.
 
 ## Security and revision control
 
 RLS policies limit SELECT/INSERT/UPDATE to `auth.uid() = user_id`. Anonymous users have no access. Authenticated users have SELECT permission only; direct table writes/deletes are revoked so clients cannot bypass revision checks. Writes use `write_cloud_snapshot(p_user_id, p_payload, p_schema_version, p_expected_revision)`.
 
-The function is `SECURITY DEFINER` with an empty search path and fully qualified relations. Because the function's owner bypasses RLS, it explicitly rejects missing/mismatched `auth.uid()` and uses that UID for every write. Only authenticated callers may execute it. Do not grant direct writes or expose a service role key in the app. The RPC validates the envelope, version, and a 10 MB JSON text limit; detailed record/reference validation is performed by the same app validator used for import/export. JSONB text formatting can make the server size check slightly more restrictive near the limit.
+The function is `SECURITY DEFINER` with an empty search path and fully qualified relations. Because the function's owner bypasses RLS, it explicitly rejects missing/mismatched `auth.uid()` and uses that UID for every write. Only authenticated callers may execute it. Do not grant direct writes or expose a service role key in the app. The RPC validates the envelope, version, and a 10 MiB JSON text limit; detailed record/reference validation is performed by the same app validator used for import/export. Unsupported schema, malformed envelope, oversized payload, and revision conflict have distinct errors. JSONB text formatting can make the server size check slightly more restrictive near the limit.
+
+### Existing project migration for current schema uploads
+
+If this project was initialized before schema 4, open **Supabase Dashboard → SQL Editor → New query**, paste and run [`migrations/20261004_schema4_uploads.sql`](./migrations/20261004_schema4_uploads.sql), and confirm the query completes successfully. This uses `CREATE OR REPLACE FUNCTION` only; it preserves the existing table, policies, grants, rows, and cloud revision. Do not run a table reset or delete the existing snapshot. The migration retains the authenticated UID check, 10 MiB bound and compare-and-swap behavior. The local `supabase_schema.sql` contains the same current RPC definition for fresh installs.
 
 The first upload uses expected revision 0 and `INSERT ... ON CONFLICT DO NOTHING`; later uploads use `UPDATE ... WHERE revision = expected`. A missing match raises SQLSTATE `40001`. Concurrent writers cannot both replace the same revision. A failed/ambiguous network response must be reconciled by previewing again, not blindly repeating a write.
 
@@ -49,7 +53,7 @@ Downloads validate the cloud owner, metadata, envelope version, record fields, r
 
 Confirmed restore calls the existing provider `importData` path. It validates again and writes an exact local recovery copy **before** replacing active data. Backup failure aborts replacement; active-write failure retains the recovery copy. Recovery entries appear as **Before import** in Data Management because cloud restore shares this path. The provider refreshes data and increments its existing draft-reset generation, including Settings drafts. Existing browser cross-tab checks still require other tabs to reload. Local rollover resumes after replacement.
 
-Uploads use the saved local export captured at preview time. Edits saved after that preview are not included. Downloads replace the local data present at confirmation, with a recovery copy of that data. They do not merge. If known-revision persistence fails after a successful transfer, the UI reports completion with a warning; subsequent uploads conservatively warn again.
+Uploads use the saved local export captured at preview time. Edits saved after that preview are not included. Confirm rechecks the latest cloud revision before calling the RPC, and the RPC compare-and-swap closes the remaining race; a changed revision requires a fresh preview. Downloads replace the local data present at confirmation, with a recovery copy of that data. They do not merge. If known-revision persistence fails after a successful transfer, the UI reports completion with a warning; subsequent uploads conservatively warn again.
 
 ## Verification against a real project
 

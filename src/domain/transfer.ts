@@ -2,11 +2,11 @@ import type { AppData } from './models';
 import { normalizeAppData } from './normalize';
 import { isDateKey } from './dates';
 
-export const DATA_VERSION = 3;
+export const DATA_VERSION = 4;
 export const MAX_TRANSFER_BYTES = 10 * 1024 * 1024;
 export interface DataExport {
   format: 'lifecommand-export';
-  schemaVersion: 3;
+  schemaVersion: 4;
   exportedAt: string;
   data: AppData;
 }
@@ -80,6 +80,20 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
     return task;
   }) } : input;
   const data = normalizeAppData(checked);
+  for (const collection of [data.savedViews ?? [], data.recurringSeries ?? []]) {
+    const ids = new Set<string>();
+    for (const item of collection) { nonempty(item.id, 'ID'); if (ids.has(item.id)) throw Error('Duplicate view or series ID.'); ids.add(item.id); }
+  }
+  for (const series of data.recurringSeries ?? []) if (!data.sections.some(s => s.id === series.sectionId) || (series.projectId && !data.projects.some(p => p.id === series.projectId))) throw Error('Recurring series has a missing section or project.');
+  for (const view of data.savedViews ?? []) { nonempty(view.name, 'Saved view name'); }
+  const occurrences = new Set<string>();
+  for (const task of data.tasks) if (task.recurrenceId || task.occurrenceDate) {
+    const key = `${task.recurrenceId}:${task.occurrenceDate}`;
+    const series = data.recurringSeries?.find(s => s.id === task.recurrenceId);
+    if (!series?.generatedThrough || task.occurrenceDate! > series.generatedThrough) throw Error('Recurring occurrence is beyond its generation cursor.');
+    if (!task.recurrenceId || !task.occurrenceDate || !data.recurringSeries?.some(s => s.id === task.recurrenceId) || occurrences.has(key) || task.id !== `occurrence:${encodeURIComponent(task.recurrenceId)}:${task.occurrenceDate}`) throw Error('Invalid or duplicate recurring occurrence.');
+    occurrences.add(key);
+  }
   // Empty sections are intentionally upgraded to the standard sections.
   const supplied = { ...checked, sections: (input.sections as unknown[]).length ? input.sections : data.sections };
   compareSupplied(supplied, data, 'data');
@@ -92,7 +106,7 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
 export function validateImport(raw: string, allowUnresolvedTaskProjects = false): ImportPreview {
   const envelope = object(parseTransferJSON(raw), 'Export');
   if (envelope.format !== 'lifecommand-export') throw Error('Choose a LifeCommand export (format: lifecommand-export).');
-  if (envelope.schemaVersion !== 1 && envelope.schemaVersion !== 2 && envelope.schemaVersion !== DATA_VERSION) throw Error(`Unsupported data version ${String(envelope.schemaVersion)}. This app supports version ${DATA_VERSION}; use a compatible LifeCommand release.`);
+  if (envelope.schemaVersion !== 1 && envelope.schemaVersion !== 2 && envelope.schemaVersion !== 3 && envelope.schemaVersion !== DATA_VERSION) throw Error(`Unsupported data version ${String(envelope.schemaVersion)}. This app supports version ${DATA_VERSION}; use a compatible LifeCommand release.`);
   timestamp(envelope.exportedAt, 'exportedAt');
   return { ...validateSnapshot(envelope.data, allowUnresolvedTaskProjects), exportedAt: envelope.exportedAt as string };
 }
@@ -102,5 +116,5 @@ export function createExport(data: AppData, now = new Date()): DataExport {
 }
 
 export function dataSummary(data: AppData): string {
-  return `${data.sections.length} sections · ${data.tasks.length} tasks · ${data.projects.length} projects · ${data.calendarEvents.length} calendar events · ${data.familyEvents.length} family events. Includes archived records, settings and rollover history.`;
+  return `${data.sections.length} sections · ${data.tasks.length} tasks · ${data.projects.length} projects · ${data.calendarEvents.length} calendar events · ${data.familyEvents.length} family events · ${data.recurringSeries?.length ?? 0} recurring series · ${data.savedViews?.length ?? 0} saved views. Includes archived records, settings and rollover history.`;
 }

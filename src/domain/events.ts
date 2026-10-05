@@ -113,7 +113,7 @@ export function calendarDays(data: EventData & Pick<AppData, 'tasks'>, from: str
   for (const task of data.tasks) if (task.dueDate && task.dueDate >= from && task.dueDate <= through && task.status !== 'complete' && task.status !== 'archived') group(task.dueDate).tasks.push(task);
   return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date)).map(day => ({ ...day, events: day.events.sort(compareEvents), tasks: day.tasks.sort((a, b) => Number(b.priority === 'high') - Number(a.priority === 'high') || a.title.localeCompare(b.title)) }));
 }
-export function weekStart(date: string): string {
+export function weekStart(date: string, starts: 'monday' | 'sunday' = 'monday'): string {
   const weekday = new Date(`${date}T12:00:00`).getDay();
-  return addDays(date, -((weekday + 6) % 7));
+  return addDays(date, -(starts === 'sunday' ? weekday : (weekday + 6) % 7));
 }

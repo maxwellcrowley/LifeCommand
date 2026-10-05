@@ -1,5 +1,6 @@
+import { AppText as Text } from '@/src/components/AppText';
 import { Link } from 'expo-router';
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import { ambientModeLabels } from '@/src/domain/ambient';
 import { ambientChoices } from '@/src/domain/settings';
 import type { AppSettings } from '@/src/domain/models';

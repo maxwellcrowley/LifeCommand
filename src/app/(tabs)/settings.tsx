@@ -1,8 +1,15 @@
+import { useAccount } from '@/src/cloud/AccountBoundary';
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { AmbientProfiles } from '@/src/components/AmbientProfiles';
+import { RecurrenceSettings } from '@/src/components/RecurrenceSettings';
+import { AutomaticSyncCard } from '@/src/components/AutomaticSyncCard';
+import { TodaySettings, DayPlanningSettings } from '@/src/components/TodaySettings';
+import { PersonalizationSettings } from '@/src/components/PersonalizationSettings';
 import { CalendarSyncCard } from '@/src/components/CalendarSyncCard';
 import { ReminderSettingsCard } from '@/src/components/ReminderSettingsCard';
 import { NotificationSettingsCard } from '@/src/components/NotificationSettingsCard';
 import { useState } from 'react';
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import { AmbientSettingsCard } from '@/src/components/AmbientSettingsCard';
 import { DataManagementCard } from '@/src/components/DataManagementCard';
 import { CloudSyncCard } from '@/src/components/CloudSyncCard';
@@ -13,7 +20,6 @@ import { useAppData } from '@/src/data/useAppData';
 import type { AppSettings } from '@/src/domain/models';
 
 const toggles = [
-  ['autoRollover', 'Auto-rollover'],
   ['raiseMissedTasksToHigh', 'Raise missed tasks to High'],
   ['preserveOriginalDueDate', 'Preserve original due date'],
   ['addRolloverCount', 'Count rollovers'],
@@ -21,6 +27,7 @@ const toggles = [
 ] as const;
 
 export default function SettingsScreen() {
+  const { label: accountLabel } = useAccount();
   const { colors, settings, updateSetting, ready } = useAppTheme();
   const { error: storageError, resetVersion } = useAppData();
   const [timeDraft, setTime] = useState<string>();
@@ -35,12 +42,18 @@ export default function SettingsScreen() {
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save settings.'); }
     finally { setSaving(false); }
   };
-  const appearances = ['system', 'light', 'dark'] as const;
   if (!ready) return <Page title="Settings" subtitle={storageError || 'Loading settings…'} />;
   return <Page title="Settings" subtitle="Shape how LifeCommand fits your day.">
     {error || storageError ? <FormError>{error || storageError}</FormError> : null}
+    <Label style={{ fontSize: 20, fontWeight: '700' }}>Account and data</Label>
+    <Muted>Active: {accountLabel}</Muted>
+    <AutomaticSyncCard /><CloudSyncCard disabled={saving} />
+    <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
+    <Label style={{ fontSize: 20, fontWeight: '700' }}>Calendars</Label>
+    <Muted>External calendar refresh is separate from LifeCommand task and project sync.</Muted>
     <CalendarSyncCard />
-    <Card title="Appearance"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{appearances.map(mode => <Pressable accessibilityRole="radio" aria-checked={settings.appearance === mode} accessibilityState={{ checked: settings.appearance === mode, disabled: saving }} key={mode} disabled={saving} onPress={() => void save('appearance', mode)} style={{ flexGrow: 1, minHeight: 44, padding: 12, borderRadius: 10, alignItems: 'center', backgroundColor: settings.appearance === mode ? colors.soft : colors.background }}><Text style={{ color: colors.text, textTransform: 'capitalize' }}>{mode}</Text></Pressable>)}</View></Card>
+    <Label style={{ fontSize: 20, fontWeight: '700' }}>Account planning preferences</Label>
+    <PersonalizationSettings mode="sections" /><RecurrenceSettings /><DayPlanningSettings />
     <Card title="Daily rollover">
       <Muted>At this local time, unfinished work from the previous day moves forward. If the app is closed, it catches up when you return.</Muted>
       <Label>Rollover time · 24-hour HH:MM</Label>
@@ -49,10 +62,13 @@ export default function SettingsScreen() {
       {toggles.map(([key, label]) => <Row key={key}><View style={{ flex: 1 }}><Label>{label}</Label></View><Switch accessibilityLabel={label} disabled={saving} value={settings[key]} onValueChange={value => void save(key, value)} trackColor={{ true: colors.accent }} /></Row>)}
     </Card>
     <Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Decrease default story points" onPress={() => void save('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Increase default story points" onPress={() => void save('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card>
-    <NotificationSettingsCard />
+
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
+    <Label style={{ fontSize: 20, fontWeight: '700' }}>This device</Label>
+    <PersonalizationSettings mode="appearance" /><TodaySettings />
+    <NotificationSettingsCard />
+    <AmbientProfiles />
     <AmbientSettingsCard settings={settings} saving={saving} save={save} />
-    <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
-    <CloudSyncCard disabled={saving} />
+
   </Page>;
 }

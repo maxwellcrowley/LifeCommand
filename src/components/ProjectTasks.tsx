@@ -1,7 +1,9 @@
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { useDevicePreferences } from '../data/DevicePreferences';
 import { QuickSchedule } from './TaskScheduling';
 import { useRef, useState } from 'react';
 import { TaskList, TaskRow } from './TaskList';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useAppData } from '@/src/data/useAppData';
 import type { Priority, Project, Task } from '@/src/domain/models';
 import { getProjectTasks } from '@/src/domain/tasks';
@@ -13,6 +15,7 @@ import { Card, Label, Muted } from './ui';
 export function ProjectTasks({ project }: { project: Project }) {
   const { data, addTask, editTask } = useAppData();
   const { colors } = useAppTheme();
+  const { preferences } = useDevicePreferences();
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
   const [archiveId, setArchiveId] = useState<string>();
@@ -20,9 +23,9 @@ export function ProjectTasks({ project }: { project: Project }) {
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   if (!data) return null;
-  const tasks = getProjectTasks(data.tasks, project.id);
-  const section = data.sections.find(item => item.id === project.sectionId) ?? data.sections[0];
-  const canAdd = project.status === 'active' && !!section;
+  const tasks = getProjectTasks(data.tasks, project.id).filter(t => preferences.showCompleted || t.status !== 'complete');
+  const section = data.sections.find(item => item.id === project.sectionId) ?? data.sections.find(s => !s.archived);
+  const canAdd = !section?.archived && project.status === 'active' && !!section;
   const run = async (operation: () => Promise<void>) => {
     if (busy.current) return;
     busy.current = true; setSaving(true); setError('');
@@ -54,7 +57,7 @@ export function ProjectTasks({ project }: { project: Project }) {
       <TaskButton label="Add task to project" onPress={() => void add()} disabled={saving} />
     </View> : <Muted>Save this project as Active to add tasks.</Muted>}
     {error ? <FormError>{error}</FormError> : null}
-    <TaskList tasks={tasks} data={data} renderTask={task => <TaskRow task={task} data={data} disabled={saving}>
+    <TaskList collapsibleGroups={`Project ${project.id}`} tasks={tasks} data={data} renderTask={task => <TaskRow task={task} data={data} disabled={saving}>
       <Muted>{task.status} · {task.storyPoints} points</Muted>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Pressable accessibilityRole="checkbox" accessibilityLabel={`Complete task: ${task.title}`} accessibilityState={{ checked: task.status === 'complete', disabled: saving }} aria-checked={task.status === 'complete'} disabled={saving} onPress={() => void toggle(task)} style={{ minHeight: 44, padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: colors.soft }}><Label>{task.status === 'complete' ? '✓ Completed · undo' : 'Mark complete'}</Label></Pressable>

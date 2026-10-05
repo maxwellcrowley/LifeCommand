@@ -9,9 +9,9 @@ import { DateEntry } from './DateEntry';
 import { FormError } from './TaskForm';
 import { Label, Muted } from './ui';
 
-export function Action({ label, text = label, onPress, disabled = false, danger = false }: { label: string; text?: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
+export function Action({ label, text = label, onPress, disabled = false, danger = false, primary = false }: { label: string; text?: string; onPress: () => void; disabled?: boolean; danger?: boolean; primary?: boolean }) {
   const { colors } = useAppTheme();
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => ({ minHeight: 44, minWidth: 44, maxWidth: '100%', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: danger ? colors.danger : colors.border, justifyContent: 'center', backgroundColor: colors.soft, opacity: disabled ? 0.5 : pressed ? 0.7 : 1 })}><Label style={{ color: danger ? colors.danger : colors.text, fontWeight: '600' }}>{text}</Label></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => ({ minHeight: 44, minWidth: 44, maxWidth: '100%', flexShrink: 1, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: danger ? colors.danger : primary ? colors.accent : colors.border, justifyContent: 'center', backgroundColor: primary ? colors.accent : colors.soft, opacity: disabled ? 0.5 : pressed ? 0.7 : 1 })}><Label style={{ color: danger ? colors.danger : primary ? colors.onAccent : colors.text, fontWeight: '600' }}>{text}</Label></Pressable>;
 }
 
 export function QuickSchedule({ task }: { task: Task }) {
@@ -50,7 +50,7 @@ export function QuickSchedule({ task }: { task: Task }) {
   </View>;
 }
 
-export function AddFromBacklog({ date }: { date: string }) {
+export function AddFromBacklog({ date, text }: { date: string; text?: string }) {
   const { data, schedule } = useAppData();
   const { colors } = useAppTheme();
   const [open, setOpen] = useState(false);
@@ -65,10 +65,11 @@ export function AddFromBacklog({ date }: { date: string }) {
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Nothing was scheduled. Please retry.'); }
     finally { busy.current = false; setSaving(false); }
   };
+  const selectedIds = new Set(selection.map(item => item.id));
   const groups = data ? getBacklogBySection(data).filter(group => group.tasks.length) : [];
   return <>
-    <Action label={`Add from backlog · ${date}`} onPress={() => { setSelection([]); setError(''); setOpen(true); }} />
-    <Modal visible={open} transparent animationType="fade" onRequestClose={() => { if (!busy.current) setOpen(false); }}>
+    <Action label={`Add from backlog · ${date}`} text={text} onPress={() => { setSelection([]); setError(''); setOpen(true); }} />
+    <Modal visible={open} transparent animationType="none" onRequestClose={() => { if (!busy.current) setOpen(false); }}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#0008' }}>
         <View accessibilityViewIsModal style={{ maxHeight: '85%', width: '100%', maxWidth: 600, alignSelf: 'center', padding: 16, gap: 12, borderRadius: 16, backgroundColor: colors.surface }}>
           <Label style={{ fontWeight: '700' }}>Add backlog tasks to {date}</Label>
@@ -86,6 +87,7 @@ export function AddFromBacklog({ date }: { date: string }) {
             {!groups.length ? <Muted>No unscheduled backlog tasks.</Muted> : null}
           </ScrollView>
           {error ? <FormError>{error}</FormError> : null}
+          <Label>{selection.length} tasks · {data?.tasks.filter(t => selectedIds.has(t.id)).reduce((sum, t) => sum + t.storyPoints, 0) ?? 0} story points selected</Label>
           <Action label={saving ? 'Scheduling…' : `Schedule selected (${selection.length})`} disabled={saving || !selection.length} onPress={() => void save()} />
           <Action label="Cancel" disabled={saving} onPress={() => setOpen(false)} />
         </View>

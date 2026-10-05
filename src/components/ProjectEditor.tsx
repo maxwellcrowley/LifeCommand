@@ -1,7 +1,9 @@
+import { AppTextInput as TextInput } from '@/src/components/AppText';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { DeleteConfirmation } from './DeleteConfirmation';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Switch, TextInput, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import { useAppData } from '@/src/data/useAppData';
 import type { Project } from '@/src/domain/models';
 import { projectStatuses, projectStatusLabels } from '@/src/domain/projects';
@@ -19,6 +21,7 @@ export function ProjectEditor({ project }: { project?: Project }) {
   const [draft, setDraft] = useState(() => toDraft(project));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const unsaved = useUnsavedChanges(JSON.stringify(draft) !== JSON.stringify(toDraft(snapshot)));
   const busy = useRef(false);
   const stale = snapshot?.updatedAt !== project?.updatedAt;
   const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/projects'); };
@@ -29,7 +32,7 @@ export function ProjectEditor({ project }: { project?: Project }) {
       const input = { ...draft, status, defaultTaskPoints: Number(draft.defaultTaskPoints) };
       if (snapshot) await editProject(snapshot.id, input, snapshot.updatedAt);
       else await addProject(input);
-      leave();
+      unsaved.allowLeave(); leave();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save project.'); }
     finally { busy.current = false; setSaving(false); }
   };
@@ -41,10 +44,11 @@ export function ProjectEditor({ project }: { project?: Project }) {
   if (!data) return <Page hasHeader title="Project" subtitle="Loading your projects…" />;
   return <Page hasHeader title={project ? 'Edit project' : 'New project'} subtitle="Organize related tasks and choose how to track progress.">
     {project ? <ProjectTasks project={project} /> : null}
+    {unsaved.prompt}
     <Card title="Project details">
       {field('notes', 'Project notes (optional)')}
       {field('name', 'Project name · required')}{field('description', 'Project description · optional')}
-      {choices('sectionId', 'Project section', [{ value: '', label: 'None' }, ...data.sections.map(section => ({ value: section.id, label: section.name }))])}
+      {choices('sectionId', 'Project section', [{ value: '', label: 'None' }, ...data.sections.filter(s => !s.archived || s.id === draft.sectionId).map(section => ({ value: section.id, label: section.name }))])}
       {choices('status', 'Project status', projectStatuses.map(value => ({ value, label: projectStatusLabels[value] })))}
       <Muted>Project status does not change task status. Archived projects keep their tasks and can be restored.</Muted>
     </Card>
@@ -60,7 +64,7 @@ export function ProjectEditor({ project }: { project?: Project }) {
     {error ? <FormError>{error}</FormError> : null}
     <EditorButton label={saving ? 'Saving…' : 'Save project'} onPress={() => void save()} disabled={saving || stale} />
     {project ? <Card><Muted>Archive and restore also save the details above. Restoring makes the project Active.</Muted><EditorButton label={project.status === 'archived' ? 'Unarchive project' : 'Archive project'} onPress={() => void save(project.status === 'archived' ? 'active' : 'archived')} disabled={saving || stale} /></Card> : null}
-    {snapshot ? <DeleteConfirmation kind="project" name={snapshot.name} disabled={saving || stale} onDelete={() => deleteProject(snapshot.id, snapshot.updatedAt)} onDeleted={leave} /> : null}
+    {snapshot ? <DeleteConfirmation kind="project" name={snapshot.name} disabled={saving || stale} onDelete={() => deleteProject(snapshot.id, snapshot.updatedAt)} onDeleted={() => { unsaved.allowLeave(); leave(); }} /> : null}
     <EditorButton label="Cancel" onPress={leave} disabled={saving} />
   </Page>;
 }

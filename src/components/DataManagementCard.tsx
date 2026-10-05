@@ -1,5 +1,6 @@
+import { AppText as Text } from '@/src/components/AppText';
 import { useRef, useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useAppData } from '@/src/data/useAppData';
 import { ResetCleanupError } from '@/src/data/storage';
@@ -7,6 +8,7 @@ import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Card, Muted, Page } from './ui';
 import { FormError } from './TaskForm';
 import { DataTransferControls } from './DataTransferControls';
+import { DataDestination } from './DataDestination';
 
 export function DataManagementCard({ saving, onReset }: { saving: boolean; onReset: () => void }) {
   const { startFresh } = useAppData();
@@ -44,6 +46,7 @@ export function DataManagementCard({ saving, onReset }: { saving: boolean; onRes
       <SafeAreaProvider>
         <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
         <Page title="Start Fresh?" subtitle="This cannot be undone.">
+          <DataDestination />
           <Card>
             <Muted>This permanently clears all local tasks, calendar and family events, projects, and saved app settings, including test and sample data. Imported calendar connections/events, local recovery copies and rollover history are also removed. Device notification preferences and OS permission remain; pending reminders and test alerts are canceled when the notification queue refreshes.</Muted>
             <Muted>Default sections and settings will be restored. Tasks, events, and projects will be empty. Other open tabs will pause saving and ask you to reload. Reloading discards their unsaved drafts.</Muted>

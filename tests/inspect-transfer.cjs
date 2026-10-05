@@ -4,7 +4,7 @@ const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { seedData } = require('../.test-build/src/domain/seed.js');
-const root = resolve('dist');
+const root = resolve(process.env.POLISH_DIST || 'dist');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -33,13 +33,13 @@ async function main() {
   const evaluate = async expression => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
   await send('Runtime.enable');
   await send('Page.enable');
-  const ready = async expected => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body.innerText.includes(${JSON.stringify(expected)})`)) return; await pause(100); } throw Error('Missing ' + expected + ': ' + await evaluate('document.body.innerText')); };
+  const ready = async expected => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body?.innerText.includes(${JSON.stringify(expected)})`)) return; await pause(100); } throw Error('Missing ' + expected + ': ' + await evaluate('document.body.innerText')); };
 
   const click = async text => {
     assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button exists: ' + text);
     await pause(150);
   };
-  const read = async () => { const { schemaVersion, revision, ...data } = await evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))'); assert.equal(schemaVersion, 3); assert.ok(revision >= 1); return data; };
+  const read = async () => { const { schemaVersion, revision, ...data } = await evaluate('JSON.parse(localStorage.getItem("lifecommand:data:v1"))'); assert.equal(schemaVersion, 4); assert.ok(revision >= 1); return data; };
 
   const fixture = require('../.test-build/src/domain/normalize.js').normalizeAppData(seedData);
   fixture.settings.autoRollover = false;
@@ -63,7 +63,7 @@ async function main() {
     await pause(200);
   };
   await navigate();
-  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify({ ...fixture, schemaVersion: 3, revision: 1 }))}); localStorage.setItem('unrelated-transfer-test','keep')`);
+  await evaluate(`Object.keys(localStorage).filter(k => k.startsWith(${JSON.stringify(key)})).forEach(k => localStorage.removeItem(k)); localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify({ ...fixture, schemaVersion: 4, revision: 1 }))}); localStorage.setItem('unrelated-transfer-test','keep')`);
   await navigate();
   const original = await read();
   await evaluate(`window.__originalURL = URL.createObjectURL; URL.createObjectURL = blob => { blob.text().then(text => window.__exported = text); return window.__originalURL(blob); }`);
@@ -71,14 +71,14 @@ async function main() {
   await ready('Export download requested');
   const exported = JSON.parse(await evaluate('window.__exported'));
   assert.deepEqual(exported.data, original);
-  assert.equal(exported.schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 4);
   assert.ok(Date.parse(exported.exportedAt));
   assert.deepEqual(await backupKeys(), []);
   console.log('PASS export blob contains all saved data and version without replacement');
-  for (const raw of ['{bad', JSON.stringify({ ...envelope, schemaVersion: 4 }), JSON.stringify({ ...envelope, data: { ...incoming, tasks: [null] } })]) {
+  for (const raw of ['{bad', JSON.stringify({ ...envelope, schemaVersion: 99 }), JSON.stringify({ ...envelope, data: { ...incoming, tasks: [null] } })]) {
     await click('Import and replace local data');
     await choose(raw);
-    assert.equal(await evaluate(`document.body.innerText.includes('Confirm import and replace data')`), false);
+    assert.equal(await evaluate(`document.body?.innerText.includes('Confirm import and replace data')`), false);
     assert.deepEqual(await read(), original);
     assert.deepEqual(await backupKeys(), []);
     await click('Cancel');
@@ -89,7 +89,7 @@ async function main() {
     await click('Import and replace local data');
     await choose(JSON.stringify(envelope));
     await ready('Import preview');
-    assert.ok(await evaluate(`document.body.innerText.includes('does not merge')`));
+    assert.ok(await evaluate(`document.body?.innerText.includes('does not merge')`));
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('[role=dialog] [role=button]')).filter(el => { const r=el.getBoundingClientRect(); return r.width>0 && (r.left < -1 || r.right > innerWidth+1 || r.height < 44); }).length`), 0);
     if (width === 320) { const shot = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(resolve('.test-build/transfer-preview.png'), Buffer.from(shot.data, 'base64')); }
     await click('Cancel');
@@ -118,7 +118,7 @@ async function main() {
   assert.equal(afterImport.length, 1);
   const recovery = await evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(afterImport[0])}))`);
   const { schemaVersion, revision, ...backupData } = JSON.parse(recovery.raw);
-  assert.equal(schemaVersion, 3); assert.equal(revision, 1);
+  assert.equal(schemaVersion, 4); assert.equal(revision, 1);
   assert.deepEqual(backupData, original);
   const writes = await evaluate('window.__writes');
   assert.deepEqual(writes, [afterImport[0], key]);
@@ -146,7 +146,7 @@ async function main() {
   await ready('View recovery backups (2)');
   await click('View recovery backups (2)');
   await ready('Cannot restore:');
-  assert.ok(await evaluate(`document.body.innerText.includes('not valid JSON')`));
+  assert.ok(await evaluate(`document.body?.innerText.includes('not valid JSON')`));
   assert.equal(await evaluate('localStorage.getItem("unrelated-transfer-test")'), 'keep');
   assert.deepEqual(errors, []);
   console.log('PASS invalid legacy copy visible, unrelated storage retained and no runtime exceptions');

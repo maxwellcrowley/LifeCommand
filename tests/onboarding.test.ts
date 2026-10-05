@@ -1,0 +1,32 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRepository, STORAGE_KEY } from '../src/data/storage';
+import { createDefaultAppData } from '../src/domain/defaults';
+import { migrateSnapshot } from '../src/domain/migrations';
+import { normalizePresentation } from '../src/domain/presentation';
+import { createTask } from '../src/domain/tasks';
+import { scheduleReminders } from '../src/domain/reminders';
+test('fresh storage stays empty, setup survives restart, existing version 3 installations bypass setup', async () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: async (k: string) => values.get(k) ?? null, setItem: async (k: string, v: string) => { values.set(k, v); }, getAllKeys: async () => [...values.keys()], removeItem: async (k: string) => { values.delete(k); } };
+  const repo = createRepository(storage);
+  const fresh = await repo.loadAppData();
+  assert.equal(fresh.tasks.length + fresh.projects.length + fresh.calendarEvents.length + fresh.familyEvents.length, 0);
+  assert.equal(fresh.onboardingComplete, false);
+  assert.equal((await createRepository(storage).loadAppData()).onboardingComplete, false);
+  await repo.changeAppData(data => ({ ...data, onboardingComplete: true }));
+  assert.equal((await createRepository(storage).loadAppData()).onboardingComplete, true);
+  assert.ok(values.has(STORAGE_KEY));
+  const { onboardingComplete: _, ...legacy } = createDefaultAppData();
+  assert.equal(migrateSnapshot({ ...legacy, schemaVersion: 3, revision: 1 }).onboardingComplete, true);
+});
+test('device ambient/privacy preferences survive validation and overdue reminders can be excluded', () => {
+  const prefs = normalizePresentation({ ambientProfile: 'tv', hideSensitiveTitles: true, ambient: { ambientDisplayEnabled: true, ambientMaxTasks: 4 } });
+  assert.equal(prefs.ambient.ambientDisplayEnabled, true); assert.equal(prefs.ambient.ambientMaxTasks, 4);
+  assert.deepEqual(normalizePresentation(prefs), prefs);
+  const data = createDefaultAppData();
+  data.tasks = [{ ...createTask({ title: 'Overdue reminder', sectionId: 'home', dueDate: '2020-01-01', reminderEnabled: true }), status: 'overdue' }];
+  assert.equal(scheduleReminders(data).length, 1);
+  data.settings.overdueReminders = false;
+  assert.equal(scheduleReminders(data).length, 0);
+});

@@ -10,7 +10,7 @@ export function withStorageLock<T>(operation: () => Promise<T>): Promise<T> {
 
 export function subscribeToStorageChanges(listener: () => void): () => void {
   const changed = (event: StorageEvent) => {
-    if (event.storageArea === window.localStorage && (event.key === KEY || event.key === EXTERNAL_CALENDAR_KEY || event.key === null)) listener();
+    if (event.storageArea === window.localStorage && (event.key?.startsWith('lifecommand:account:') || event.key === KEY || event.key === EXTERNAL_CALENDAR_KEY || event.key === null)) listener();
   };
   const visible = () => { if (document.visibilityState === 'visible') listener(); };
   window.addEventListener('storage', changed);

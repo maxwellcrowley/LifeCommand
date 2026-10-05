@@ -134,8 +134,9 @@ export function scheduleTasks(data: AppData, selection: ScheduleSelection[], due
   if (!selection.length) throw Error('Select at least one task.');
   const selected = new Map(selection.map(item => [item.id, item.updatedAt]));
   if (selected.size !== selection.length) throw Error('A task was selected more than once.');
+  const tasksById = new Map(data.tasks.map(task => [task.id, task]));
   for (const item of selection) {
-    const task = data.tasks.find(task => task.id === item.id);
+    const task = tasksById.get(item.id);
     if (!task || task.updatedAt !== item.updatedAt || task.status === 'complete' || task.status === 'archived' || (backlogOnly && task.dueDate)) {
       throw Error('A selected task changed or is no longer available. Nothing was scheduled. Reopen the selection and try again.');
     }

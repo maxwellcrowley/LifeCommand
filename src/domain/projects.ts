@@ -58,6 +58,7 @@ export function deleteProject(data: AppData, id: string, expectedUpdatedAt: stri
   if (!project) throw new Error('This project no longer exists. Return to Projects.');
   if (project.updatedAt !== expectedUpdatedAt) throw new Error('This project changed while you were editing. Reload the project before deleting.');
   return { ...data, projects: data.projects.filter(item => item.id !== id),
+    ...(data.recurringSeries ? { recurringSeries: data.recurringSeries.map(s => s.projectId === id ? { ...s, projectId: undefined, updatedAt: new Date(Math.max(now.getTime(), Date.parse(s.updatedAt) + 1)).toISOString() } : s) } : {}),
     tasks: data.tasks.map(task => task.projectId === id ? { ...task, projectId: undefined,
       updatedAt: new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)).toISOString() } : task) };
 }

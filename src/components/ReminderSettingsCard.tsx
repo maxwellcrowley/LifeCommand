@@ -1,5 +1,6 @@
+import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { useState } from 'react';
-import { Pressable, Switch, TextInput, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import type { AppSettings } from '@/src/domain/models';
 import { reminderDefaults, reminderLabels } from '@/src/domain/reminders';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
@@ -9,6 +10,8 @@ export function ReminderSettingsCard({ settings, saving, save }: { settings: App
   const { colors } = useAppTheme();
   const [drafts, setDrafts] = useState<Partial<Record<'quietHoursStart' | 'quietHoursEnd', string>>>({});
   return <><Card title="Reminder defaults">
+    <Muted>Eligible reminders need an enabled reminder and a scheduled date or custom reminder time. Completed, archived, deleted and acknowledged items are excluded. External calendar events are read-only and do not create local alerts.</Muted>
+    <Row><Label>Reminders for overdue tasks</Label><Switch accessibilityLabel="Reminders for overdue tasks" value={settings.overdueReminders !== false} disabled={saving} onValueChange={value => void save('overdueReminders', value)} /></Row>
     <Muted>Applies to new tasks and events only. Existing reminders stay as saved.</Muted>
     {(['defaultTaskReminder', 'defaultEventReminder'] as const).map(key => <View key={key} style={{ gap: 8 }}>
       <Label>{key === 'defaultTaskReminder' ? 'New task reminders' : 'New event reminders'}</Label>

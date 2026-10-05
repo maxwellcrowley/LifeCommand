@@ -5,7 +5,7 @@ import { validateSnapshot } from './transfer';
 // Version 0 is unversioned data; version 1 predates reminders.
 // Versions 1 -> 2 -> 3 use strict additive normalization: reminders and quiet
 // hours default off; absent occurrence state stays absent. No history is invented.
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 export interface PersistedSnapshot extends AppData {
   schemaVersion: number;
   revision: number;
@@ -28,7 +28,7 @@ export function snapshotRevision(value: unknown): number {
 export function snapshotData(value: unknown): unknown {
   snapshotVersion(value);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const { schemaVersion: _version, revision: _revision, ...data } = value as Record<string, unknown>;
+  const { schemaVersion: _version, revision: _revision, taskUndo: _undo, ...data } = value as Record<string, unknown>;
   return data;
 }
 

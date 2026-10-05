@@ -40,12 +40,18 @@ begin
   if p_expected_revision is null or p_expected_revision < 0 then
     raise exception 'Invalid expected revision' using errcode = '22023';
   end if;
-  if p_schema_version is distinct from 3 or p_payload is null
+  if p_schema_version not in (1, 2, 3, 4) then
+    raise exception 'Unsupported snapshot schema version' using errcode = '22023';
+  end if;
+  if p_payload is null
     or p_payload ->> 'format' is distinct from 'lifecommand-export'
-    or p_payload ->> 'schemaVersion' is distinct from '3'
-    or jsonb_typeof(p_payload -> 'data') is distinct from 'object'
-    or octet_length(p_payload::text) > 10485760 then
-    raise exception 'Invalid snapshot envelope or exceeds 10 MB' using errcode = '22023';
+    or p_payload ->> 'schemaVersion' is distinct from p_schema_version::text
+    or jsonb_typeof(p_payload -> 'exportedAt') is distinct from 'string'
+    or jsonb_typeof(p_payload -> 'data') is distinct from 'object' then
+    raise exception 'Malformed snapshot envelope' using errcode = '22023';
+  end if;
+  if octet_length(p_payload::text) > 10485760 then
+    raise exception 'Snapshot payload exceeds 10 MiB' using errcode = '22023';
   end if;
   if p_expected_revision = 0 then
     insert into public.cloud_snapshots (user_id, payload, schema_version, revision, updated_at)

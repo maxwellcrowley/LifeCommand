@@ -1,4 +1,5 @@
-import type { AppData, CalendarEvent, FamilyEvent, Project, Section, Task } from './models';
+import { validateSeries } from './recurrence';
+import type { AppData, CalendarEvent, FamilyEvent, Project, Section, Task, RecurringSeries, SavedView } from './models';
 import { normalizeSettings, isRolloverTime } from './settings';
 import { familyCategories, sourceColors } from './events';
 import { normalizeReminder } from './reminders';
@@ -34,8 +35,9 @@ export function normalizeAppData(value: unknown): AppData {
   const settings = normalizeSettings(data.settings);
   const sectionId = identities('section');
   const sections: Section[] = records(data.sections).map((s, i) => ({
-    id: sectionId(s.id, i), name: choice(s.name, defaultSections.map(s => s.name), 'Personal'),
+    id: sectionId(s.id, i), name: text(s.name) ?? 'Personal',
     color: typeof s.color === 'string' && /^#[\da-f]{6}$/i.test(s.color) ? s.color : '#5A9A75', order: count(s.order),
+    ...(s.archived !== undefined ? { archived: bool(s.archived, false) } : {}),
   }));
   if (!sections.length) sections.push(...defaultSections.map(s => ({ ...s })));
   const ensureSection = (value: unknown) => {
@@ -56,7 +58,7 @@ export function normalizeAppData(value: unknown): AppData {
   const tasks: Task[] = records(data.tasks).map((t, i) => {
     const dueDate = date(t.dueDate);
     return compact({
-      ...normalizeReminder(t),
+      ...normalizeReminder(t), recurrenceId: text(t.recurrenceId), occurrenceDate: date(t.occurrenceDate),
       id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description), notes: text(t.notes),
       sectionId: ensureSection(t.sectionId), projectId: projects.some(p => p.id === t.projectId) ? text(t.projectId) : undefined,
       status: choice(t.status, ['backlog', 'scheduled', 'overdue', 'complete', 'deferred', 'archived'], dueDate ? 'scheduled' : 'backlog'),
@@ -94,5 +96,10 @@ export function normalizeAppData(value: unknown): AppData {
   const performedAt = instant(summary.performedAt);
   const lastRolloverSummary = rolloverDate && performedAt && Array.isArray(summary.movedTaskIds)
     ? { rolloverDate, performedAt, movedTaskIds: [...new Set(summary.movedTaskIds.filter((id): id is string => typeof id === 'string' && tasks.some(t => t.id === id)))] } : undefined;
-  return { sections, tasks, projects, calendarEvents, familyEvents, settings, lastRolloverSummary };
+  const recurringSeries: RecurringSeries[] | undefined = data.recurringSeries === undefined ? undefined : records(data.recurringSeries).map(s => {
+    const series: RecurringSeries = { id: text(s.id) ?? '', title: text(s.title) ?? '', sectionId: text(s.sectionId) ?? '', projectId: text(s.projectId), priority: choice(s.priority, ['low', 'normal', 'high'], 'normal'), storyPoints: positive(s.storyPoints), startDate: date(s.startDate) ?? '', timeZone: text(s.timeZone) ?? '', frequency: choice(s.frequency, ['daily', 'weekdays', 'weekly', 'monthly'], 'daily'), weekdays: Array.isArray(s.weekdays) ? s.weekdays.filter((d): d is number => typeof d === 'number') : [], monthEnd: choice(s.monthEnd, ['last-day', 'skip'], 'last-day'), generatedThrough: date(s.generatedThrough), endDate: date(s.endDate), createdAt: instant(s.createdAt) ?? epoch, updatedAt: instant(s.updatedAt) ?? epoch };
+    validateSeries(series); return compact(series);
+  });
+  const savedViews: SavedView[] | undefined = data.savedViews === undefined ? undefined : records(data.savedViews).map(v => compact<SavedView>({ id: text(v.id) ?? '', name: text(v.name) ?? '', query: typeof v.query === 'string' ? v.query : '', sectionId: text(v.sectionId), projectId: text(v.projectId), priority: v.priority === undefined ? undefined : choice<'low' | 'normal' | 'high'>(v.priority, ['low', 'normal', 'high'], 'normal'), schedule: v.schedule === undefined ? undefined : choice<'all' | 'scheduled' | 'backlog'>(v.schedule, ['all', 'scheduled', 'backlog'], 'all') }));
+  return { onboardingComplete: bool(data.onboardingComplete, true), ...(recurringSeries ? { recurringSeries } : {}), ...(savedViews ? { savedViews } : {}), sections, tasks, projects, calendarEvents, familyEvents, settings, lastRolloverSummary };
 }

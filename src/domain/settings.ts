@@ -54,6 +54,8 @@ export function normalizeSettings(value: unknown): AppSettings {
   for (const key of ['defaultTaskReminder', 'defaultEventReminder'] as const) {
     if (!reminderDefaults.includes(normalized[key])) normalized[key] = 'off';
   }
+  if (['automatic', 'stay-overdue', 'morning-review'].includes(String(settings.rolloverMode))) normalized.rolloverMode = settings.rolloverMode as AppSettings['rolloverMode'];
+  if (typeof settings.overdueReminders === 'boolean') normalized.overdueReminders = settings.overdueReminders;
   return normalized;
 }
 
@@ -69,6 +71,8 @@ export function isAmbientLimit(value: unknown): value is number {
 }
 
 export function validateAmbientSetting(key: keyof AppSettings, value: unknown): void {
+  if (key === 'overdueReminders' && typeof value !== 'boolean') throw Error('Overdue reminders must be on or off.');
+  if (key === 'rolloverMode' && !['automatic', 'stay-overdue', 'morning-review'].includes(String(value))) throw Error('Choose a rollover mode.');
   if ((key === 'quietHoursStart' || key === 'quietHoursEnd') && (typeof value !== 'string' || !isRolloverTime(value))) throw Error('Use HH:MM in 24-hour time for quiet hours.');
   if (key === 'quietHoursEnabled' && typeof value !== 'boolean') throw Error('Quiet hours must be on or off.');
   if ((key === 'defaultTaskReminder' || key === 'defaultEventReminder') && !(reminderDefaults as readonly unknown[]).includes(value)) throw Error('Choose a valid reminder default.');

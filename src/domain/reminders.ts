@@ -105,7 +105,7 @@ export function scheduleReminders(data: ReminderData): ScheduledReminder[] {
     const effective = snoozedUntil ?? at;
     reminders.push({ key, kind, itemId, title: item.title, reminderAt: effective, baseReminderAt: at, occurrenceId, snoozedUntil, updatedAt: item.updatedAt, notificationReadyAt: deferForQuietHours(effective, data.settings) });
   };
-  for (const task of data.tasks) if (task.status !== 'complete' && task.status !== 'archived') {
+  for (const task of data.tasks) if (task.status !== 'complete' && task.status !== 'archived' && !(data.settings?.overdueReminders === false && (task.status === 'overdue' || !!task.dueDate && task.dueDate < localDateKey(new Date())))) {
     add(`task:${task.id}`, 'task', task.id, task, task.dueDate);
   }
   for (const [prefix, events] of [['local', data.calendarEvents], ['family', data.familyEvents]] as const) {

@@ -1,4 +1,5 @@
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { AppText as Text } from '@/src/components/AppText';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 
 export function LocalDataChanged({ visible, error, onReload }: { visible: boolean; error: string; onReload: () => void }) {
   return <Modal visible={visible} animationType="none" onRequestClose={() => {}}>

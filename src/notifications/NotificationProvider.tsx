@@ -1,3 +1,4 @@
+import { createDefaultAppData } from '../domain/defaults';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, AppState } from 'react-native';
@@ -9,6 +10,7 @@ import { bindNotificationResponses, NotificationTapRouter } from './routing';
 import { observeNotificationLifecycle } from './lifecycle';
 
 const service = new NotificationService(notificationAdapter, AsyncStorage);
+export const clearAccountNotifications = () => service.update(createDefaultAppData(), true);
 const Context = createContext({ service, responseError: '', refresh: service.refresh });
 
 export function NotificationProvider({ children }: { children: ReactNode }) {

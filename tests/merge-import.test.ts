@@ -129,7 +129,7 @@ test('supported legacy versions receive defaults; future versions, bad fields an
     delete incoming.tasks[0].priority;
     assert.equal(planMergeImport(data(), raw(incoming, version)).data.tasks[0].priority, 'normal');
   }
-  assert.throws(() => planMergeImport(data(), raw(data(), 4)), /Unsupported/);
+  assert.throws(() => planMergeImport(data(), raw(data(), 5)), /Unsupported/);
   assert.throws(() => planMergeImport(data(), raw(data([], [task('t', { dueDate: '2026-02-30' })]))), /dueDate/);
 });
 
@@ -158,7 +158,7 @@ test('read-only preview, exact backup before atomic merge, revision, restart and
 
 test('invalid imports cannot write during preview or confirmation', async () => {
   const mem = memory();
-  for (const input of ['{', 'null', raw(data(), 4), raw(data([], [task('bad', { storyPoints: -1 })]))]) {
+  for (const input of ['{', 'null', raw(data(), 5), raw(data([], [task('bad', { storyPoints: -1 })]))]) {
     await assert.rejects(mem.repo.previewMergeImport(input));
     await assert.rejects(mem.repo.mergeImportAppData(input, mem.original));
   }

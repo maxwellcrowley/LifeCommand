@@ -191,8 +191,11 @@ The isolated checkout is `.test-build/project-plans-delivery`, branch
 `cc3eb9b` is the separately labeled, untouched earlier prerequisite snapshot.
 The starting archive was compared against that checkout with no differences.
 Only project-plan changes enter the new checkpoints. Domain checkpoint:
-`9e2eff8` (`feat: add guarded project plan gates and persistence`). The final UI/
-integration/documentation checkpoint is the branch HEAD, recorded in the manifest.
+`9e2eff8` (`feat: add guarded project plan gates and persistence`). The UI/integration implementation checkpoint is
+`d42d4ca9639af37b77365fe1740b071d7114ac6f`. Both checkpoints were pushed to
+[feature/project-plans](https://github.com/maxwellcrowley/LifeCommand/tree/feature/project-plans),
+and the remote SHA was verified. A following documentation checkpoint records
+these results; its final HEAD is in the verification manifest.
 
 The final commit hash, push outcome and matching source hashes are recorded in
 `.test-build/project-plans-verification.json`. Remote branch publication uses
@@ -200,12 +203,15 @@ The final commit hash, push outcome and matching source hashes are recorded in
 To inspect the isolated changes without staging unrelated working-tree files:
 
 ```powershell
-git -C '.test-build/project-plans-delivery' log -3 --oneline
-git -C '.test-build/project-plans-delivery' diff '162df91..HEAD' --stat
-git -C '.test-build/project-plans-delivery' diff '162df91..HEAD' --check
-git -C '.test-build/project-plans-delivery' show --stat HEAD
-# If the final push is blocked, run after restoring Git/network access:
-git -C '.test-build/project-plans-delivery' push origin 'HEAD:refs/heads/feature/project-plans'
+$planCheckout = (Resolve-Path -LiteralPath '.test-build/project-plans-delivery').Path
+# This exact sandbox-created checkout has a different Windows owner.
+# Trust is scoped to each command; no global Git settings need changing.
+git -c "safe.directory=$planCheckout" -C "$planCheckout" log -4 --oneline
+git -c "safe.directory=$planCheckout" -C "$planCheckout" diff '162df91..HEAD' --stat
+git -c "safe.directory=$planCheckout" -C "$planCheckout" diff '162df91..HEAD' --check
+git -c "safe.directory=$planCheckout" -C "$planCheckout" show --stat HEAD
+# Already pushed; this is the exact retry command if needed later:
+git -c "safe.directory=$planCheckout" -C "$planCheckout" push origin 'HEAD:refs/heads/feature/project-plans'
 ```
 
 The original worktree and index are preserved. The bundle/patch/manifest under

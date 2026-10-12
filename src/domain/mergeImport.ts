@@ -1,3 +1,5 @@
+import { mapSeriesTemplates } from './recurrenceTemplates';
+import { occursOn } from './recurrence';
 import type { AppData, Task, RecurringSeries } from './models';
 import { validateImport } from './transfer';
 
@@ -65,7 +67,7 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
     } else {
       const sectionId = sections.get(series.sectionId), projectId = series.projectId ? projectLinks.get(series.projectId) : undefined;
       if (!sectionId || (series.projectId && !projectId)) { warnings.push(`Series ${series.title} skipped because its section or project is unavailable.`); continue; }
-      recurringSeries.push({ ...series, sectionId, projectId }); counts.seriesChanged = (counts.seriesChanged ?? 0) + 1;
+      recurringSeries.push(mapSeriesTemplates(series, template => ({ ...template, sectionId: sections.get(template.sectionId) ?? sectionId, projectId: template.projectId ? projectLinks.get(template.projectId) : undefined }))); counts.seriesChanged = (counts.seriesChanged ?? 0) + 1;
     }
   }
   const tasks = [...current.tasks];
@@ -74,7 +76,7 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
   for (const task of incoming.tasks) {
     if (task.recurrenceId) {
       const existing = current.recurringSeries?.find(s => s.id === task.recurrenceId);
-      if (!recurringSeries.some(s => s.id === task.recurrenceId) || (!taskIds.has(task.id) && existing?.generatedThrough && task.occurrenceDate! <= existing.generatedThrough)) { counts.tasksSkipped++; continue; }
+      if ((existing && !occursOn(existing, task.occurrenceDate!) && task.status !== 'complete') || existing?.excludedDates?.includes(task.occurrenceDate!) || (existing?.endedFrom && task.occurrenceDate! >= existing.endedFrom) || !recurringSeries.some(s => s.id === task.recurrenceId) || (!taskIds.has(task.id) && existing?.generatedThrough && task.occurrenceDate! <= existing.generatedThrough)) { counts.tasksSkipped++; continue; }
     }
     if (taskIds.has(task.id)) { counts.tasksSkipped++; continue; }
     const projectId = task.projectId ? projectLinks.get(task.projectId) ?? (projectIds.has(task.projectId) ? task.projectId : undefined) : undefined;
@@ -82,7 +84,7 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
     const sectionId = sections.get(task.sectionId);
     if (!sectionId) { counts.tasksMissingSection++; continue; }
     const candidate = { ...task, sectionId, projectId };
-    const key = fingerprint(candidate);
+    const key = task.recurrenceId ? task.id : fingerprint(candidate);
     if (fingerprints.has(key)) { counts.tasksSkipped++; continue; }
     tasks.push(candidate);
     taskIds.add(task.id);

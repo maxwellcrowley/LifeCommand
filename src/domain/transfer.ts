@@ -85,13 +85,13 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
     const ids = new Set<string>();
     for (const item of collection) { nonempty(item.id, 'ID'); if (ids.has(item.id)) throw Error('Duplicate view or series ID.'); ids.add(item.id); }
   }
-  for (const series of data.recurringSeries ?? []) if (!data.sections.some(s => s.id === series.sectionId) || (series.projectId && !data.projects.some(p => p.id === series.projectId))) throw Error('Recurring series has a missing section or project.');
+  for (const series of (data.recurringSeries ?? []).flatMap(s => [s, ...(s.revisions ?? []).map(r => r.template)])) if (!data.sections.some(s => s.id === series.sectionId) || (series.projectId && !data.projects.some(p => p.id === series.projectId))) throw Error('Recurring series has a missing section or project.');
   for (const view of data.savedViews ?? []) { nonempty(view.name, 'Saved view name'); validateSavedView(view); }
   const occurrences = new Set<string>();
   for (const task of data.tasks) if (task.recurrenceId || task.occurrenceDate) {
     const key = `${task.recurrenceId}:${task.occurrenceDate}`;
     const series = data.recurringSeries?.find(s => s.id === task.recurrenceId);
-    if (!series?.generatedThrough || task.occurrenceDate! > series.generatedThrough) throw Error('Recurring occurrence is beyond its generation cursor.');
+    if (!series) throw Error('Recurring occurrence has no series.');
     if (!task.recurrenceId || !task.occurrenceDate || !data.recurringSeries?.some(s => s.id === task.recurrenceId) || occurrences.has(key) || task.id !== `occurrence:${encodeURIComponent(task.recurrenceId)}:${task.occurrenceDate}`) throw Error('Invalid or duplicate recurring occurrence.');
     occurrences.add(key);
   }

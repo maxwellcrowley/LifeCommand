@@ -1,9 +1,10 @@
+import { materializeRecurrenceRange } from '@/src/domain/recurrence';
 import { useDevicePreferences } from '@/src/data/DevicePreferences';
 import { Action, AddFromBacklog } from '@/src/components/TaskScheduling';
 import { TaskList, TaskRow } from '@/src/components/TaskList';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { useState } from 'react';
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { Modal, Pressable, View } from 'react-native';
 import { Card, Label, Muted, Page } from '@/src/components/ui';
 import { FormError } from '@/src/components/TaskForm';
@@ -16,6 +17,11 @@ import { calendarDays, dateLabel, eventKey, eventSources, sourceColors, sourceLa
 import { useLocalClock } from '@/src/hooks/useLocalClock';
 
 export default function CalendarScreen() {
+  const { date, selection } = useLocalSearchParams<{ date?: string; selection?: string }>();
+  return <CalendarContent key={`${date ?? ''}:${selection ?? ''}`} initialDate={date} />;
+}
+
+function CalendarContent({ initialDate }: { initialDate?: string }) {
   const calendarSync = useCalendarSync();
   const { events: externalEvents, cache, hideEvent, unhideAllEvents, busy: visibilityBusy } = calendarSync;
   const { data, error } = useAppData();
@@ -29,11 +35,11 @@ export default function CalendarScreen() {
   const [restoreRequest, setRestoreRequest] = useState<{ id?: string; title: string; all: boolean }>();
   const [visibilityError, setVisibilityError] = useState('');
   if (!data || !now) return <Page title="Calendar" subtitle={error || 'Loading your calendar...'} />;
-  const date = selected ?? localDateKey(now);
+  const date = selected ?? (initialDate && isDateKey(initialDate) ? initialDate : localDateKey(now));
   const valid = isDateKey(date);
   const from = valid && view === 'Week' ? weekStart(date, preferences.weekStart) : date;
   const through = valid ? addDays(from, view === 'Week' ? 6 : view === 'Agenda' ? agendaLength - 1 : 0) : date;
-  const days = valid ? calendarDays({ ...data, externalEvents }, from, through, view !== 'Agenda') : [];
+  const days = valid ? calendarDays({ ...materializeRecurrenceRange(data, from, through), externalEvents }, from, through, view !== 'Agenda') : [];
   const hiddenEvents = [...cache.events.filter(event => cache.hiddenEventIds?.includes(event.id)), ...calendarSync.subscriptions.cache.events.filter(event => calendarSync.subscriptions.cache.hidden.includes(event.id))];
   const confirmRestore = async () => {
     if (!restoreRequest || visibilityBusy) return;
@@ -82,10 +88,10 @@ export default function CalendarScreen() {
       {day.events.length ? day.events.map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No events.</Muted>}
       <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, gap: 8 }}>
         <Muted>Scheduled tasks | {day.tasks.length}</Muted>
-        {day.tasks.length ? <TaskList collapsibleGroups={`Calendar tasks ${day.date}`} sectionFooter={section => <AddFromBacklog date={day.date} section={section} />} tasks={day.tasks} data={data} renderTask={task => <TaskRow grouped task={task} data={data} date={day.date} />} /> : <Muted>No scheduled tasks.</Muted>}
+        {day.tasks.length ? <TaskList collapsibleGroups={`Calendar tasks ${day.date}`} sectionFooter={section => <AddFromBacklog date={day.date} section={section} />} tasks={day.tasks} data={data} renderTask={task => <TaskRow grouped task={task} data={data} date={localDateKey(now)} />} /> : <Muted>No scheduled tasks.</Muted>}
       </View>
     </Card>)}
     {valid && !days.length ? <Card><Muted>No events or scheduled tasks in this range.</Muted></Card> : null}
-    {view === 'Agenda' && valid ? <Pressable accessibilityRole="button" onPress={() => setAgendaLength(length => length + 30)} style={{ padding: 15 }}><Label>Show 30 more days</Label></Pressable> : null}
+    {view === 'Agenda' && valid && agendaLength < 60 ? <Pressable accessibilityRole="button" onPress={() => setAgendaLength(60)} style={{ padding: 15 }}><Label>Show 30 more days</Label></Pressable> : null}
   </Page>;
 }

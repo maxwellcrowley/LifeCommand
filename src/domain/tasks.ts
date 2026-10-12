@@ -26,7 +26,7 @@ export function createTask(input: TaskInput, now = new Date()): Task {
 }
 
 export function updateTask(task: Task, changes: TaskChanges, now = new Date()): Task {
-  const merged = { ...task, ...changes, title: changes.title?.trim() ?? task.title, updatedAt: now.toISOString() };
+  const merged = { ...task, ...changes, ...(task.recurrenceId ? { recurrenceException: true } : {}), title: changes.title?.trim() ?? task.title, updatedAt: now.toISOString() };
   if ('description' in changes) merged.description = changes.description?.trim() || undefined;
   if ('notes' in changes) merged.notes = changes.notes?.trim() || undefined;
   if ('projectId' in changes) merged.projectId = changes.projectId || undefined;
@@ -117,8 +117,8 @@ export function changeTask(data: AppData, id: string, changes: TaskChanges, choi
 }
 
 export function deleteTask(data: AppData, id: string, expectedUpdatedAt: string): AppData {
-  currentTask(data, id, expectedUpdatedAt);
-  return { ...data, tasks: data.tasks.filter(task => task.id !== id),
+  const removed = currentTask(data, id, expectedUpdatedAt);
+  return { ...data, ...(removed.recurrenceId ? { recurringSeries: data.recurringSeries?.map(s => s.id === removed.recurrenceId ? { ...s, excludedDates: [...new Set([...(s.excludedDates ?? []), removed.occurrenceDate!])], updatedAt: new Date(Math.max(Date.now(), Date.parse(s.updatedAt) + 1)).toISOString() } : s) } : {}), tasks: data.tasks.filter(task => task.id !== id),
     lastRolloverSummary: data.lastRolloverSummary ? { ...data.lastRolloverSummary, movedTaskIds: data.lastRolloverSummary.movedTaskIds.filter(taskId => taskId !== id) } : undefined };
 }
 

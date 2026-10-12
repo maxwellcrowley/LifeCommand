@@ -18,7 +18,7 @@ export function rolloverTasks(tasks: Task[], rolloverDay: string, settings: AppS
   const timestamp = now.toISOString();
   if (settings.rolloverMode === 'morning-review' || settings.rolloverMode === 'stay-overdue' || !settings.autoRollover) return { tasks, rolledTaskIds, movedTaskIds };
   const next = tasks.map(task => {
-    if (task.status === 'complete' || task.status === 'archived' || !task.dueDate || task.dueDate > rolloverDay || (task.lastRolloverDate && task.lastRolloverDate >= rolloverDay)) return task;
+    if (task.recurrenceId || task.status === 'complete' || task.status === 'archived' || !task.dueDate || task.dueDate > rolloverDay || (task.lastRolloverDate && task.lastRolloverDate >= rolloverDay)) return task;
     rolledTaskIds.push(task.id);
     if (settings.moveIncompleteTasksToNextDay) movedTaskIds.push(task.id);
     return {

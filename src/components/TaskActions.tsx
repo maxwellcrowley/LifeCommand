@@ -26,7 +26,7 @@ export function TaskActions({ task, children, disabled = false }: { task: Task; 
         {children}
         <Action label="Return to backlog" disabled={busy} onPress={() => void run(() => editTask(task.id, { status: 'backlog' }, 'backlog', task.updatedAt))} />
         {(['high', 'normal', 'low'] as const).map(priority => <Action key={priority} label={`Set ${priority} priority`} disabled={busy} onPress={() => void run(() => editTask(task.id, { priority }, undefined, task.updatedAt))} />)}
-        <DeleteConfirmation kind="task" name={task.title} disabled={busy} onDelete={() => deleteTask(task.id, task.updatedAt)} onDeleted={() => setOpen(false)} />
+        <DeleteConfirmation kind="task" name={task.title} label={task.recurrenceId ? "Skip this occurrence" : undefined} detail={task.recurrenceId ? "Only this occurrence is removed. Its saved exception prevents it from returning after reload or sync." : undefined} disabled={busy} onDelete={() => deleteTask(task.id, task.updatedAt)} onDeleted={() => setOpen(false)} />
         {error ? <FormError>{error}</FormError> : null}
     </SettingsDialog> : null}</>;
 }

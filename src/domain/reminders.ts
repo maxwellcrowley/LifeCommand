@@ -1,4 +1,4 @@
-import { addDays, isDateKey, localDateKey } from './dates';
+import { addDays, isDateKey, localDateKey, zonedClock } from './dates';
 import type { AppData, QuietHoursSettings, ReminderDefault, ReminderFields, ReminderOffset } from './models';
 
 export const reminderOffsets = ['at-time', '15-minutes', '1-hour', 'morning-of', 'evening-before'] as const;
@@ -13,7 +13,12 @@ export function isReminderInstant(value: unknown): value is string {
 }
 
 export function normalizeReminder(input: Record<string, unknown>): ReminderFields {
+  if (input.reminderTimeZone !== undefined) {
+    if (typeof input.reminderTimeZone !== 'string' || !input.reminderTimeZone) throw Error('Invalid reminder timezone.');
+    new Intl.DateTimeFormat('en-US', { timeZone: input.reminderTimeZone }).format(new Date());
+  }
   return {
+    ...(typeof input.reminderTimeZone === 'string' ? { reminderTimeZone: input.reminderTimeZone } : {}),
     reminderEnabled: input.reminderEnabled === true,
     reminderOffset: reminderOffsets.includes(input.reminderOffset as ReminderOffset) ? input.reminderOffset as ReminderOffset : 'at-time',
     ...(isReminderInstant(input.reminderAt) ? { reminderAt: input.reminderAt } : {}),
@@ -22,6 +27,7 @@ export function normalizeReminder(input: Record<string, unknown>): ReminderField
   };
 }
 export function validateReminder(input: ReminderFields): void {
+  if (input.reminderTimeZone !== undefined) new Intl.DateTimeFormat('en-US', { timeZone: input.reminderTimeZone }).format(new Date());
   if (input.reminderEnabled !== undefined && typeof input.reminderEnabled !== 'boolean') throw Error('Reminder must be on or off.');
   if (input.reminderOffset !== undefined && !reminderOffsets.includes(input.reminderOffset)) throw Error('Choose a valid reminder offset.');
   if (input.reminderAt !== undefined && !isReminderInstant(input.reminderAt)) throw Error('Choose a valid reminder date and time.');
@@ -47,7 +53,7 @@ export function reminderTime(item: ReminderFields, date?: string, time?: string)
   if (!reminderOffsets.includes(offset)) return;
   const day = offset === 'evening-before' ? addDays(date, -1) : date;
   const clock = offset === 'morning-of' ? '09:00' : offset === 'evening-before' ? '18:00' : time || '09:00';
-  const instant = new Date(`${day}T${clock}:00`);
+  const instant = item.reminderTimeZone ? zonedClock(day, clock, item.reminderTimeZone) : new Date(`${day}T${clock}:00`);
   const minutes = offset === '15-minutes' ? 15 : offset === '1-hour' ? 60 : 0;
   return new Date(instant.getTime() - minutes * 60_000).toISOString();
 }

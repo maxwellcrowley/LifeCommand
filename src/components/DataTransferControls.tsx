@@ -21,7 +21,7 @@ function Action({ label, disabled, onPress, destructive = false }: { label: stri
 }
 
 type Selection = { kind: 'import'; raw: string; preview: ImportPreview } | { kind: 'merge'; raw: string; preview: MergePreview } | { kind: 'restore'; preview: RecoveryPreview };
-const mergeScope = 'Adds missing projects, tasks and recurring series. Existing series templates win; generation cursors advance to prevent duplicate occurrences. Keeps your sections, saved views, settings, rollover history, events and device preferences. Automatic sync, if enabled, can subsequently synchronize the merged data.';
+const mergeScope = 'Adds missing projects, tasks and recurring series. Existing series rules, schedule revisions and skipped dates win; generation cursors advance to prevent duplicate occurrences. Keeps your sections, saved views, settings, rollover history, events and device preferences. Automatic sync, if enabled, can subsequently synchronize the merged data.';
 export function DataTransferControls({ disabled, onReplace }: { disabled: boolean; onReplace: () => void }) {
   const [repository] = useState(currentRepository);
   const { exportAppData, listRecoveryBackups, previewRecoveryBackup } = repository;
@@ -92,7 +92,7 @@ export function DataTransferControls({ disabled, onReplace }: { disabled: boolea
             <Card title="Preserve existing local data">
               <Muted>{mergeScope}</Muted>
               <Muted>Existing IDs always win, including conflicting edits. Projects also match by normalized name. Tasks also match by normalized title, mapped section and project, due date, points, priority and owner. Duplicates are skipped, including archived records.</Muted>
-              <Muted>{selection.preview.counts.seriesChanged ?? 0} recurring series added or generation cursors advanced. Deleted recurring occurrences covered by a local cursor stay deleted. Previously deleted ordinary tasks may be added again by this explicit import. Sections map by ID or name; tasks with missing links are skipped.</Muted>
+              <Muted>{selection.preview.counts.seriesChanged ?? 0} recurring series added or generation cursors advanced. Locally skipped occurrences and ended schedules stay in effect; legacy deletions covered by a local cursor stay deleted. Previously deleted ordinary tasks may be added again by this explicit import. Sections map by ID or name; tasks with missing links are skipped.</Muted>
               <Muted>A recovery backup must succeed before any additions are saved. If nothing is new, no data or backup is written. Other open tabs will ask you to reload. Existing local data will be preserved.</Muted>
             </Card>
             <Action label="Confirm merge import" disabled={busy} onPress={() => void confirm()} />

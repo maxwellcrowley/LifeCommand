@@ -1,3 +1,4 @@
+import { mapSeriesTemplates } from './recurrenceTemplates';
 import type { AppData, Section } from './models';
 import { isSectionIconId } from './sectionAppearance';
 
@@ -36,7 +37,7 @@ export function reassignSection(data: AppData, source: string, target: string): 
   if (source === target || !data.sections.some(s => s.id === source) || !data.sections.some(s => s.id === target && !s.archived)) throw Error('Choose a different active section.');
   const stamp = (previous: string) => new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
   return { ...data,
-    ...(data.recurringSeries ? { recurringSeries: data.recurringSeries.map(s => s.sectionId === source ? { ...s, sectionId: target, updatedAt: stamp(s.updatedAt) } : s) } : {}),
+    ...(data.recurringSeries ? { recurringSeries: data.recurringSeries.map(series => mapSeriesTemplates(series, s => s.sectionId === source ? { ...s, sectionId: target, updatedAt: stamp(s.updatedAt) } : s)) } : {}),
     tasks: data.tasks.map(t => t.sectionId === source ? { ...t, sectionId: target, updatedAt: stamp(t.updatedAt) } : t),
     projects: data.projects.map(p => p.sectionId === source ? { ...p, sectionId: target, updatedAt: stamp(p.updatedAt) } : p),
   };

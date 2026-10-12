@@ -1,0 +1,92 @@
+const assert = require('node:assert/strict');
+exports.run = async ({ send, evaluate, ready, click, fill, go, snap, shot, pause, today }) => {
+  const clickText = async text => {
+    assert.ok(await evaluate(`(() => {const e=[...document.querySelectorAll('[role="button"],button')].find(e=>e.innerText===${JSON.stringify(text)}); if(!e)return false;e.scrollIntoView({block:'center'});e.click();return true;})()`), text);
+    await pause(250);
+  };
+  const waitSaved = async check => { for (let i=0;i<80;i++) { const state=await snap(); if(check(state))return state; await pause(100); } throw Error('Save did not persist: '+await evaluate('document.body.innerText')); };
+  const layout = async () => assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'), 'No horizontal overflow');
+  const taskPath = task => '/task/' + encodeURIComponent(task.id);
+  for (const [device,width,height] of [['phone',390,844],['desktop',1440,1000]]) {
+    await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+    for (const appearance of ['light','dark']) {
+      console.log('stage: recurring create/edit '+device+' '+appearance);
+      await go('/capture','Capture');
+      await evaluate(`localStorage.setItem('lifecommand:device:presentation:v1',JSON.stringify({appearance:${JSON.stringify(appearance)},density:'comfortable',collapsed:{}}))`);
+      await go('/capture','Capture');
+      const title = `Synthetic repeat ${device} ${appearance}`;
+      await fill('Task title, required',title);
+      assert.equal(await evaluate(`document.querySelector('[aria-label="Repeat: Does not repeat"]').getAttribute('aria-checked')`),'true');
+      await click('Repeat: Every weekday'); await ready('Repeats every weekday');
+      await click('Repeat: Weekly'); await ready('Repeat');
+      await click('Repeat: Every 2 weeks'); await click('Repeat weekday: Monday'); await ready('Repeats every 2 weeks on Monday');
+      await click('Repeat: Monthly'); await fill('Repeat day of month','31'); await ready('shorter months use their last day');
+      await click('Repeat ends: On a date'); await fill('Repeat end date','2099-12-31');
+      await click('Repeat ends: After a number of occurrences'); await fill('Repeat occurrence count','3');
+      await layout(); await shot(`create-${device}-${appearance}`);
+      await click('Repeat: Daily'); await fill('Repeat start date',today);
+      await clickText('Save task');
+      let saved = await waitSaved(s=>s.recurringSeries?.some(r=>r.title===title));
+      const series=saved.recurringSeries.find(r=>r.title===title);
+      assert.equal(series.occurrenceCount,3); assert.equal(series.timeZone,await evaluate('Intl.DateTimeFormat().resolvedOptions().timeZone'));
+      assert.equal(saved.tasks.filter(t=>t.recurrenceId===series.id).length,3);
+      const first=saved.tasks.find(t=>t.recurrenceId===series.id && t.occurrenceDate===today);
+      await go(taskPath(first),'Repeating task');
+      await fill('Task title, required',title+' one occurrence');
+      await click('Status: complete'); await click('Save changes');
+      saved=await waitSaved(s=>s.tasks.find(t=>t.id===first.id)?.status==='complete');
+      assert.equal(saved.tasks.filter(t=>t.recurrenceId===series.id&&t.status==='complete').length,1);
+      assert.equal(saved.tasks.filter(t=>t.recurrenceId===series.id&&t.title===title).length,2);
+      const second=saved.tasks.find(t=>t.recurrenceId===series.id&&t.status!=='complete');
+      await go(taskPath(second),'Repeating task');
+      await click('This and future occurrences');
+      await fill('Task title, required',title+' revised');
+      await click('Repeat: Every 2 weeks'); await click('Repeat weekday: Monday');
+      await fill('Repeat occurrence count','2');
+      await layout(); await shot(`edit-${device}-${appearance}`);
+      await click('Save changes'); await ready('Change this and future occurrences?'); await shot(`confirmation-${device}-${appearance}`);
+      await click('Confirm recurring changes');
+      saved=await waitSaved(s=>s.recurringSeries.find(r=>r.id===series.id)?.revisions?.length===1);
+      assert.equal(saved.tasks.find(t=>t.id===first.id).status,'complete');
+      const next=saved.tasks.find(t=>t.recurrenceId===series.id&&t.status!=='complete');
+      assert.ok(next,'Revised upcoming occurrence exists');
+      await go(taskPath(next),'Repeating task'); await click('Skip this occurrence'); await ready('Skip this occurrence?');
+      await layout(); await shot(`skip-${device}-${appearance}`); await click('Confirm skip this occurrence');
+      saved=await waitSaved(s=>!s.tasks.some(t=>t.id===next.id));
+      assert.ok(saved.recurringSeries.find(r=>r.id===series.id).excludedDates.includes(next.occurrenceDate));
+      await go('/calendar','Calendar');
+      assert.ok(!(await snap()).tasks.some(t=>t.id===next.id));
+      const remaining=(await snap()).tasks.find(t=>t.recurrenceId===series.id&&t.status!=='complete');
+      if (remaining) {
+        await go(taskPath(remaining),'Repeating task'); await click('This and future occurrences'); await click('End this and future occurrences');
+        await ready('End this and future occurrences?'); await click('Confirm end this and future occurrences');
+        saved=await waitSaved(s=>!!s.recurringSeries.find(r=>r.id===series.id).endedFrom);
+        assert.equal(saved.tasks.filter(t=>t.recurrenceId===series.id).length,1);
+      }
+    }
+  }
+  console.log('stage: virtual Calendar navigation');
+  await go('/capture','Capture'); await fill('Task title, required','Synthetic distant recurrence'); await click('Repeat: Daily'); await fill('Repeat start date',today); await clickText('Save task');
+  const saved=await waitSaved(s=>s.recurringSeries.some(r=>r.title==='Synthetic distant recurrence'));
+  const series=saved.recurringSeries.find(r=>r.title==='Synthetic distant recurrence');
+  const count=saved.tasks.length;
+  await go('/calendar','Calendar'); await fill('Date, required, YYYY-MM-DD','2090-10-19'); await ready('Synthetic distant recurrence');
+  await layout(); await shot('distant-calendar'); assert.equal((await snap()).tasks.length,count,'Browsing distant dates does not persist future tasks');
+  const id='occurrence:'+encodeURIComponent(series.id)+':2090-10-19';
+  await go(taskPath({id}),'Repeating task'); await fill('Task title, required','Synthetic distant exception'); await click('Save changes');
+  const changed=await waitSaved(s=>s.tasks.some(t=>t.id===id)); assert.equal(changed.tasks.length,count+1);
+  assert.equal(changed.tasks.find(t=>t.id===id).occurrenceDate,'2090-10-19');
+  await go('/calendar','Calendar'); await fill('Date, required, YYYY-MM-DD','2090-10-19');
+  assert.ok(await evaluate(`(()=>{const e=[...document.querySelectorAll('a')].find(e=>e.getAttribute('href')?.endsWith('/capture'));if(!e)return false;e.click();return true;})()`));
+  await ready('Add a task to a section backlog'); await fill('Task title, required','Synthetic return to start'); await click('Repeat: Daily'); await fill('Repeat start date',today);
+  await click('Repeat ends: After a number of occurrences'); await fill('Repeat occurrence count','1'); await clickText('Save task');
+  await ready('Synthetic return to start');
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Date, required, YYYY-MM-DD"]').value`),today,'Capture returns a mounted Calendar tab to the start date');
+  const yesterday=require('../.test-build/src/domain/dates.js').addDays(today,-1);
+  await go('/capture','Capture'); await fill('Task title, required','Synthetic missed occurrence'); await click('Repeat: Daily'); await fill('Repeat start date',yesterday);
+  await click('Repeat ends: After a number of occurrences'); await fill('Repeat occurrence count','1'); await clickText('Save task');
+  const missedState=await waitSaved(s=>s.tasks.some(t=>t.title==='Synthetic missed occurrence'));
+  const missed=missedState.tasks.find(t=>t.title==='Synthetic missed occurrence'); await ready('Synthetic missed occurrence');
+  assert.ok(await evaluate(`document.querySelector(${JSON.stringify('[data-testid="task-row-'+missed.id+'"]')}).innerText.includes('Overdue')`),'Past Calendar occurrence is visibly overdue');
+  console.log('PASS: all repeat controls; create, individual completion/edit, future edit, skip, end; phone/desktop and light/dark; virtual future Calendar edit.');
+};

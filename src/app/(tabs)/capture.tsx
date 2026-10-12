@@ -1,3 +1,4 @@
+import { seriesFromDraft } from '@/src/domain/recurrenceDraft';
 import { AppText as Text } from '@/src/components/AppText';
 import { useUnsavedChanges } from '@/src/hooks/useUnsavedChanges';
 import { applyReminderDefault, reminderFromDraft, reminderToDraft } from '@/src/domain/reminders';
@@ -18,7 +19,7 @@ export default function CaptureScreen() {
 }
 
 function CaptureForm({ initialDate }: { initialDate: string }) {
-  const { data, addTask } = useAppData();
+  const { data, addTask, saveRecurringSeries } = useAppData();
   const { colors } = useAppTheme();
   const [rawDraft, setDraft] = useState<TaskDraft>(() => ({ ...blankTaskDraft(), dueDate: initialDate, status: initialDate ? 'scheduled' as const : 'backlog' as const }));
   const [reminderEdited, setReminderEdited] = useState(false);
@@ -27,17 +28,21 @@ function CaptureForm({ initialDate }: { initialDate: string }) {
   const draft = { ...rawDraft, ...(!reminderEdited ? reminderToDraft(applyReminderDefault({}, data?.settings.defaultTaskReminder ?? 'off')) : {}), storyPoints: pointsEdited ? rawDraft.storyPoints : String(defaultPoints), sectionId: rawDraft.sectionId || data?.sections.find(s => !s.archived)?.id || '' };
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const unsaved = useUnsavedChanges(!!rawDraft.title || !!rawDraft.description || !!rawDraft.notes);
+  const unsaved = useUnsavedChanges(!!rawDraft.title || !!rawDraft.description || !!rawDraft.notes || !!rawDraft.repeat);
   if (!data) return <Page title="Capture" subtitle="Loading your local task list…" />;
   const save = async () => {
     if (saving) return;
     setError(''); setSaving(true);
     try {
-      await addTask({ ...reminderFromDraft(draft), title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId || undefined, priority: draft.priority, dueDate: draft.dueDate.trim() || undefined, owner: draft.owner, storyPoints: Number(draft.storyPoints) });
+      const input = { ...reminderFromDraft(draft), title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId || undefined, priority: draft.priority, dueDate: draft.dueDate.trim() || undefined, owner: draft.owner, storyPoints: Number(draft.storyPoints) };
+      if (draft.repeat) await saveRecurringSeries(seriesFromDraft(input, draft.repeat));
+      else await addTask(input);
       setDraft(blankTaskDraft(data.sections.find(s => !s.archived)?.id ?? ''));
       setPointsEdited(false);
       setReminderEdited(false);
-      unsaved.allowLeave(); router.navigate(initialDate ? '/(tabs)' : '/(tabs)/review');
+      unsaved.allowLeave();
+      if (draft.repeat) router.navigate({ pathname: '/(tabs)/calendar', params: { date: draft.repeat.startDate, selection: String(Date.now()) } });
+      else router.navigate(initialDate ? '/(tabs)' : '/(tabs)/review');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save task.'); }
     finally { setSaving(false); }
   };

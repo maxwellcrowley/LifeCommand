@@ -1,3 +1,4 @@
+import { mapSeriesTemplates } from './recurrenceTemplates';
 import type { AppData, Project, Task } from './models';
 
 export const projectStatuses = ['active', 'paused', 'complete', 'archived'] as const;
@@ -58,7 +59,7 @@ export function deleteProject(data: AppData, id: string, expectedUpdatedAt: stri
   if (!project) throw new Error('This project no longer exists. Return to Projects.');
   if (project.updatedAt !== expectedUpdatedAt) throw new Error('This project changed while you were editing. Reload the project before deleting.');
   return { ...data, projects: data.projects.filter(item => item.id !== id),
-    ...(data.recurringSeries ? { recurringSeries: data.recurringSeries.map(s => s.projectId === id ? { ...s, projectId: undefined, updatedAt: new Date(Math.max(now.getTime(), Date.parse(s.updatedAt) + 1)).toISOString() } : s) } : {}),
+    ...(data.recurringSeries ? { recurringSeries: data.recurringSeries.map(series => mapSeriesTemplates(series, s => s.projectId === id ? { ...s, projectId: undefined, updatedAt: new Date(Math.max(now.getTime(), Date.parse(s.updatedAt) + 1)).toISOString() } : s)) } : {}),
     tasks: data.tasks.map(task => task.projectId === id ? { ...task, projectId: undefined,
       updatedAt: new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)).toISOString() } : task) };
 }
@@ -71,7 +72,7 @@ export function validateTaskProject(projects: Project[], projectId?: string, pre
 }
 
 export function calculateProjectProgress(tasks: Task[], projectId: string, includeBacklogTasks = true) {
-  const included = tasks.filter(task => task.projectId === projectId && task.status !== 'archived' && (includeBacklogTasks || !!task.dueDate || task.status === 'complete'));
+  const included = tasks.filter(task => !task.recurrenceId && task.projectId === projectId && task.status !== 'archived' && (includeBacklogTasks || !!task.dueDate || task.status === 'complete'));
   const complete = included.filter(task => task.status === 'complete');
   const totalPoints = included.reduce((sum, task) => sum + task.storyPoints, 0);
   const donePoints = complete.reduce((sum, task) => sum + task.storyPoints, 0);

@@ -7,14 +7,14 @@ export type ReminderOffset = 'at-time' | '15-minutes' | '1-hour' | 'morning-of' 
 export type ReminderDefault = 'off' | ReminderOffset;
 // Optional on input/legacy records; normalized storage always supplies enabled and offset.
 export interface ReminderFields {
-  reminderEnabled?: boolean; reminderAt?: string; reminderOffset?: ReminderOffset;
+  reminderTimeZone?: string; reminderEnabled?: boolean; reminderAt?: string; reminderOffset?: ReminderOffset;
   lastReminderAcknowledgedAt?: string;
   reminderDismissedForOccurrence?: string;
   snoozedUntil?: string;
   reminderSnoozedForOccurrence?: string;
 }
 export interface QuietHoursSettings { quietHoursEnabled: boolean; quietHoursStart: string; quietHoursEnd: string }
-export interface Task extends ReminderFields { manualPostponementsSinceCompletion?: number; rolloversSinceCompletion?: number; recurrenceId?: string; occurrenceDate?: string; id: string; title: string; description?: string; notes?: string; sectionId: string; projectId?: string; status: TaskStatus; priority: Priority; dueDate?: string; originalDueDate?: string; completedAt?: string; createdAt: string; updatedAt: string; owner: TaskOwner; storyPoints: number; rolloverCount: number; manuallyDeferredCount: number; lastRolledOverAt?: string; lastRolloverDate?: string; tags?: string[] }
+export interface Task extends ReminderFields { manualPostponementsSinceCompletion?: number; rolloversSinceCompletion?: number; recurrenceException?: boolean; recurrenceId?: string; occurrenceDate?: string; id: string; title: string; description?: string; notes?: string; sectionId: string; projectId?: string; status: TaskStatus; priority: Priority; dueDate?: string; originalDueDate?: string; completedAt?: string; createdAt: string; updatedAt: string; owner: TaskOwner; storyPoints: number; rolloverCount: number; manuallyDeferredCount: number; lastRolledOverAt?: string; lastRolloverDate?: string; tags?: string[] }
 export interface Project { id: string; name: string; description: string; notes?: string; sectionId?: string; status: 'active' | 'paused' | 'complete' | 'archived'; trackCompletion: boolean; useWeightedProgress: boolean; defaultTaskPoints: number; includeBacklogTasks: boolean; createdAt: string; updatedAt: string }
 export type EventSource = 'work' | 'personal' | 'army' | 'family';
 export type FamilyCategory = 'Appointment' | 'School' | 'Pet/Foster' | 'Errand' | 'Family Plan' | 'Other';
@@ -38,5 +38,14 @@ export interface AmbientSettings {
 export interface AppSettings extends AmbientSettings, QuietHoursSettings { overdueReminders?: boolean; rolloverMode?: 'automatic' | 'stay-overdue' | 'morning-review'; defaultTaskReminder: ReminderDefault; defaultEventReminder: ReminderDefault; appearance: 'system' | 'light' | 'dark'; rolloverTime: string; autoRollover: boolean; raiseMissedTasksToHigh: boolean; preserveOriginalDueDate: boolean; addRolloverCount: boolean; moveIncompleteTasksToNextDay: boolean; defaultStoryPoints: number; ambientDisplayEnabled: boolean }
 export interface RolloverSummary { rolloverDate: string; performedAt: string; movedTaskIds: string[] }
 export interface SavedView { sectionIds?: string[]; projectIds?: string[]; priorities?: Priority[]; dateMode?: 'any' | 'today' | 'this-week' | 'overdue' | 'fixed'; dateFrom?: string; dateThrough?: string; id: string; name: string; query: string; sectionId?: string; projectId?: string; priority?: Priority; schedule?: 'all' | 'scheduled' | 'backlog'; completion?: 'all' | 'open' | 'complete' }
-export interface RecurringSeries { id: string; title: string; sectionId: string; projectId?: string; priority: Priority; storyPoints: number; startDate: string; timeZone: string; frequency: 'daily' | 'weekdays' | 'weekly' | 'monthly'; weekdays: number[]; monthEnd: 'last-day' | 'skip'; generatedThrough?: string; endDate?: string; createdAt: string; updatedAt: string }
+export interface RecurringSeries extends ReminderFields {
+  id: string; title: string; description?: string; notes?: string; owner?: TaskOwner; tags?: string[];
+  sectionId: string; projectId?: string; priority: Priority; storyPoints: number;
+  startDate: string; timeZone: string; frequency: 'daily' | 'weekdays' | 'weekly' | 'biweekly' | 'monthly';
+  weekdays: number[]; weekday?: number; monthDay?: number; monthEnd: 'last-day' | 'skip';
+  excludedDates?: string[]; generatedThrough?: string; endDate?: string; occurrenceCount?: number; endedFrom?: string;
+  // Calendar-date revisions keep the same series and occurrence identities.
+  revisions?: { from: string; template: RecurringSeries }[];
+  createdAt: string; updatedAt: string;
+}
 export interface AppData { onboardingComplete?: boolean; recurringSeries?: RecurringSeries[]; savedViews?: SavedView[]; sections: Section[]; tasks: Task[]; projects: Project[]; calendarEvents: CalendarEvent[]; familyEvents: FamilyEvent[]; settings: AppSettings; lastRolloverSummary?: RolloverSummary }

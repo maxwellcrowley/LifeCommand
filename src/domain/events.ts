@@ -95,14 +95,21 @@ export function eventTime(event: DisplayEvent): string {
 export function dateLabel(date: string): string {
   return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 }
-export type CalendarDay = { date: string; events: DisplayEvent[]; tasks: Task[] };
-export function calendarDays(data: EventData & Pick<AppData, 'tasks'>, from: string, through: string, includeEmpty = false): CalendarDay[] {
+export type MilestoneMarker = { id: string; projectId: string; phaseId: string; title: string; projectName: string; targetDate: string };
+export type CalendarDay = { date: string; events: DisplayEvent[]; tasks: Task[]; milestones?: MilestoneMarker[] };
+export function calendarDays(data: EventData & Pick<AppData, 'tasks'> & Partial<Pick<AppData, 'projects'>>, from: string, through: string, includeEmpty = false): CalendarDay[] {
   const groups = new Map<string, CalendarDay>();
   const group = (date: string) => {
     if (!groups.has(date)) groups.set(date, { date, events: [], tasks: [] });
     return groups.get(date)!;
   };
   if (includeEmpty) for (let date = from; date <= through; date = addDays(date, 1)) group(date);
+  for (const project of data.projects ?? []) if (project.plan?.enabled && project.status !== 'archived') {
+    for (const milestone of project.plan.milestones) if (milestone.targetDate && milestone.targetDate >= from && milestone.targetDate <= through) {
+      const day = group(milestone.targetDate);
+      (day.milestones ??= []).push({ id: milestone.id, projectId: project.id, phaseId: milestone.phaseId, title: milestone.title, projectName: project.name, targetDate: milestone.targetDate });
+    }
+  }
   for (const event of allEvents(data)) if (!event.archivedAt && event.date >= from && event.date <= through) group(event.date).events.push(event);
   for (const event of data.externalEvents ?? []) {
     const first = event.allDay ? event.start : localDateKey(new Date(event.start));

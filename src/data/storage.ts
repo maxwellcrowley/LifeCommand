@@ -2,6 +2,7 @@ import { EXTERNAL_CALENDAR_KEY } from '../domain/externalCalendars';
 import { SUBSCRIPTIONS_KEY } from '../domain/ics';
 import type { AppData } from '../domain/models';
 import { normalizeAppData } from '../domain/normalize';
+import { reconcilePlans } from '../domain/projectPlans';
 import { CURRENT_SCHEMA_VERSION, migrateSnapshot, persistedSnapshot, snapshotData, snapshotRevision, snapshotVersion } from '../domain/migrations';
 import { createDefaultAppData } from '../domain/defaults';
 import { createExport, parseTransferJSON, validateImport, validateSnapshot, type ImportPreview } from '../domain/transfer';
@@ -135,7 +136,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
       await assertCurrent();
       const current = await read();
       if (canonical(current) !== expected) throw Error('Local data changed during sync. Retry to include the latest changes.');
-      return replace(validateSnapshot(data).data, 'before-import');
+      return replace(reconcilePlans(current, validateSnapshot(data).data), 'before-import');
     }),
     exportAppData: () => enqueue(async () => { await assertCurrent(); return JSON.stringify(createExport(await read()), null, 2); }),
     hasExternalChange: () => enqueue(async () => observedRaw !== undefined && observedRaw !== await storage.getItem(STORAGE_KEY)),
@@ -223,7 +224,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
     changeAppData: (change: (current: AppData) => AppData, undoLabel?: string) => enqueue(async () => {
       await assertCurrent();
       const current = await read();
-      const next = change(current);
+      const next = reconcilePlans(current, change(current));
       const undo = undoLabel ? taskUndo(current, next, undoLabel) : undefined;
       if (next !== current) await write(next, undo ? [...undoEntries, undo].slice(-10) : undoEntries);
       return next;

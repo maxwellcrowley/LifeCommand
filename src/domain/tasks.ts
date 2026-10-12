@@ -1,4 +1,5 @@
 import type { AppData, AppSettings, Priority, Task, TaskOwner, TaskStatus } from './models';
+import { validatePlanReferences } from './planValidation';
 import { normalizeReminder, validateReminder } from './reminders';
 import { localDateKey } from './dates';
 import { validateTaskProject } from './projects';
@@ -22,7 +23,7 @@ export function createTask(input: TaskInput, now = new Date()): Task {
   const timestamp = now.toISOString();
   const dueDate = input.dueDate || undefined;
   validateDueDate(dueDate);
-  return { ...normalizeReminder({ ...input }), id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, notes: input.notes?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
+  return { ...(input.phaseId ? { phaseId: input.phaseId } : {}), ...(input.planRequired === undefined ? {} : { planRequired: input.planRequired }), ...normalizeReminder({ ...input }), id: `task-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, title, description: input.description?.trim() || undefined, notes: input.notes?.trim() || undefined, sectionId: input.sectionId, projectId: input.projectId || undefined, status: dueDate ? 'scheduled' : 'backlog', priority: input.priority ?? 'normal', dueDate, originalDueDate: input.originalDueDate, completedAt: undefined, createdAt: timestamp, updatedAt: timestamp, owner: input.owner ?? 'me', storyPoints: points, rolloverCount: 0, manuallyDeferredCount: 0, tags: input.tags };
 }
 
 export function updateTask(task: Task, changes: TaskChanges, now = new Date()): Task {
@@ -30,6 +31,8 @@ export function updateTask(task: Task, changes: TaskChanges, now = new Date()): 
   if ('description' in changes) merged.description = changes.description?.trim() || undefined;
   if ('notes' in changes) merged.notes = changes.notes?.trim() || undefined;
   if ('projectId' in changes) merged.projectId = changes.projectId || undefined;
+  if (merged.projectId !== task.projectId && !('phaseId' in changes)) merged.phaseId = undefined;
+  if ('phaseId' in changes) merged.phaseId = changes.phaseId || undefined;
   if (!merged.title) throw new Error('Title is required.');
   if (!merged.sectionId) throw new Error('Section is required.');
   if (!Number.isFinite(merged.storyPoints) || merged.storyPoints <= 0) throw new Error('Story points must be positive.');
@@ -113,7 +116,8 @@ export function changeTask(data: AppData, id: string, changes: TaskChanges, choi
   const task = currentTask(data, id, expectedUpdatedAt);
   validateTaskProject(data.projects, 'projectId' in changes ? changes.projectId : task.projectId, task.projectId);
   const next = updateTaskSchedule(task, changes, data.settings, choice, new Date(Math.max(now.getTime(), Date.parse(task.updatedAt) + 1)));
-  return { ...data, tasks: data.tasks.map(item => item.id === id ? next : item) };
+  const result = { ...data, tasks: data.tasks.map(item => item.id === id ? next : item) };
+  validatePlanReferences(result); return result;
 }
 
 export function deleteTask(data: AppData, id: string, expectedUpdatedAt: string): AppData {

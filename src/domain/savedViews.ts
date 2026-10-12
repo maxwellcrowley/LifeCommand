@@ -9,11 +9,11 @@ export function mutateSavedView(data: AppData, id: string, next: SavedView | und
   return { ...data, savedViews: [...(data.savedViews ?? []).filter(view => view.id !== id), ...(next ? [next] : [])] };
 }
 export function viewProblems(data: Pick<AppData, 'sections' | 'projects'>, view: TaskFilter) {
-  return [...(view.sectionIds ?? (view.sectionId ? [view.sectionId] : [])).filter(id => !data.sections.some(s => s.id === id)).map(() => 'A section no longer exists'), ...(view.projectIds ?? (view.projectId ? [view.projectId] : [])).filter(id => !data.projects.some(p => p.id === id)).map(() => 'A project no longer exists')];
+  return [...(view.phaseIds ?? []).filter(id => !data.projects.some(p => p.plan?.phases.some(phase => phase.id === id))).map(() => 'A phase no longer exists'), ...(view.sectionIds ?? (view.sectionId ? [view.sectionId] : [])).filter(id => !data.sections.some(s => s.id === id)).map(() => 'A section no longer exists'), ...(view.projectIds ?? (view.projectId ? [view.projectId] : [])).filter(id => !data.projects.some(p => p.id === id)).map(() => 'A project no longer exists')];
 }
 export function validateSavedView(view: SavedView) {
   if (!view.id || !view.name.trim()) throw Error('A view name is required.');
-  for (const values of [view.sectionIds, view.projectIds, view.priorities]) if (values !== undefined && (!Array.isArray(values) || values.some(v => typeof v !== 'string' || !v) || new Set(values).size !== values.length)) throw Error('Choose valid, distinct view filters.');
+  for (const values of [view.sectionIds, view.projectIds, view.phaseIds, view.priorities]) if (values !== undefined && (!Array.isArray(values) || values.some(v => typeof v !== 'string' || !v) || new Set(values).size !== values.length)) throw Error('Choose valid, distinct view filters.');
   if (view.priorities?.some(v => !['low', 'normal', 'high'].includes(v))) throw Error('Choose valid priorities.');
   if (view.dateMode && !['any', 'today', 'this-week', 'overdue', 'fixed'].includes(view.dateMode)) throw Error('Choose a valid date filter.');
   if (view.dateMode === 'fixed' && (!view.dateFrom || !view.dateThrough || !isDateKey(view.dateFrom) || !isDateKey(view.dateThrough) || view.dateFrom > view.dateThrough)) throw Error('Use a valid start and end date in order.');

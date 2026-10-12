@@ -1,3 +1,4 @@
+import { validatePlanReferences } from './planValidation';
 import { validateSavedView } from './savedViews';
 import type { AppData } from './models';
 import { normalizeAppData } from './normalize';
@@ -47,7 +48,7 @@ function compareSupplied(input: unknown, normalized: unknown, path: string): voi
     }
   } else if (input !== normalized) {
     // Empty optional text is the same as absent text in existing editors.
-    if (input === '' && normalized === undefined && /\.(description|location|notes|projectId|sectionId)$/.test(path)) return;
+    if (input === '' && normalized === undefined && /\.(description|location|notes|projectId|sectionId|phaseId)$/.test(path)) return;
     throw Error(`${path} has an unsupported or invalid value. Check its type, format, or referenced ID.`);
   }
 }
@@ -72,10 +73,12 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
   // other supplied field strictly, then return the original unresolved link.
   const projectIds = new Set((input.projects as RecordValue[]).map(project => project.id));
   const unresolved = new Map<number, string>();
+  const unresolvedPhases = new Map<number, unknown>();
   const checked = allowUnresolvedTaskProjects ? { ...input, tasks: (input.tasks as RecordValue[]).map((task, index) => {
     if (typeof task.projectId === 'string' && task.projectId.trim() && !projectIds.has(task.projectId)) {
       unresolved.set(index, task.projectId);
-      const { projectId: _projectId, ...rest } = task;
+      if (task.phaseId !== undefined) unresolvedPhases.set(index, task.phaseId);
+      const { projectId: _projectId, phaseId: _phaseId, ...rest } = task;
       return rest;
     }
     return task;
@@ -95,12 +98,13 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
     if (!task.recurrenceId || !task.occurrenceDate || !data.recurringSeries?.some(s => s.id === task.recurrenceId) || occurrences.has(key) || task.id !== `occurrence:${encodeURIComponent(task.recurrenceId)}:${task.occurrenceDate}`) throw Error('Invalid or duplicate recurring occurrence.');
     occurrences.add(key);
   }
+  validatePlanReferences(data);
   // Empty sections are intentionally upgraded to the standard sections.
   const supplied = { ...checked, sections: (input.sections as unknown[]).length ? input.sections : data.sections };
   compareSupplied(supplied, data, 'data');
   if (data.sections.length !== (supplied.sections as unknown[]).length) throw Error('A task or project references a missing section ID.');
   const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
-  unresolved.forEach((projectId, index) => { data.tasks[index].projectId = projectId; });
+  unresolved.forEach((projectId, index) => { data.tasks[index].projectId = projectId; if (unresolvedPhases.has(index)) { const phaseId = unresolvedPhases.get(index); nonempty(phaseId, 'Task phase ID'); data.tasks[index].phaseId = phaseId as string; } });
   return { data, defaultsApplied: canonical(input) !== canonical(data) };
 }
 

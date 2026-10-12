@@ -23,7 +23,7 @@ export interface MergeImportPreview {
 const normalizeText = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 const fingerprint = (task: Task) => JSON.stringify([
   normalizeText(task.title), task.sectionId, task.projectId ?? null,
-  task.dueDate ?? null, task.storyPoints, task.priority, task.owner,
+  task.phaseId ?? null, task.planRequired ?? true, task.dueDate ?? null, task.storyPoints, task.priority, task.owner,
 ]);
 
 // Pure plan shared by preview and confirmation. Existing records/collections are
@@ -83,6 +83,7 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
     if (task.projectId && !projectId) { counts.tasksMissingProject++; continue; }
     const sectionId = sections.get(task.sectionId);
     if (!sectionId) { counts.tasksMissingSection++; continue; }
+    if (task.phaseId && !projects.find(p => p.id === projectId)?.plan?.phases.some(p => p.id === task.phaseId)) { warnings.push(`Task ${task.title} skipped: its phase does not exist in the retained local project plan.`); counts.tasksSkipped++; continue; }
     const candidate = { ...task, sectionId, projectId };
     const key = task.recurrenceId ? task.id : fingerprint(candidate);
     if (fingerprints.has(key)) { counts.tasksSkipped++; continue; }

@@ -1,3 +1,4 @@
+import { validatePlanShape } from './planValidation';
 import { validateSeries } from './recurrence';
 import type { AppData, CalendarEvent, FamilyEvent, Project, Section, Task, RecurringSeries, SavedView } from './models';
 import { normalizeSettings, isRolloverTime } from './settings';
@@ -49,7 +50,7 @@ export function normalizeAppData(value: unknown): AppData {
   };
   const projectId = identities('project');
   const projects: Project[] = records(data.projects).map((p, i) => ({
-    id: projectId(p.id, i), name: text(p.name) ?? 'Untitled project', description: text(p.description) ?? '', notes: text(p.notes),
+    ...(p.plan === undefined ? {} : { plan: validatePlanShape(p.plan) }), id: projectId(p.id, i), name: text(p.name) ?? 'Untitled project', description: text(p.description) ?? '', notes: text(p.notes),
     sectionId: text(p.sectionId) ? ensureSection(p.sectionId) : undefined,
     status: choice(p.status, ['active', 'paused', 'complete', 'archived'], 'active'),
     trackCompletion: bool(p.trackCompletion, true), useWeightedProgress: bool(p.useWeightedProgress, false),
@@ -61,7 +62,7 @@ export function normalizeAppData(value: unknown): AppData {
     const dueDate = date(t.dueDate);
     return compact({
       ...normalizeReminder(t), ...(t.recurrenceException !== undefined ? { recurrenceException: bool(t.recurrenceException, false) } : {}), recurrenceId: text(t.recurrenceId), occurrenceDate: date(t.occurrenceDate),
-      id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description), notes: text(t.notes),
+      phaseId: text(t.phaseId), ...(t.planRequired === undefined ? {} : { planRequired: bool(t.planRequired, true) }), id: taskId(t.id, i), title: text(t.title) ?? 'Untitled task', description: text(t.description), notes: text(t.notes),
       sectionId: ensureSection(t.sectionId), projectId: projects.some(p => p.id === t.projectId) ? text(t.projectId) : undefined,
       status: choice(t.status, ['backlog', 'scheduled', 'overdue', 'complete', 'deferred', 'archived'], dueDate ? 'scheduled' : 'backlog'),
       priority: choice(t.priority, ['low', 'normal', 'high'], 'normal'), owner: choice(t.owner, ['me', 'kellyn', 'shared', 'system'], 'me'),
@@ -107,6 +108,6 @@ export function normalizeAppData(value: unknown): AppData {
     }
     validateSeries(series); return compact(series);
   });
-  const savedViews: SavedView[] | undefined = data.savedViews === undefined ? undefined : records(data.savedViews).map(v => compact<SavedView>({ ...(Array.isArray(v.sectionIds) ? { sectionIds: v.sectionIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.projectIds) ? { projectIds: v.projectIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.priorities) ? { priorities: v.priorities.filter((p): p is 'high' | 'normal' | 'low' => ['high', 'normal', 'low'].includes(String(p))) } : {}), ...(v.dateMode !== undefined ? { dateMode: choice(v.dateMode, ['any', 'today', 'this-week', 'overdue', 'fixed'] as const, 'any') } : {}), dateFrom: date(v.dateFrom), dateThrough: date(v.dateThrough), id: text(v.id) ?? '', name: text(v.name) ?? '', query: typeof v.query === 'string' ? v.query : '', sectionId: text(v.sectionId), projectId: text(v.projectId), priority: v.priority === undefined ? undefined : choice<'low' | 'normal' | 'high'>(v.priority, ['low', 'normal', 'high'], 'normal'), schedule: v.schedule === undefined ? undefined : choice<'all' | 'scheduled' | 'backlog'>(v.schedule, ['all', 'scheduled', 'backlog'], 'all'), completion: v.completion === undefined ? undefined : choice<'all' | 'open' | 'complete'>(v.completion, ['all', 'open', 'complete'], 'all') }));
+  const savedViews: SavedView[] | undefined = data.savedViews === undefined ? undefined : records(data.savedViews).map(v => compact<SavedView>({ ...(Array.isArray(v.phaseIds) ? { phaseIds: v.phaseIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.sectionIds) ? { sectionIds: v.sectionIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.projectIds) ? { projectIds: v.projectIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.priorities) ? { priorities: v.priorities.filter((p): p is 'high' | 'normal' | 'low' => ['high', 'normal', 'low'].includes(String(p))) } : {}), ...(v.dateMode !== undefined ? { dateMode: choice(v.dateMode, ['any', 'today', 'this-week', 'overdue', 'fixed'] as const, 'any') } : {}), dateFrom: date(v.dateFrom), dateThrough: date(v.dateThrough), id: text(v.id) ?? '', name: text(v.name) ?? '', query: typeof v.query === 'string' ? v.query : '', sectionId: text(v.sectionId), projectId: text(v.projectId), priority: v.priority === undefined ? undefined : choice<'low' | 'normal' | 'high'>(v.priority, ['low', 'normal', 'high'], 'normal'), schedule: v.schedule === undefined ? undefined : choice<'all' | 'scheduled' | 'backlog'>(v.schedule, ['all', 'scheduled', 'backlog'], 'all'), completion: v.completion === undefined ? undefined : choice<'all' | 'open' | 'complete'>(v.completion, ['all', 'open', 'complete'], 'all') }));
   return { onboardingComplete: bool(data.onboardingComplete, true), ...(recurringSeries ? { recurringSeries } : {}), ...(savedViews ? { savedViews } : {}), sections, tasks, projects, calendarEvents, familyEvents, settings, lastRolloverSummary };
 }

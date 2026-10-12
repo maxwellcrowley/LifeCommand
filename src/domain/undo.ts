@@ -1,3 +1,4 @@
+import { reconcilePlans } from './projectPlans';
 import type { AppData, Task, RecurringSeries } from './models';
 import { validateSnapshot } from './transfer';
 
@@ -32,5 +33,5 @@ export function applyTaskUndo(data: AppData, entry: TaskUndo): AppData {
       if (index < 0) recurringSeries.push(restored); else recurringSeries[index] = restored;
     } else if (index >= 0) recurringSeries.splice(index, 1);
   }
-  return validateSnapshot({ ...data, tasks, ...(data.recurringSeries || recurringSeries.length ? { recurringSeries } : {}) }).data;
+  return validateSnapshot(reconcilePlans(data, { ...data, tasks, ...(data.recurringSeries || recurringSeries.length ? { recurringSeries } : {}) }, undefined, false)).data;
 }

@@ -1,3 +1,5 @@
+import { assertPlanTokens } from '../domain/planState';
+import { applyPlanCommand, transitionSummary, type PlanCommand } from '../domain/projectPlans';
 import { mutateSavedView } from '../domain/savedViews';
 import { materializeRecurrences, saveSeries, ensureOccurrence, changeFutureSeries, convertTaskToSeries } from '../domain/recurrence';
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -15,8 +17,9 @@ import { changeEvent, createEvent, insertEvent, type EventInput } from '@/src/do
 import { deleteProject as removeProject, changeProject, createProject, insertProject, validateTaskProject, type ProjectInput, type ProjectChanges } from '@/src/domain/projects';
 
 type AppDataValue = {
+  planAction: (id: string, expected: string, command: PlanCommand) => Promise<void>;
   editFutureSeries: (task: Task, template: RecurringSeries | undefined, expectedSeries: string) => Promise<void>;
-  convertToRecurring: (task: Task, series: RecurringSeries) => Promise<void>;
+  convertToRecurring: (task: Task, series: RecurringSeries, planTokens?: Record<string, string>) => Promise<void>;
   finishSetup: () => Promise<void>;
   saveView: (view: SavedView, expected?: SavedView) => Promise<void>; deleteView: (id: string, expected?: SavedView) => Promise<void>; saveRecurringSeries: (series: RecurringSeries, expected?: string) => Promise<void>;
   acceptCloud: (next: AppData, expected: string) => Promise<void>;
@@ -45,7 +48,7 @@ type AppDataValue = {
   actOnReminder: (reminder: ScheduledReminder, action: ReminderAction) => Promise<void>;
   addTask: (input: TaskInput) => Promise<Task>;
   schedule: (selection: ScheduleSelection[], date: string, backlogOnly?: boolean) => Promise<void>;
-  editTask: (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => Promise<void>;
+  editTask: (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string, planTokens?: Record<string, string>) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
 };
 const AppDataContext = createContext<AppDataValue | null>(null);
@@ -70,9 +73,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (stale.current) throw new ExternalDataChangeError();
     if (resetting.current) throw new Error('Data replacement is in progress. Please wait.');
     try {
-      const next = await changeAppData(change, undoLabel);
+      let before: AppData | undefined;
+      const next = await changeAppData(current => { before = current; return change(current); }, undoLabel);
       setData(next);
-      if (undoLabel) setFeedback(`${undoLabel}. Saved.`);
+      const transitions = before ? transitionSummary(before, next) : '';
+      if (transitions || undoLabel) setFeedback(transitions || `${undoLabel}. Saved.`);
       setRecoveryNotice(getRecoveryNotice());
       setError('');
     } catch (cause) {
@@ -180,7 +185,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return task;
   };
   const schedule = (selection: ScheduleSelection[], date: string, backlogOnly = false) => commit(current => scheduleTasks(selection.reduce((next, item) => ensureOccurrence(next, item.id), current), selection, date, backlogOnly), 'Schedule tasks');
-  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string) => commit(current => changeTask(ensureOccurrence(current, id), id, changes, choice, expectedUpdatedAt), 'Update task');
+  const editTask = async (id: string, changes: TaskChanges, choice?: PushbackChoice, expectedUpdatedAt?: string, planTokens?: Record<string, string>) => commit(current => { assertPlanTokens(current, planTokens); return changeTask(ensureOccurrence(current, id), id, changes, choice, expectedUpdatedAt); }, 'Update task');
   const deleteTask = (id: string, expectedUpdatedAt: string) => commit(current => removeTask(ensureOccurrence(current, id), id, expectedUpdatedAt), 'Delete task');
   const deleteProject = (id: string, expectedUpdatedAt: string) => commit(current => removeProject(current, id, expectedUpdatedAt));
   const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -215,7 +220,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ editFutureSeries: (task, template, expected) => commit(current => changeFutureSeries(ensureOccurrence(current, task.id), task, template, expected), template ? 'Update recurring schedule' : 'End recurring schedule'), convertToRecurring: (task, series) => commit(current => convertTaskToSeries(current, task, series), 'Make task recurring'), finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: (view, expected) => commit(current => mutateSavedView(current, view.id, view, expected)), deleteView: (id, expected) => commit(current => mutateSavedView(current, id, undefined, expected)), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date(), 30), 'Save recurring task'), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, externalChange, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ planAction: (id, expected, command) => commit(current => applyPlanCommand(current, id, expected, command), command.type === 'assign' ? 'Move project tasks' : undefined), editFutureSeries: (task, template, expected) => commit(current => changeFutureSeries(ensureOccurrence(current, task.id), task, template, expected), template ? 'Update recurring schedule' : 'End recurring schedule'), convertToRecurring: (task, series, planTokens) => commit(current => { assertPlanTokens(current, planTokens); return convertTaskToSeries(current, task, series); }, 'Make task recurring'), finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: (view, expected) => commit(current => mutateSavedView(current, view.id, view, expected)), deleteView: (id, expected) => commit(current => mutateSavedView(current, id, undefined, expected)), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date(), 30), 'Save recurring task'), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, externalChange, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment></AppDataContext.Provider>;
 }
 
 export function useAppData() {

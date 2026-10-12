@@ -1,3 +1,4 @@
+import { planNotices, currentPhase } from './planState';
 import type { AppData } from './models';
 import type { Presentation } from './presentation';
 import { isTaskOverdue } from './tasks';
@@ -12,8 +13,13 @@ export function classifyReview(data: AppData, today: string, preferences: Pick<P
     const eligible = { overdue: isTaskOverdue(task, today), postponed: count >= preferences.reviewPostponedThreshold, 'needs-date': !task.dueDate && !preferences.reviewBacklogExcludedSections.includes(task.sectionId), future: !!task.dueDate && task.dueDate > today, projects: false };
     return { task, reasons, group: preferences.reviewGroups.find(group => eligible[group]) };
   });
-  const projects = data.projects.filter(p => p.status === 'active').flatMap(project => {
+  const projects = data.projects.filter(p => p.status === 'active' || (p.status === 'complete' && p.plan?.enabled)).flatMap(project => {
+    const notices = planNotices(data, project);
+    if (notices.length) return [{ project, reason: notices.join(' ') }];
+    if (project.status === 'complete') return [];
     const tasks = active.filter(t => t.projectId === project.id);
+    const phase = currentPhase(project);
+    if (phase && !tasks.some(t => t.phaseId === phase.id)) return [{ project, reason: `${phase.name}: no actionable task in the current phase. Review its milestones or choose a next step.` }];
     if (tasks.some(t => t.dueDate && t.dueDate <= today)) return [];
     const future = tasks.filter(t => t.dueDate).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!));
     const reason = !tasks.length ? 'No incomplete tasks — choose a next step or finish this project.' : tasks.every(t => t.dueDate && t.dueDate > today) ? `Future-only plan · next scheduled ${future[0].dueDate}. Not overdue.` : 'No task scheduled today or earlier — choose a next step when ready.';

@@ -4,7 +4,7 @@ import { Action, AddFromBacklog } from '@/src/components/TaskScheduling';
 import { TaskList, TaskRow } from '@/src/components/TaskList';
 import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
 import { useState } from 'react';
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { Modal, Pressable, View } from 'react-native';
 import { Card, Label, Muted, Page } from '@/src/components/ui';
 import { FormError } from '@/src/components/TaskForm';
@@ -81,9 +81,10 @@ function CalendarContent({ initialDate }: { initialDate?: string }) {
     </Modal>
     {valid ? <AddFromBacklog key={date} date={date} /> : null}
     {valid ? <Muted>{dateLabel(from)}{from !== through ? ` to ${dateLabel(through)}` : ''}</Muted> : null}
-    {view === 'Week' && valid ? <Card title="Week summary"><Label>{days.reduce((count, day) => count + day.events.length, 0)} events | {days.reduce((count, day) => count + day.tasks.length, 0)} tasks</Label>{days.map(day => <Pressable key={day.date} accessibilityRole="button" accessibilityLabel={`Open ${day.date}`} onPress={() => { setSelected(day.date); setView('Day'); }} style={{ paddingVertical: 12 }}><Label>{dateLabel(day.date)}</Label><Muted>{day.events.length} events | {day.events.filter(event => event.source === 'family').length} family | {day.tasks.length} tasks</Muted></Pressable>)}</Card> : null}
+    {view === 'Week' && valid ? <Card title="Week summary"><Label>{days.reduce((count, day) => count + day.events.length, 0)} events | {days.reduce((count, day) => count + day.tasks.length, 0)} tasks</Label>{days.map(day => <Pressable key={day.date} accessibilityRole="button" accessibilityLabel={`Open ${day.date}`} onPress={() => { setSelected(day.date); setView('Day'); }} style={{ paddingVertical: 12 }}><Label>{dateLabel(day.date)}</Label><Muted>{day.milestones?.length ?? 0} milestones | {day.events.length} events | {day.events.filter(event => event.source === 'family').length} family | {day.tasks.length} tasks</Muted></Pressable>)}</Card> : null}
     {view !== 'Week' && days.map(day => <Card key={day.date} title={dateLabel(day.date)}>
       {day.date !== date ? <AddFromBacklog date={day.date} /> : null}
+      {day.milestones?.map(m => <View key={m.id} style={{ gap: 4, borderLeftWidth: 2, borderLeftColor: colors.accent, paddingLeft: 10 }}><Label>◇ Milestone target · {m.title}</Label><Muted>{m.projectName} · target date, not a timed event</Muted><Action label={`Open milestone ${m.title}`} text="Open plan" onPress={() => router.push({ pathname: '/project/[id]', params: { id: m.projectId, view: 'plan' } })} /></View>)}
       <Muted>Events | {day.events.length}</Muted>
       {day.events.length ? day.events.map(event => <EventRow key={eventKey(event)} event={event} />) : <Muted>No events.</Muted>}
       <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, gap: 8 }}>

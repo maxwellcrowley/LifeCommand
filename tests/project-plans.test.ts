@@ -5,7 +5,7 @@ import { createDefaultAppData } from '../src/domain/defaults';
 import { createProject, changeProject, getProjectNextTask, getProjectProgress } from '../src/domain/projects';
 import { createTask, changeTask, deleteTask } from '../src/domain/tasks';
 import { applyPlanCommand, draftPlan, previewPlanCommand, reconcilePlans, type PlanCommand } from '../src/domain/projectPlans';
-import { assertPlanTokens, milestoneState, phaseReadiness, planToken, projectBlockers, planNotices } from '../src/domain/planState';
+import { assertPlanTokens, nextMilestone, milestoneState, phaseReadiness, planToken, projectBlockers, planNotices } from '../src/domain/planState';
 import { createExport, validateImport, validateSnapshot } from '../src/domain/transfer';
 import { migrateSnapshot, persistedSnapshot } from '../src/domain/migrations';
 import { createRepository, STORAGE_KEY } from '../src/data/storage';
@@ -19,6 +19,8 @@ import { searchData } from '../src/domain/search';
 import { normalizePresentation } from '../src/domain/presentation';
 import { notificationPlan } from '../src/notifications/service';
 import { rolloverAppData } from '../src/domain/rollover';
+import { convertTaskToSeries, materializeRecurrences } from '../src/domain/recurrence';
+import type { RecurringSeries } from '../src/domain/models';
 
 const now = new Date('2026-10-12T12:00:00Z');
 const phases = (): ProjectPhase[] => ['Discover', 'Build', 'Launch'].map((name, i) => ({ id: `phase-${i}`, name, state: 'upcoming', rule: { mode: 'manual' } }));
@@ -268,4 +270,35 @@ test('assignment consequence tokens reject an intervening requirement edit in ei
   const updated = changeTask(data, 'work-1', { planRequired: false });
   assert.throws(() => assertPlanTokens(updated, { planned: token }), /requirements changed/);
   assert.doesNotThrow(() => assertPlanTokens(validateSnapshot(data).data, { planned: token }));
+});
+test('invalid stored plans fail recoverably without repair, writes, or lost task records', async () => {
+  const data = planFixture(), storage = memory(data);
+  const raw = JSON.parse(storage.values.get(STORAGE_KEY)!); raw.projects[0].plan.phases[0].rule.mode = 'skip-everything';
+  const damaged = JSON.stringify(raw); storage.values.set(STORAGE_KEY, damaged);
+  await assert.rejects(createRepository(storage).loadAppData(), /progression rule/);
+  assert.equal(storage.values.get(STORAGE_KEY), damaged); assert.equal(storage.values.size, 1);
+  const repository = createRepository(memory(data)); await repository.loadAppData();
+  const envelope = createExport(data); (envelope.data.projects[0].plan!.phases[0].rule as { mode: string }).mode = 'invalid';
+  await assert.rejects(repository.importAppData(JSON.stringify(envelope)), /progression rule/);
+  assert.equal((await repository.loadAppData()).tasks.length, 33);
+});
+test('finite-to-recurring conversion leaves explicit milestone repair and bounded maintenance never inflates gates', () => {
+  let data = run(planFixture(), { type: 'milestone', milestone: milestone(), action: 'none' });
+  const series: RecurringSeries = { id: 'maintenance', title: 'Regular inspection', projectId: 'planned', sectionId: 'work', priority: 'normal', storyPoints: 1, startDate: '2026-10-12', timeZone: 'America/New_York', frequency: 'daily', weekdays: [], monthEnd: 'last-day', createdAt: now.toISOString(), updatedAt: now.toISOString() };
+  data = reconcilePlans(data, convertTaskToSeries(data, data.tasks[0], series, now), now);
+  assert.equal(milestoneState(data.tasks, p(data).plan!.milestones[0]).label, 'Needs attention');
+  assert.ok(data.tasks.filter(t => t.recurrenceId).every(t => !t.phaseId));
+  const progress = getProjectProgress(data.tasks, p(data)), gate = phaseReadiness(data, p(data), p(data).plan!.phases[0]);
+  const later = materializeRecurrences(data, new Date('2027-01-12T12:00:00Z'), 30);
+  assert.deepEqual(getProjectProgress(later.tasks, p(later)), progress); assert.equal(phaseReadiness(later, p(later), p(later).plan!.phases[0]).total, gate.total);
+  assert.doesNotThrow(() => validateSnapshot(later));
+});
+
+test('next milestone follows phase order into upcoming work when current milestones are complete', () => {
+  let data = run(planFixture(), { type: 'start' });
+  data = run(data, { type: 'milestone', milestone: milestone({ id: 'future', phaseId: 'phase-2', taskIds: [], type: 'approval' }), action: 'none' });
+  data = run(data, { type: 'milestone', milestone: milestone(), action: 'none' });
+  assert.equal(nextMilestone(data.tasks, p(data))!.id, 'gate');
+  data = done(done(data, 'work-0'), 'work-1');
+  assert.equal(nextMilestone(data.tasks, p(data))!.id, 'future');
 });

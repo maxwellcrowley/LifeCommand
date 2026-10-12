@@ -9,7 +9,9 @@ account records, calendar connections, storage keys or credentials are fixtures.
 ## Audited foundation
 
 - Root `AGENTS.md`, Expo 57 package versions, matching SDK documentation and Router
-  documentation. No nested AGENTS files; no dependency/native module needed.
+  documentation ([SDK 57](https://docs.expo.dev/versions/v57.0.0/),
+  [Expo index](https://docs.expo.dev/llms.txt),
+  [Router](https://docs.expo.dev/router/introduction/)). No nested AGENTS files; no dependency/native module needed.
 - Product spec, data-model document, product-completion and recurrence delivery
   reports: projects already have Active/Paused/Complete/Archived lifecycle,
   simple/weighted optional progress and a device-selected next task.
@@ -63,17 +65,17 @@ account records, calendar connections, storage keys or credentials are fixtures.
 
 ## Implementation sequence and requirement inventory
 
-- [ ] Domain model, validation, gate selectors, deterministic progression/history,
+- [x] Domain model, validation, gate selectors, deterministic progression/history,
   explicit start/advance/finish/reopen and stale guarded plan mutations (2, 5–9, 12).
-- [ ] Persistence round trips, migration defaults, merge reference handling,
+- [x] Persistence round trips, migration defaults, merge reference handling,
   repository evaluation, recovery and safe undo behavior (1, 8, 12).
-- [ ] Compact cards; Tasks/Plan detail; draft builder and phase/milestone editors;
+- [x] Compact cards; Tasks/Plan detail; draft builder and phase/milestone editors;
   assignment/bulk movement; deletion repair and consequence previews (3–7, 11).
-- [ ] Shared task assignment; next-step selection; planner filters; Review notices;
+- [x] Shared task assignment; next-step selection; planner filters; Review notices;
   Calendar milestone markers; Search/saved phases; Ambient context (5, 9–11).
-- [ ] Isolated 30+ task fixtures and all 18 acceptance cases, persistence/concurrency
+- [x] Isolated 30+ task fixtures and all 18 acceptance cases, persistence/concurrency
   tests, responsive browser workflows/screenshots and regression checks (13–14).
-- [ ] Product/data-model docs, device checklist, exact files/check results and
+- [x] Product/data-model docs, device checklist, exact files/check results and
   isolated validated Git checkpoint with push or exact commands (14).
 
 ## Planned verification
@@ -85,4 +87,7 @@ card, expanded plan, task/milestone editors, readiness and blocked-transition
 explanation. Native compilation, physical devices and actual multi-device account
 tests will be reported separately; never infer them from browser/JS exports.
 
-Delivery results and exact acceptance steps will be added after verification.
+Delivery results, exact files, checks, screenshots and acceptance steps are in
+[PROJECT_PLANS_DELIVERY.md](PROJECT_PLANS_DELIVERY.md). Physical-device and
+native-compilation checks remain explicitly unperformed; six existing Expo patch
+mismatches are documented rather than suppressed.

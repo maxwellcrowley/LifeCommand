@@ -1,3 +1,6 @@
+import { assertPlanTokens, planToken, taskPlanDeletionMessage } from '../domain/planState';
+import { reconcilePlans, transitionSummary } from '../domain/projectPlans';
+import { changeTask } from '../domain/tasks';
 import { ProjectScope } from './ProjectAppearance';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { Action } from './TaskScheduling';
@@ -12,11 +15,13 @@ import { needsPushbackChoice, type PushbackChoice } from '@/src/domain/tasks';
 import type { Task } from '@/src/domain/models';
 import { useAppData } from '@/src/data/useAppData';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
-import { effectiveSeries, recurrencePreview } from '../domain/recurrence';
+import { effectiveSeries, recurrencePreview, convertTaskToSeries } from '../domain/recurrence';
 import { repeatToDraft, seriesFromDraft } from '../domain/recurrenceDraft';
 export function TaskEditor({ task }: { task: Task }) {
   const { data, editTask, deleteTask, editFutureSeries, convertToRecurring } = useAppData();
   const series = data?.recurringSeries?.find(s => s.id === task.recurrenceId);
+  const [planBaseline, setPlanBaseline] = useState(data);
+  const [assignmentPreview, setAssignmentPreview] = useState<{ tokens: Record<string, string>; summary: string }>();
   const [seriesSnapshot, setSeriesSnapshot] = useState(series);
   const initialDraft = (value: Task) => ({ ...taskToDraft(value), ...(series ? { repeat: repeatToDraft(effectiveSeries(series, value.occurrenceDate!), value.occurrenceDate) } : {}) });
   const [scope, setScope] = useState<'one' | 'future'>('one');
@@ -37,15 +42,25 @@ export function TaskEditor({ task }: { task: Task }) {
     { value: 'backlog', title: 'Move to Backlog', detail: 'Remove the due date and return to the section backlog.' },
   ];
   const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/review'); };
-  const save = async () => {
+  const save = async (confirmPlan = false) => {
     if (saving) return;
     setSaving(true);
     try {
       setError('');
-      const changes = { ...reminderFromDraft(draft), tags: snapshot.tags, title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status };
+      const changes = { ...reminderFromDraft(draft), tags: snapshot.tags, phaseId: draft.phaseId, planRequired: draft.planRequired, title: draft.title, description: draft.description, notes: draft.notes, sectionId: draft.sectionId, projectId: draft.projectId, priority: draft.priority, dueDate: draft.dueDate.trim(), owner: draft.owner, storyPoints: Number(draft.storyPoints), status: draft.status };
+      const assignmentChanged = !task.recurrenceId && ((draft.phaseId || undefined) !== snapshot.phaseId || (draft.projectId || undefined) !== snapshot.projectId || (draft.planRequired !== false) !== (snapshot.planRequired !== false) || !!draft.repeat);
+      const related = [...new Set([snapshot.projectId, draft.projectId].filter((id): id is string => !!id))];
+      const planned = related.some(id => data.projects.find(p => p.id === id)?.plan);
+      if (assignmentChanged && planned && (!assignmentPreview || !confirmPlan)) {
+        const tokens: Record<string, string> = {};
+        for (const id of related) { const project = planBaseline?.projects.find(p => p.id === id); if (!project) throw Error('Project requirements changed. Reload the task.'); tokens[id] = planToken(planBaseline!, project); }
+        assertPlanTokens(data, tokens);
+        const next = draft.repeat ? convertTaskToSeries(data, snapshot, seriesFromDraft(changes, draft.repeat)) : changeTask(data, task.id, changes, needsChoice ? choice : undefined, snapshot.updatedAt);
+        setAssignmentPreview({ tokens, summary: transitionSummary(data, reconcilePlans(data, next)) }); return;
+      }
       if (scope === 'future' && seriesSnapshot) await editFutureSeries(snapshot, draft.repeat ? seriesFromDraft(changes, draft.repeat, effectiveSeries(seriesSnapshot, snapshot.occurrenceDate!)) : undefined, seriesSnapshot.updatedAt);
-      else if (!task.recurrenceId && draft.repeat) await convertToRecurring(snapshot, seriesFromDraft(changes, draft.repeat));
-      else await editTask(task.id, changes, needsChoice ? choice : undefined, snapshot.updatedAt);
+      else if (!task.recurrenceId && draft.repeat) await convertToRecurring(snapshot, seriesFromDraft(changes, draft.repeat), assignmentPreview?.tokens);
+      else await editTask(task.id, changes, needsChoice ? choice : undefined, snapshot.updatedAt, assignmentPreview?.tokens);
       unsaved.allowLeave(); leave();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update task.'); }
     finally { setSaving(false); }
@@ -54,13 +69,14 @@ export function TaskEditor({ task }: { task: Task }) {
       <Muted>{recurrencePreview(effectiveSeries(series, task.occurrenceDate!))} Timezone: {series.timeZone}. Original occurrence: {task.occurrenceDate}.</Muted>
       {(['one', 'future'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={value === 'one' ? 'This occurrence' : 'This and future occurrences'} accessibilityState={{ checked: scope === value }} aria-checked={scope === value} onPress={() => { setScope(value); setConfirmFuture(false); }} style={{ minHeight: 44, padding: 12, borderRadius: 10, backgroundColor: scope === value ? colors.soft : colors.background }}><Label>{value === 'one' ? 'This occurrence' : 'This and future occurrences'}</Label></Pressable>)}
       {scope === 'future' ? <Muted>Changes replace the schedule from this occurrence’s original date. Completed, missed, individually edited and skipped occurrences are kept. Missed tasks keep their dates; use This occurrence to reschedule one. Count limits start at the new start date. Choose Does not repeat to end this and future occurrences.</Muted> : <Muted>Complete, reschedule or edit this occurrence independently.</Muted>}
-    </Card> : null}<TaskForm draft={draft} onChange={next => { if (next.dueDate !== draft.dueDate || next.status !== draft.status) setChoice(undefined); setConfirmFuture(false); setDraft(next); }} sections={data.sections} projects={data.projects} currentProjectId={task.projectId} occurrence={!!series && scope === 'one'} showStatus={scope === 'one'} />
-    {stale ? <Card title="This task or series changed"><Muted>Reload to include the latest changes before saving.</Muted><Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => { setSnapshot(task); setSeriesSnapshot(series); setDraft(initialDraft(task)); setChoice(undefined); setConfirmFuture(false); setError(''); }}><Label>Reload task</Label></Pressable></Card> : null}
+    </Card> : null}<TaskForm draft={draft} onChange={next => { if (next.dueDate !== draft.dueDate || next.status !== draft.status) setChoice(undefined); setConfirmFuture(false); setAssignmentPreview(undefined); setDraft(next); }} sections={data.sections} projects={data.projects} currentProjectId={task.projectId} occurrence={!!series && scope === 'one'} showStatus={scope === 'one'} />
+    {stale || error.includes('requirements changed') ? <Card title="This task or series changed"><Muted>Reload to include the latest changes before saving.</Muted><Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => { setSnapshot(task); setPlanBaseline(data); setAssignmentPreview(undefined); setSeriesSnapshot(series); setDraft(initialDraft(task)); setChoice(undefined); setConfirmFuture(false); setError(''); }}><Label>Reload task</Label></Pressable></Card> : null}
     {needsChoice ? <Card title="How should this task move?"><Muted>This task is already due or overdue. Choose what happens when you save.</Muted>{choices.map(option => <Pressable key={option.value} accessibilityRole="radio" aria-checked={choice === option.value} accessibilityState={{ checked: choice === option.value }} onPress={() => setChoice(option.value)} style={{ padding: 12, borderRadius: 10, backgroundColor: choice === option.value ? colors.soft : colors.background }}><Label>{option.title}</Label><Muted>{option.detail}</Muted></Pressable>)}</Card> : null}
     {task.rolloverCount || task.manuallyDeferredCount || task.originalDueDate ? <Card title="Scheduling history"><Muted>Rolled over {task.rolloverCount} times · Manually deferred {task.manuallyDeferredCount} times</Muted>{task.originalDueDate ? <Muted>Original due date: {task.originalDueDate}</Muted> : null}</Card> : null}
     {error ? <FormError>{error}</FormError> : null}<Action primary label={saving ? 'Saving…' : 'Save changes'} disabled={saving || stale || (needsChoice && !choice)} onPress={() => scope === 'future' ? setConfirmFuture(true) : void save()} />
+    {assignmentPreview ? <Card title="Review task plan changes"><Muted>Phase, project, required/optional or recurring changes affect plan requirements. Linked milestones may need repair. Task dates and priority stay as entered; completed phase history is retained.</Muted><Label>{assignmentPreview.summary ? `Immediate effect: ${assignmentPreview.summary}` : 'No immediate phase transition.'}</Label><Action primary label="Confirm task plan changes" disabled={saving || stale} onPress={() => void save(true)} /><Action label="Cancel task plan preview" onPress={() => setAssignmentPreview(undefined)} /></Card> : null}
     {confirmFuture ? <Card title={draft.repeat ? 'Change this and future occurrences?' : 'End this and future occurrences?'}><Muted>{draft.repeat ? 'The new details and repeat schedule will apply from the selected occurrence. Completed history, missed tasks and individual exceptions are preserved.' : 'Uncompleted occurrences from this date onward will be removed, including rescheduled ones. Past occurrences and completion history are preserved.'} Undo remains available until a conflicting change.</Muted><Action primary label="Confirm recurring changes" disabled={saving || stale} onPress={() => void save()} /><Action label="Cancel recurring changes" disabled={saving} onPress={() => setConfirmFuture(false)} /></Card> : null}
-    <DeleteConfirmation kind="task" name={snapshot.title} label={series ? scope === 'future' ? 'End this and future occurrences' : 'Skip this occurrence' : undefined} detail={series ? scope === 'future' ? 'Uncompleted occurrences from this original date onward, including rescheduled ones, will be removed. Past tasks and all completion history are preserved.' : 'Only this occurrence will be removed. The saved exception prevents it from returning after reload or sync.' : undefined} disabled={saving || stale} onDelete={() => scope === 'future' && seriesSnapshot ? editFutureSeries(snapshot, undefined, seriesSnapshot.updatedAt) : deleteTask(snapshot.id, snapshot.updatedAt)} onDeleted={() => { unsaved.allowLeave(); leave(); }} />
+    <DeleteConfirmation kind="task" name={snapshot.title} label={series ? scope === 'future' ? 'End this and future occurrences' : 'Skip this occurrence' : undefined} detail={series ? scope === 'future' ? 'Uncompleted occurrences from this original date onward, including rescheduled ones, will be removed. Past tasks and all completion history are preserved.' : 'Only this occurrence will be removed. The saved exception prevents it from returning after reload or sync.' : taskPlanDeletionMessage(data, snapshot)} disabled={saving || stale} onDelete={() => scope === 'future' && seriesSnapshot ? editFutureSeries(snapshot, undefined, seriesSnapshot.updatedAt) : deleteTask(snapshot.id, snapshot.updatedAt)} onDeleted={() => { unsaved.allowLeave(); leave(); }} />
     <Action label="Cancel" disabled={saving} onPress={leave} />
   </Page></ProjectScope>;
 }

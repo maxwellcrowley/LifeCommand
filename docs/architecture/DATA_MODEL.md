@@ -555,3 +555,109 @@ next emphasis uses the next future timed start. Overlapping events retain separa
 rows and external multi-day clipping uses the existing conversion functions.
 
 See [polish QA](../qa/POLISH_RELIABILITY_QA.md) for verification and device limits.
+# Optional project plans (2026-10-12)
+
+This additive schema-4 contract supersedes the earlier statement that every
+project can be marked Complete without task checks. Projects without enabled
+plans retain that behavior. The storage key, cloud RPC schema range, snapshot
+revision, account namespaces, recovery envelope and calendar connections are
+unchanged. No backend migration is required.
+
+`Project.plan?` stores `enabled`, `started`, `automaticCompletion` (false by
+default), a monotonic `revision`, ordered `phases`, `milestones`, and `history`.
+No plan is synthesized for an old project. Draft/disabled are plan configuration,
+not additional project statuses; Active/Paused/Complete/Archived remain the sole
+project lifecycle. A draft has only Upcoming phases. Explicit Start activates the
+first phase and makes the project Active. A started plan has exactly one Current
+phase until all phases are Complete. Routine reordering changes Upcoming phases
+only, retaining all task IDs and current/completed history.
+
+Each phase has a stable account-unique `id`, `name`, optional `description` and
+`targetDate` calendar date, `state` (upcoming/current/complete), and one `rule`:
+`manual`, `required`, or `milestone` with a `milestoneId`. The milestone editor's
+On completion choice writes this same rule. Project auto-completion is an explicit
+additional permission, not an alternative phase gate. Final completion settings
+apply to the last phase after a reviewed reorder.
+
+Tasks gain optional `phaseId` and `planRequired`. A phase must belong to the task's
+existing project. No assignment means Unassigned; absent `planRequired` means
+required finite work. Changing projects clears an omitted incompatible phase.
+All recurring occurrences, including occurrences of bounded/count-limited series,
+are excluded from phase assignment, milestone links, finite gates and percentage
+progress in this version. Existing recurrence rules and ordinary rollover remain
+unchanged. Converting a linked finite task to recurrence leaves the old milestone
+reference in Needs attention until explicitly repaired.
+
+Milestones have stable account-unique `id`, `projectId`, `phaseId`, title,
+optional description/targetDate, `type` (tasks/approval), `taskIds`, `required`,
+optional `approvedAt`/`approvalInvalidatedAt`, and compact completion/approval
+`history`. Task milestones need at least one finite same-phase task and derive
+completion from all links. Manual approval never derives approval from tasks;
+with no supports it is available for explicit approval. Missing, moved, archived
+or recurring linked tasks remain invalid references, with actionable Needs
+attention. They are deliberately accepted as recoverable domain states, not
+silently removed by normalization/import. Invalid plan shape, duplicate identities
+or task phase associations fail strict validation without overwriting the source.
+
+Approval history survives edits/reopening. Materially changed supporting sets or
+types invalidate prior approval. Reopening a supporting task (including Undo)
+invalidates approval until explicitly reviewed again. Task-based completion and
+reopening are recorded when relevant mutations occur. Import/recovery preserve
+recorded histories without inventing completion events.
+
+Phase readiness checks every required finite assigned task, required milestone,
+and designated trigger. Archived required tasks still block; restore or explicitly
+make them optional. Empty gates never auto-advance. Optional work stays where it
+is when a phase completes. Required finite unassigned work additionally blocks
+final completion. Percentage keeps existing simple/weighted and backlog inclusion
+preferences; optional finite tasks count once, milestones never count as tasks.
+Consequently 100% task progress may await an approval, and an empty task denominator
+is shown as No required tasks instead of 100% readiness.
+
+Repository `changeAppData` evaluates relevant accepted mutations in the same
+serialized transaction. `applyCloudData` validates its local fingerprint and the
+incoming snapshot before evaluation. Rule changes have reviewable previews using
+the same pure evaluator. A canonical plan token includes project configuration
+and task identities/revisions/requirements, so task-only edits invalidate stale
+transition or assignment decisions. Automatic timestamps derive from accepted
+record timestamps; transition IDs derive from project, plan revision, phase,
+before/after and cause. The bounded evaluator visits at most the phase count and
+stops at manual, empty, invalid or incomplete phases. It never skips the current
+phase because future tasks were completed early. Snapshot CAS still refuses
+divergent cloud edits; there is no last-writer-wins plan merge or duplicate ledger.
+
+Transitions retain ID, optional phase ID/name, previous/resulting state, timestamp,
+manual/rule/milestone/reopen cause and optional trigger ID. Ordinary task reopening
+does not rewind phases. Explicit Reopen phase restores it as Current, returns later
+phases to Upcoming, resumes the project, and retains task states, dates and audit.
+Task Undo uses existing record guards, preserves transition history and never
+replaces an entire project. It can invalidate an approval but cannot auto-advance.
+
+Phase deletion is explicit: move retained tasks to another phase or Unassigned,
+confirm removal of its milestones, and preserve phase transition history. Deleting
+Current activates the following phase; without a following phase it explicitly
+reopens the preceding one. Deleting the last phase returns the retained plan to a
+draft. The preview names consequences and any automatic follow-on transitions.
+Disabled plans retain structure and assignments while suspending gates. Completing
+a disabled project follows its ordinary lifecycle; re-enabling exposes any issues.
+
+Load, rollover-only updates, imports, merge imports, recovery and Undo do not replay
+automatic transitions. Merge keeps existing local plans; incompatible incoming
+phase assignments are skipped with explicit warnings. New plans retain states and
+history; skipped/deduplicated task links become Needs attention. Replacement and
+recovery keep the existing exact-byte backups. Old clients reject unsupported
+supplied plan fields safely rather than stripping them from schema-4 snapshots.
+
+Device/account-local `collapsed` keys remember `Plan:view:<project>` and
+`Plan:phase:<project>:<phase>` plus history disclosure. The current phase expands
+by default unless explicitly collapsed. Focus IDs and next-task choices are still
+individual task/occurrence IDs. Current-phase work is preferred unless a valid
+explicit next task exists; cards surface overdue work elsewhere. Planner filters
+default to the selected project's Current phase and preserve selection when
+filters change. Saved views retain `phaseIds`; deleted references yield empty task
+results until explicitly repaired. Calendar milestone targets are separate marker
+objects, not events or scheduled tasks. No milestone notifications are introduced;
+the existing task reminder reconciler continues unchanged.
+
+See [implementation inventory](../PROJECT_PLANS_IMPLEMENTATION.md) and
+[delivery / verification](../PROJECT_PLANS_DELIVERY.md).

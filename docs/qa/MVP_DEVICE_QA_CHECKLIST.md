@@ -112,3 +112,45 @@ Real-account/device results: **pending manual QA**. Browser harnesses use mocked
 
 - [ ] Record results for Android, iOS, web and the physical TV separately. Treat missing native/TV runs as unverified, even when unit tests and browser exports pass.
 - [ ] Resolve any lost data, clipped essential action, blocked keyboard save, unreadable priority state or repeated rollover before MVP device sign-off.
+# Optional project plans — physical-device acceptance (2026-10-12)
+
+The project-plan browser workflow and JavaScript exports are automated checks,
+not evidence of native compilation, installation, OS notification delivery or
+screen-reader verification. Use disposable accounts with synthetic records only.
+
+- [ ] iPhone and Android development builds: create three phases, save a draft,
+  assign existing tasks, add task-based and manual milestones, then explicitly
+  start. Verify a single full-screen modal, keyboard avoidance, native Back,
+  dirty discard and retained picker choices. Repeat in light and dark themes.
+- [ ] Tablet/desktop and system larger text: inspect compact project card,
+  aligned actions, Current/Upcoming/Ready/Complete labels, 30+ task plan, collapsed
+  phases, target dates and Optional labels. Confirm no clipped controls.
+- [ ] VoiceOver/TalkBack, keyboard and switch controls: focus enters and returns
+  from editors; tab focus remains inside; radios/checkboxes announce selection;
+  phase disclosures announce expansion. Use Move up/Move down without dragging.
+- [ ] Complete linked tasks early; task milestone completes, manual approval waits.
+  Complete a trigger while another required task is open: remain in Current.
+  Optional work and recurring maintenance never block advancement.
+- [ ] Preview a satisfied automatic rule. Confirm named phase transitions once.
+  Empty/manual/invalid phases stop cascades. Final readiness waits for Finish
+  project unless explicitly opted into automatic final completion.
+- [ ] Reopen earlier work and verify an attention notice without rollback. Reopen
+  the phase explicitly; later phases become Upcoming while task work/history stay.
+  Undo a completion; approval invalidates without rewinding transitions.
+- [ ] Move/delete linked tasks; repair retained invalid links. Delete a phase only
+  after reviewing task destination and milestone removal. Rename/reorder phases
+  without losing associations; disable/re-enable the plan.
+- [ ] Today/Calendar/Review/Search/Focus/Ambient: preserve dates and individual task
+  IDs, current-phase planner default with retained selections, milestone date
+  markers separate from events, deleted saved phase filters remain empty. Ambient
+  Detailed density may show context; privacy hides it.
+- [ ] Physical task reminders: complete, move, reopen and advance with reminders
+  pending. Verify the existing OS reconciliation removes/reschedules eligible task
+  reminders once, and emits no phase/milestone notifications.
+- [ ] Two disposable signed-in devices: same-gate completion, divergent edits,
+  offline reconnect, revision conflict review, reload, export/import and recovery.
+  Verify no duplicated transitions and no silent overwriting of requirements.
+- [ ] Switch disposable accounts and return: plan content and presentation
+  preferences stay isolated; Focus pins and calendar connections are preserved.
+
+Automation results and screenshot paths: [project-plan delivery](../PROJECT_PLANS_DELIVERY.md).

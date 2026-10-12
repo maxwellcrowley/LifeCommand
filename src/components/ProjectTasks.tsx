@@ -17,6 +17,7 @@ export function ProjectTasks({ project }: { project: Project }) {
   const { data, addTask, editTask } = useAppData();
   const { colors } = useAppTheme();
   const { preferences } = useDevicePreferences();
+  const [phaseFilter, setPhaseFilter] = useState('all');
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
   const [archiveId, setArchiveId] = useState<string>();
@@ -24,7 +25,8 @@ export function ProjectTasks({ project }: { project: Project }) {
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   if (!data) return null;
-  const tasks = getProjectTasks(data.tasks, project.id).filter(t => preferences.showCompleted || t.status !== 'complete');
+  const allTasks = getProjectTasks(data.tasks, project.id).filter(t => preferences.showCompleted || t.status !== 'complete');
+  const tasks = allTasks.filter(t => phaseFilter === 'all' || (phaseFilter === 'unassigned' ? !t.phaseId : t.phaseId === phaseFilter));
   const section = data.sections.find(item => item.id === project.sectionId) ?? data.sections.find(s => !s.archived);
   const canAdd = !section?.archived && project.status === 'active' && !!section;
   const run = async (operation: () => Promise<void>) => {
@@ -36,7 +38,7 @@ export function ProjectTasks({ project }: { project: Project }) {
   };
   const add = () => run(async () => {
     if (!canAdd) return;
-    await addTask({ title, priority, sectionId: section.id, projectId: project.id });
+    await addTask({ title, priority, sectionId: section.id, projectId: project.id, phaseId: !['all', 'unassigned'].includes(phaseFilter) ? phaseFilter : undefined });
     setTitle(''); setPriority('normal');
   });
   const toggle = (task: Task) => run(() => editTask(task.id, {
@@ -49,6 +51,7 @@ export function ProjectTasks({ project }: { project: Project }) {
 
   return <Card title="Project tasks">
     <ProjectProgress project={project} tasks={data.tasks} />
+    {project.plan ? <View style={{ gap: 8 }}><Label>Filter by phase</Label><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{[{ id: 'all', name: 'All phases' }, ...project.plan.phases, { id: 'unassigned', name: 'Unassigned' }].map(p => <Action key={p.id} label={`Task phase filter: ${p.name}`} text={`${phaseFilter === p.id ? '✓ ' : ''}${p.name}`} onPress={() => setPhaseFilter(p.id)} />)}</View><Muted>{tasks.length} visible tasks. Upcoming and Unassigned work remain available.</Muted></View> : null}
     {canAdd ? <View style={{ gap: 8 }}>
       <TextInput accessibilityLabel="New project task title" placeholder="What needs doing?" placeholderTextColor={colors.muted} value={title} editable={!saving} onChangeText={setTitle} style={{ minHeight: 44, padding: 12, borderRadius: 10, color: colors.text, backgroundColor: colors.background, fontSize: 15 }} />
       <View accessibilityRole="radiogroup" accessibilityLabel="New task priority" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -58,6 +61,7 @@ export function ProjectTasks({ project }: { project: Project }) {
       <TaskButton label="Add task to project" onPress={() => void add()} disabled={saving} />
     </View> : <Muted>Save this project as Active to add tasks.</Muted>}
     {error ? <FormError>{error}</FormError> : null}
+    {project.plan && phaseFilter === 'all' ? <View style={{ gap: 12 }}>{[...project.plan.phases, { id: 'unassigned', name: 'Unassigned' }].map(p => <View key={p.id} style={{ gap: 6 }}><Label>{p.name}</Label>{tasks.filter(t => p.id === 'unassigned' ? !t.phaseId : t.phaseId === p.id).map(t => <TaskRow key={t.id} grouped task={t} data={data} />)}</View>)}</View> :
     <TaskList collapsibleGroups={`Project ${project.id}`} tasks={tasks} data={data} renderTask={task => <TaskRow grouped task={task} data={data} disabled={saving} action={<TaskCheck label={`Complete task: ${task.title}`} checked={task.status === 'complete'} disabled={saving} onPress={() => void toggle(task)} />}>
       <Muted>{task.status} · {task.storyPoints} points</Muted>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -68,7 +72,7 @@ export function ProjectTasks({ project }: { project: Project }) {
         <TaskButton label="Confirm archive task" onPress={() => void archive(task)} disabled={saving} danger />
         <TaskButton label="Cancel archive" onPress={() => setArchiveId(undefined)} disabled={saving} />
       </View> : null}
-    </TaskRow>} />
+    </TaskRow>} />}
   </Card>;
 }
 

@@ -1,3 +1,4 @@
+import { validatePlanReferences } from './planValidation';
 import { mapSeriesTemplates } from './recurrenceTemplates';
 import { occursOn } from './recurrence';
 import type { AppData, Task, RecurringSeries } from './models';
@@ -95,5 +96,7 @@ export function planMergeImport(current: AppData, raw: string): MergeImportPrevi
   if (counts.tasksMissingProject) warnings.push(`${counts.tasksMissingProject} task(s) skipped because their project is missing locally and from the file.`);
   if (counts.tasksMissingSection) warnings.push(`${counts.tasksMissingSection} task(s) skipped because their section has no local ID or name match.`);
   if (projectsWithoutSection) warnings.push(`${projectsWithoutSection} new project(s) added without a section because their section has no local match.`);
-  return { data: counts.projectsToAdd || counts.tasksToAdd || counts.seriesChanged ? { ...current, projects, tasks, ...(recurringSeries.length ? { recurringSeries } : {}) } : current, counts, warnings, exportedAt: imported.exportedAt, defaultsApplied: imported.defaultsApplied };
+  const data = counts.projectsToAdd || counts.tasksToAdd || counts.seriesChanged ? { ...current, projects, tasks, ...(recurringSeries.length ? { recurringSeries } : {}) } : current;
+  validatePlanReferences(data);
+  return { data, counts, warnings, exportedAt: imported.exportedAt, defaultsApplied: imported.defaultsApplied };
 }

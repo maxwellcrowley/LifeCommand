@@ -1,5 +1,48 @@
 # LifeCommand Product Spec
 
+## Optional project plans (2026-10-12)
+
+Projects may have a sequential plan with named phases, assigned tasks and distinct
+diamond milestones. Existing projects need no plan. Cards show phase position,
+the next task and next incomplete milestone; task controls remain available under
+Task actions. Project detail has Tasks and Plan views. Plan keeps the Current phase
+expanded by default, with remembered disclosures and accessible future work.
+
+Add project plan saves a draft. Name/order phases, assign existing tasks and add
+milestones, then Review and start. Dates and milestones are optional. Add phase
+and Edit plan are separate actions. Phones use a full-screen editor; larger screens
+use a focused dialog. Upcoming phases support web drag and Move up/Move down.
+Bulk movement, phase deletion, lifecycle changes and already-satisfied rules show
+their consequences before confirmation. Disable retains a plan for later use.
+
+Ordinary tasks are required by default; optional finite work still counts in the
+user's existing percentage but does not block advancement. Unassigned required
+work blocks final completion. Recurring maintenance is outside finite plans and
+percentage progress, including limited recurring schedules in this first version.
+Future work can be scheduled/completed at any time without skipping the current
+phase or changing dates. Optional tasks stay accessible after phase completion.
+
+Task milestones complete through their explicit finite task links. Manual approval
+milestones wait for a person, even when all supports are done. Broken links and
+invalidated approvals show Needs attention and require repair. Each phase has one
+progression rule: Manual, When required work is complete, or After a selected
+milestone (with all other required work also complete). Empty phases always wait.
+Final completion defaults to confirmation and checks all remaining finite work.
+Automatic final completion requires explicit opt-in and a preview.
+
+Reopening work flags inconsistencies without rewinding the plan. Explicit Reopen
+phase preserves task completion/history and returns later phases to Upcoming.
+Review surfaces readiness, approvals and repair needs. Calendar shows optional
+milestone target markers. Search views support phases without silently broadening
+deleted filters. Planning starts with current-phase work; other phases and
+Unassigned remain selectable. Ambient shows concise phase/milestone context in
+Detailed density when sensitive titles are visible. Focus pins remain task IDs;
+transitions do not pin work or send new phase notifications.
+
+See [plan semantics](../architecture/DATA_MODEL.md),
+[delivery and checks](../PROJECT_PLANS_DELIVERY.md), and
+[device acceptance](../qa/MVP_DEVICE_QA_CHECKLIST.md).
+
 ## Current product-completion refinement (2026-10-10)
 
 The warm visual system now derives subordinate project tones/buttons from the

@@ -4,12 +4,13 @@ import { getProjectProgress } from '@/src/domain/projects';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { Label, Muted, Row } from './ui';
 
-export function ProjectProgress({ project, tasks }: { project: Project; tasks: Task[] }) {
+export function ProjectProgress({ project, tasks, compact = false }: { project: Project; tasks: Task[]; compact?: boolean }) {
   const { colors } = useAppTheme();
   const progress = getProjectProgress(tasks, project);
   const linked = tasks.filter(task => task.projectId === project.id && task.status !== 'archived');
   return <>
-    {linked.some(task => task.recurrenceId) ? <Muted>Recurring maintenance tasks are excluded from percentage progress and story point totals.</Muted> : null}
+    {!compact && linked.some(task => task.recurrenceId) ? <Muted>Recurring maintenance tasks are excluded from percentage progress and story point totals.</Muted> : null}
+    {!compact && project.plan?.enabled ? <Muted>Task progress includes optional finite tasks. Milestones are separate; 100% may still await approval.</Muted> : null}
     {!linked.length ? <Muted>No tasks linked to this project yet. Choose this project in Capture or a task editor once it is Active. Archived tasks are hidden.</Muted> : null}
     {linked.length > 0 && progress.total === 0 ? <Muted>No tasks count toward progress yet. Add or schedule a non-recurring task, or include non-recurring backlog tasks.</Muted> : null}
     {progress.value === null ? <Muted>Completion tracking is off.</Muted> : <>

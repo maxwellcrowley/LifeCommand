@@ -1,3 +1,4 @@
+import { currentPhase } from '../domain/planState';
 import { useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { SymbolView } from 'expo-symbols';
@@ -23,6 +24,10 @@ export function AddFromBacklog({ date, text, section }: { date: string; text?: s
   const { data, schedule } = useAppData(), { preferences: p, save: savePreferences } = useDevicePreferences(), { events } = useCalendarSync(), { colors } = useAppTheme();
   const wide = useWindowDimensions().width >= 1000;
   const [open, setOpen] = useState(false), [selection, setSelection] = useState<ScheduleSelection[]>([]), [error, setError] = useState(''), [saving, setSaving] = useState(false);
+  const [phaseFilters, setPhaseFilters] = useState<Record<string, string>>({});
+  const selectedProject = data?.projects.find(project => project.id === p.plannerProjectId);
+  const defaultPhase = selectedProject ? currentPhase(selectedProject)?.id : undefined;
+  const phaseFilter = p.plannerProjectId ? phaseFilters[p.plannerProjectId] ?? defaultPhase ?? 'all' : 'all';
   const busy = useRef(false);
   const [opening, setOpening] = useState(false), [launchError, setLaunchError] = useState(''), [focused, setFocused] = useState(false);
   const launchLock = useRef(false);
@@ -37,7 +42,7 @@ export function AddFromBacklog({ date, text, section }: { date: string; text?: s
     finally { launchLock.current = false; setOpening(false); }
   };
   const selected = new Set(selection.map(t => t.id));
-  const tasks = data?.tasks.filter(t => !t.dueDate && t.status !== 'complete' && t.status !== 'archived' && (!t.projectId || data.projects.some(project => project.id === t.projectId && project.status === 'active')) && (!p.plannerSectionId || t.sectionId === p.plannerSectionId) && (!p.plannerProjectId || t.projectId === p.plannerProjectId) && `${t.title} ${t.description ?? ''}`.toLowerCase().includes(p.plannerQuery.toLowerCase())) ?? [];
+  const tasks = data?.tasks.filter(t => !t.dueDate && t.status !== 'complete' && t.status !== 'archived' && (!t.projectId || data.projects.some(project => project.id === t.projectId && project.status === 'active')) && (!p.plannerSectionId || t.sectionId === p.plannerSectionId) && (!p.plannerProjectId || t.projectId === p.plannerProjectId) && (phaseFilter === 'all' || (phaseFilter === 'unassigned' ? !t.phaseId : t.phaseId === phaseFilter)) && `${t.title} ${t.description ?? ''}`.toLowerCase().includes(p.plannerQuery.toLowerCase())) ?? [];
   const groups = data ? groupTasksBySectionAndProject(data, tasks).filter(g => g.tasks.length) : [];
   const existing = data?.tasks.filter(t => t.dueDate === date && t.status !== 'archived' && t.status !== 'complete') ?? [];
   const dayEvents = data ? eventsOnDate({ ...data, externalEvents: events }, date) : [];
@@ -58,6 +63,7 @@ export function AddFromBacklog({ date, text, section }: { date: string; text?: s
           <AppTextInput accessibilityLabel="Filter backlog tasks" value={p.plannerQuery} onChangeText={plannerQuery => pref({ plannerQuery })} placeholder="Search backlog" editable={!saving} style={{ minHeight: 44, padding: 10, color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 10 }} />
           <Row><Action label="Clear planner filters" onPress={() => pref({ plannerSectionId: undefined, plannerProjectId: undefined, plannerQuery: '' })} />{data?.sections.filter(s => !s.archived).map(s => <Action key={s.id} label={`Planner section ${s.name}${p.plannerSectionId === s.id ? ', selected' : ''}`} text={`${p.plannerSectionId === s.id ? '✓ ' : ''}${s.name}`} disabled={saving} onPress={() => pref({ plannerSectionId: p.plannerSectionId === s.id ? undefined : s.id })} />)}</Row>
           <Row>{data?.projects.filter(project => project.status === 'active').map(project => <Action key={project.id} label={`Planner project ${project.name}${p.plannerProjectId === project.id ? ', selected' : ''}`} text={`${p.plannerProjectId === project.id ? '✓ ' : ''}${project.name}`} disabled={saving} onPress={() => pref({ plannerProjectId: p.plannerProjectId === project.id ? undefined : project.id })} />)}</Row>
+          {selectedProject?.plan ? <Row>{[{ id: 'all', name: 'All phases' }, ...selectedProject.plan.phases, { id: 'unassigned', name: 'Unassigned' }].map(phase => <Action key={phase.id} label={`Planner phase ${phase.name}${phaseFilter === phase.id ? ', selected' : ''}`} text={`${phaseFilter === phase.id ? '✓ ' : ''}${phase.name}`} onPress={() => setPhaseFilters(filters => ({ ...filters, [selectedProject.id]: phase.id }))} />)}</Row> : null}
           <Muted>{tasks.length} tasks match. Select visible tasks includes collapsed groups matching these filters, not the whole backlog.</Muted>
           <Action label="Select visible tasks" disabled={saving || !tasks.length} onPress={() => setSelection(current => [...current, ...tasks.filter(t => !current.some(item => item.id === t.id)).map(t => ({ id: t.id, updatedAt: t.updatedAt, title: t.title }))])} />
           {groups.map(({ section, tasks: grouped, projectGroups }) => { const key = `Planner:section:${section.id}`, expanded = !p.collapsed[key], count = grouped.filter(t => selected.has(t.id)).length; return <SectionCard key={section.id}>

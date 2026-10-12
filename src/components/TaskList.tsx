@@ -19,8 +19,8 @@ import { ProjectHeader, ProjectScope } from './ProjectAppearance';
 
 type ListData = Pick<AppData, 'sections' | 'projects' | 'tasks'>;
 
-export function TaskRow({ task, data, date, history = false, disabled = false, action, children, grouped = false }: {
-  task: Task; data: ListData; date?: string; history?: boolean; disabled?: boolean; action?: ReactNode; children?: ReactNode; grouped?: boolean;
+export function TaskRow({ task, data, date, history = false, disabled = false, action, children, grouped = false, showPhaseContext = true }: {
+  task: Task; data: ListData; date?: string; history?: boolean; disabled?: boolean; action?: ReactNode; children?: ReactNode; grouped?: boolean; showPhaseContext?: boolean;
 }) {
   const { colors } = useAppTheme();
   const { preferences, save } = useDevicePreferences();
@@ -57,6 +57,7 @@ export function TaskRow({ task, data, date, history = false, disabled = false, a
         </Pressable>
         {task.description ? <><Text numberOfLines={descriptionLines} ellipsizeMode="tail" style={{ color: colors.muted, fontSize: 14, lineHeight: 20 }}>{task.description}</Text>{!detailed ? <Pressable accessibilityRole="button" accessibilityLabel={`${expanded ? 'Show less' : 'Show more'} description: ${task.title}`} accessibilityState={{ expanded, disabled }} disabled={disabled} onPress={toggleDescription} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}><Text style={{ color: colors.muted, textDecorationLine: 'underline', fontSize: 12 }}>{expanded ? 'Show less' : 'Show more'}</Text></Pressable> : null}</> : null}
         {!grouped ? <Muted>{section?.name ?? 'No section'}{project ? ` · ${project.name}` : ''}</Muted> : null}
+        {showPhaseContext && project?.plan && !task.recurrenceId ? <Muted>{project.plan.phases.find(p => p.id === task.phaseId)?.name ?? 'Unassigned'}{task.planRequired === false ? ' · Optional' : ''}</Muted> : !showPhaseContext && task.planRequired === false && !task.recurrenceId ? <Muted>Optional</Muted> : null}
         {task.status === 'complete' ? <Muted>Completed</Muted> : isTaskOverdue(task, date) ? <Label style={{ color: colors.danger }}>Overdue · {task.originalDueDate ?? task.dueDate}</Label> : null}
       </View>
       {wide ? actions : null}

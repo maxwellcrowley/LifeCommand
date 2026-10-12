@@ -47,7 +47,11 @@ export function projectBlockers(data: Pick<AppData, 'tasks'>, project: Project) 
 export function nextMilestone(tasks: Task[], project: Project) {
   const phase = currentPhase(project);
   if (!phase) return undefined;
-  return project.plan!.milestones.find(m => m.phaseId === phase.id && !milestoneState(tasks, m).complete);
+  for (const candidate of project.plan!.phases.slice(project.plan!.phases.indexOf(phase))) {
+    const milestone = project.plan!.milestones.find(m => m.phaseId === candidate.id && !milestoneState(tasks, m).complete);
+    if (milestone) return milestone;
+  }
+  return undefined;
 }
 
 // Includes requirements, not just the Project timestamp: a task-only update also

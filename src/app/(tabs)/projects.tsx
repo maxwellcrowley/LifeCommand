@@ -4,11 +4,12 @@ import { Action } from '@/src/components/TaskScheduling';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
+import { ProjectPlanSummary } from '@/src/components/ProjectPlanView';
 import { ProjectProgress } from '@/src/components/ProjectProgress';
 import { ProjectNextStep } from '@/src/components/ProjectNextStep';
 import { ProjectScope, ProjectHeader } from '@/src/components/ProjectAppearance';
 import { SectionHeader } from '@/src/components/SectionHeader';
-import { Card, Label, Muted, Page } from '@/src/components/ui';
+import { Card, Label, Muted, Page, Row } from '@/src/components/ui';
 import { useAppData } from '@/src/data/useAppData';
 import { groupProjectsByStatus, projectStatusLabels } from '@/src/domain/projects';
 import { localDateKey } from '@/src/domain/dates';
@@ -41,12 +42,15 @@ export default function ProjectsScreen() {
           <Text style={{ color: colors.muted, fontSize: 18 }}>{expanded ? '⌄' : '›'}</Text>
         </Pressable>
         {expanded ? projects.map(project => <ProjectScope key={project.id} project={project} sections={data.sections}><Card><ProjectHeader title={project.name} />
-          <Muted>{projectStatusLabels[project.status]}</Muted>
-          {project.description ? <Muted>{project.description}</Muted> : null}
-          {(() => { const section = data.sections.find(item => item.id === project.sectionId); return section ? <SectionHeader section={section} /> : <Muted>No section</Muted>; })()}
-          <ProjectProgress project={project} tasks={data.tasks} />
-          <ProjectNextStep project={project} today={today} />
-          <Action label={`Edit project: ${project.name}`} text="Edit project and linked tasks" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} />
+          <Muted>{projectStatusLabels[project.status]}{project.plan ? ` · ${data.sections.find(s => s.id === project.sectionId)?.name ?? 'No section'}` : ''}</Muted>
+          {!project.plan && project.description ? <Muted>{project.description}</Muted> : null}
+          {!project.plan ? (() => { const section = data.sections.find(item => item.id === project.sectionId); return section ? <SectionHeader section={section} /> : <Muted>No section</Muted>; })() : null}
+          <ProjectProgress compact project={project} tasks={data.tasks} />
+          <ProjectPlanSummary project={project} data={data} showAction={false} />
+          <ProjectNextStep project={project} today={today} compact={!!project.plan} />
+          <Row>{project.plan ? <Action label={`Open plan: ${project.name}`} text="Open plan" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id, view: 'plan' } })} /> : null}
+          <Action label={`Edit project: ${project.name}`} text={project.plan ? "Project details / tasks" : "Edit project and linked tasks"} onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} />
+          </Row>
         </Card></ProjectScope>) : null}
       </View>;
     })}

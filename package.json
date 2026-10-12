@@ -20,6 +20,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
     "expo-web-browser": "~57.0.3",
+    "ical.js": "^2.2.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -43,6 +44,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
+    "check:cloud-config": "node scripts/check-cloud-config.cjs",
+    "eas-build-post-install": "node scripts/check-cloud-config.cjs --environment-only",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js"
   },
   "private": true

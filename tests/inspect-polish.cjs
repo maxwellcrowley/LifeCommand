@@ -4,6 +4,8 @@ const { resolve, extname, sep } = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const root = resolve(process.env.POLISH_DIST || '.test-build/polish-final');
+const serverPort = Number(process.env.POLISH_SERVER_PORT || 4207);
+const debuggerPort = Number(process.env.POLISH_DEBUGGER_PORT || 9267);
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
@@ -20,7 +22,11 @@ const clients = [];
 const errors = [];
 async function connect(target) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise(r => ws.addEventListener('open', r, { once: true }));
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(Error('Headless Chrome DevTools WebSocket did not open within 10 seconds.')), 10000);
+    ws.addEventListener('open', () => { clearTimeout(timeout); resolve(); }, { once: true });
+    ws.addEventListener('error', () => { clearTimeout(timeout); reject(Error('Headless Chrome DevTools WebSocket failed to open.')); }, { once: true });
+  });
   let id = 0;
   const pending = new Map();
   ws.addEventListener('message', ({ data }) => {
@@ -33,16 +39,20 @@ async function connect(target) {
   const ready = async text => { for (let i = 0; i < 100; i++) { if (await evaluate(`document.body?.innerText.includes(${JSON.stringify(text)})`)) return; await pause(100); } throw Error('Missing ' + text + ': ' + await evaluate('document.body.innerText')); };
   const click = async text => { assert.ok(await evaluate(`(() => { const el = [...document.querySelectorAll('[role=button],button,a')].find(el => el.innerText === ${JSON.stringify(text)}); if (!el) return false; el.click(); return true; })()`), 'Button: ' + text); await pause(150); };
   const fill = async (label, value) => evaluate(`(() => { const el = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!el) throw Error('Missing input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
-  const go = async (path, text) => { await send('Page.navigate', { url: 'http://127.0.0.1:4207' + path }); await ready(text); };
+  const go = async (path, text) => { await send('Page.navigate', { url: `http://127.0.0.1:${serverPort}` + path }); await ready(text); };
   await send('Runtime.enable'); await send('Page.enable');
   const client = { ws, send, evaluate, ready, click, fill, go }; clients.push(client); return client;
 }
 
 async function main() {
-  await new Promise(r => server.listen(4207, '127.0.0.1', r));
-  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=9267', '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-extensions', '--disable-background-networking', '--user-data-dir=' + resolve('.test-build/polish-chrome-' + process.pid), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  await new Promise((resolve, reject) => {
+    const fail = error => reject(error);
+    server.once('error', fail);
+    server.listen(serverPort, '127.0.0.1', () => { server.off('error', fail); resolve(); });
+  });
+  chrome = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--remote-debugging-port=' + debuggerPort, '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-extensions', '--disable-background-networking', '--user-data-dir=' + resolve('.test-build/polish-chrome-' + process.pid), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   let targets;
-  for (let i = 0; i < 80; i++) { try { targets = await (await fetch('http://127.0.0.1:9267/json', { signal: AbortSignal.timeout(1000) })).json(); break; } catch { await pause(100); } }
+  for (let i = 0; i < 80; i++) { try { targets = await (await fetch(`http://127.0.0.1:${debuggerPort}/json`, { signal: AbortSignal.timeout(1000) })).json(); break; } catch { await pause(100); } }
   assert.ok(targets, 'Headless Chrome ready');
   const a = await connect(targets.find(t => t.type === 'page'));
   const label = async text => { for(let i=0;i<100;i++){const clicked=await a.evaluate(`(() => { const e=[...document.querySelectorAll('[aria-label]')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(text)}); if(!e||e.disabled||e.getAttribute('aria-disabled')==='true')return false; e.click();return true; })()`);if(clicked){await pause(150);return;}await pause(50);}throw Error('Missing enabled action: '+text); };
@@ -108,7 +118,7 @@ async function main() {
   await a.go('/settings', 'This device'); await label('appearance: dark'); await label('textSize: extra-large');
   await a.go('/', data.tasks[0].title); await metric(320,740);
   assert.equal(await a.evaluate(`JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')).appearance`),'dark');
-  assert.ok(await a.evaluate(`[...document.querySelectorAll('div')].some(e=>getComputedStyle(e).backgroundColor==='rgb(17, 25, 29)')`),'dark palette rendered');
+  assert.ok(await a.evaluate(`[...document.querySelectorAll('div')].some(e=>getComputedStyle(e).backgroundColor==='rgb(30, 24, 22)')`),'warm dark canvas rendered');
   assert.ok(await a.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')); await shot('dark-large-text');
   const ax = await a.send('Accessibility.getFullAXTree');
   assert.ok(ax.nodes.some(n => n.role?.value === 'checkbox' && n.name?.value === 'Complete ' + data.tasks[0].title));

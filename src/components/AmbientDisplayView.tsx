@@ -1,3 +1,4 @@
+import { sectionAppearance } from '../domain/sectionAppearance';
 import { AppText as Text } from '@/src/components/AppText';
 import { useDevicePreferences } from '../data/DevicePreferences';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
@@ -60,7 +61,9 @@ export function AmbientDisplayView() {
     const overdue = isTaskOverdue(task, selection.today);
     const completed = task.status === 'complete';
     const urgent = !completed && (overdue || task.priority === 'high');
-    return <View key={task.id} style={[styles.event, { borderLeftColor: urgent ? colors.danger : completed ? colors.border : colors.accent, paddingVertical: compact ? 4 : 8 }]}>
+    const section = data.sections.find(s => s.id === task.sectionId);
+    const identity = sectionAppearance(section?.color ?? '#808080', colors.surface, colors.text);
+    return <View key={task.id} style={[styles.event, { borderLeftColor: identity.icon, paddingVertical: compact ? 4 : 8 }]}>
       <Text accessibilityLabel={privateTitle(task.title)} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={{ color: urgent ? colors.danger : completed ? colors.muted : colors.text, fontSize: itemSize, lineHeight: itemSize + 6, fontWeight: urgent ? '700' : '500', textDecorationLine: completed ? 'line-through' : 'none' }}>{privateTitle(task.title)}</Text>
       <Text numberOfLines={1} style={[styles.meta, { color: urgent ? colors.danger : colors.muted }]}>{completed ? 'Completed today' : `${overdue ? 'Overdue · ' : ''}${task.priority === 'high' ? 'High priority' : task.priority === 'low' ? 'Low priority' : 'Normal priority'}`}</Text>
     </View>;

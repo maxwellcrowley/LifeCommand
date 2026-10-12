@@ -1,8 +1,27 @@
 # MVP Device QA Checklist
 
+Product-completion additions and remaining native/accessibility/release checks:
+[Product release checklist](PRODUCT_RELEASE_CHECKLIST.md). Automated Chrome and
+Hermes export results do not replace installed-device or live-calendar testing.
+
 Run on disposable test data first. Record device/OS/browser, build/commit, date, pass/fail, and screenshots for failures. Automated web checks do not validate native keyboard or physical display behavior.
 
+## Settings disclosures and section editor
+
+Automated results and screenshots: [Settings refinement](../SETTINGS_REFINEMENT.md). These physical checks remain pending.
+
+- [ ] On iOS/Android phones and a tablet, expand each Settings category; verify its summary, saved expansion, and scoped resets. Connection errors must remain discoverable from the collapsed overview.
+- [ ] Open Add/Edit section with the keyboard visible. Scroll name/color/icon controls; Save/Cancel stay reachable above keyboard and safe areas. Repeat landscape and largest system text, light/dark.
+- [ ] With VoiceOver/TalkBack and a hardware keyboard, verify opening focus, labeled inputs, icon selection/expanded states, modal containment, and return focus. Escape/Android back with a dirty draft must confirm; Keep editing retains all values.
+- [ ] Search/select icons and choose a custom color, then dismiss/keep editing/save. Archive/Restore keeps records and rejects archiving the last active section. Reassignment requires its separate confirmation. Permanent section deletion is not supported.
+- [ ] Using a disposable test account, switch accounts while an editor has an unsaved draft. The old editor must close, with no draft, theme, or disclosure-state leakage. Switch back and confirm only saved values remain.
+- [ ] On a test build with injected storage failure, verify Retry save retains draft and does not duplicate a section. Never inject failures into live storage.
+
 ## Android and iOS
+
+- [ ] In two signed-in accounts, enable Focus Today and pin different today tasks. Switch accounts and confirm pins, planner filters, and project-next choices do not appear in the other account. Complete, archive, delete, reschedule, and roll over a pinned task; it must disappear from Focus without changing the task's date or priority.
+- [ ] At standard and largest system text sizes, verify compact/comfortable/detailed task rows, description Show more/less, section/project collapse controls, and all task actions have visible 44px targets without horizontal clipping.
+- [ ] On phone and tablet, open the backlog planner, filter by section/project, collapse groups after selecting tasks, show the schedule preview, then schedule atomically. Confirm selection survives filtering/collapse and no calendar event data is changed.
 
 - [ ] Install a fresh native build with the updated orientation/keyboard config. Check one small phone, one notched/gesture-navigation phone, and a tablet where available. Confirm startup and all six tabs.
 - [ ] Rotate portrait/landscape on Today, Capture, Calendar, Settings, task/event editors, and Ambient. Content must avoid status bars, cutouts and navigation/home indicators. No clipped controls or horizontal scrolling; vertical scrolling is expected on short screens.
@@ -11,6 +30,8 @@ Run on disposable test data first. Record device/OS/browser, build/commit, date,
 - [ ] Increase system text size through the largest practical setting. Check wrapping and all actions remain reachable. Tab labels are hidden above 1.3 font scale to preserve six usable tab targets; VoiceOver/TalkBack must still announce their names.
 - [ ] Enable VoiceOver/TalkBack: navigate headings, fields, task choices, appearance/display options, date controls, completion, save, archive and exit. Verify meaningful names, selection/disabled states, and error announcements.
 - [ ] Check light/dark/system appearance, high priority/overdue labels, Family source labels and teal rails, ambient completed states, and dark primary-button text. Meaning must remain clear without color.
+- [ ] Check the warm canvas, white cards, peach Focus/section surfaces, outlined secondary actions, terracotta primary actions, focus indicators, and disabled/error states in both appearances. Verify user-selected section and calendar colors still identify content without replacing labels or status text.
+- [ ] On Today, Projects, Review, Calendar, Capture, Settings, a task editor, and the backlog planner, check 320px phone, tablet, and desktop widths with compact/comfortable/detailed density. Long titles and descriptions must wrap without hiding Edit, Save, Schedule, Cancel, or Add.
 - [ ] Enable Reduce Motion / Remove Animations. No app-owned automatic scrolling, flashing or rotating content should occur; check native navigation and keyboard transitions for comfort.
 - [ ] Create/edit/complete/archive tasks; create/edit/archive local and family events. Force-close after each completed save and reopen. Verify details, attribution, settings and empty states persist.
 - [ ] Leave an editor open across a rollover; confirm stale changes require reload and do not overwrite rollover history.

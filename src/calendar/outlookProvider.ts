@@ -1,6 +1,6 @@
 import { addDays, isDateKey } from '../domain/dates';
 import { normalizeGoogleEvent, validCalendarColor, type CalendarSnapshot, type ExternalAccount, type GoogleEvent } from '../domain/externalCalendars';
-import { CalendarAuthError, createAccountSessions, type CalendarAuth } from './auth';
+import { CalendarAuthError, createAccountSessions, type CalendarAuth, type CalendarDiagnostic } from './auth';
 import type { CalendarProvider } from './provider';
 import type { TokenVault } from './tokenVault';
 
@@ -9,6 +9,18 @@ const object = (value: unknown): value is Json => !!value && typeof value === 'o
 const nonempty = (value: unknown): value is string => typeof value === 'string' && !!value.trim();
 const API = 'https://graph.microsoft.com/v1.0';
 const FIELDS = 'id,subject,start,end,isAllDay,isCancelled,originalStartTimeZone';
+const safeCode = (value: unknown) => nonempty(value) && /^[A-Za-z][A-Za-z0-9._-]{0,80}$/.test(value) ? value : undefined;
+function graphFailure(response: Response, raw: string | undefined) {
+  const content = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  if (raw === undefined) return { responseContentType: content || 'missing', responseBodyState: 'unreadable' as const };
+  if (!raw.trim()) return { responseContentType: content || 'missing', responseBodyState: 'empty' as const };
+  try {
+    const value: unknown = JSON.parse(raw);
+    const error = object(value) && object(value.error) ? value.error : undefined;
+    const inner = error && (object(error.innerError) ? error.innerError : object(error.innererror) ? error.innererror : undefined);
+    return { responseContentType: content || 'missing', responseBodyState: 'readable' as const, providerCode: safeCode(error?.code), providerInnerCode: safeCode(inner?.code) };
+  } catch { return { responseContentType: content || 'missing', responseBodyState: 'unreadable' as const }; }
+}
 
 export function normalizeOutlookEvent(raw: Json): GoogleEvent {
   if (!nonempty(raw.id)) throw Error('Outlook event is missing its ID.');
@@ -31,6 +43,10 @@ export function normalizeOutlookEvent(raw: Json): GoogleEvent {
 
 export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch = fetch, vault?: TokenVault): CalendarProvider {
   const sessions = createAccountSessions(auth, vault);
+  let activeTokenComparison: Pick<CalendarDiagnostic, 'exchangedTokenMatchesStored' | 'sentTokenMatchesStored'> | undefined;
+  const graphDiagnostic = (url: string, tokenPresent: boolean, details: Partial<CalendarDiagnostic> = {}): CalendarDiagnostic => ({
+    ...auth.diagnostic?.(), ...activeTokenComparison, ...details, stage: 'graph-request', endpoint: new URL(url).pathname, host: new URL(url).host, tokenPresent,
+  });
   async function get(url: string, token: string, signal: AbortSignal, timezone = 'UTC'): Promise<Json> {
     const target = new URL(url);
     if (target.origin !== 'https://graph.microsoft.com' || target.username || target.password || target.hash || !(target.pathname.startsWith('/v1.0/me/') || target.pathname === '/oidc/userinfo')) throw Error('Outlook returned an unsafe page URL. Previous imports were kept.');
@@ -38,10 +54,16 @@ export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch 
     let response: Response;
     try { response = await fetcher(url, { method: 'GET', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', Prefer: `outlook.timezone="${timezone}", IdType="ImmutableId"` }, signal, credentials: 'omit', cache: 'no-store', redirect: 'error' }); }
     catch { throw Error('Could not reach Outlook. Check your connection and retry. Previous imports were kept.'); }
-    if (response.status === 401) { await sessions.invalidate(token); throw new CalendarAuthError('Outlook authorization expired or was revoked. Reconnect Outlook.'); }
-    if (response.status === 403) throw new CalendarAuthError('Outlook denied access. Check read-only calendar consent and your organization’s access policy, then reconnect.');
-    if (response.status === 429) throw Error('Outlook rate limit reached. Wait a moment and retry. Previous imports were kept.');
-    if (!response.ok) throw Error(`Outlook request failed (${response.status}). Previous imports were kept.`);
+    if (!response.ok) {
+      let raw: string | undefined; try { raw = await response.text(); } catch { /* Metadata below marks an unreadable body. */ }
+      const failure = graphFailure(response, raw);
+      const detail = failure.providerCode ? `, ${failure.providerCode}` : '';
+      const diagnostic = graphDiagnostic(url, true, { httpStatus: response.status, ...failure });
+      if (response.status === 401) { await sessions.invalidate(token); throw new CalendarAuthError(`Outlook rejected the access token (HTTP 401${detail}). Reconnect Outlook.`, diagnostic); }
+      if (response.status === 403) throw new CalendarAuthError(`Outlook denied calendar access (HTTP 403${detail}). Check read-only calendar consent and your organization’s access policy, then reconnect.`, diagnostic);
+      if (response.status === 429) throw Error(`Outlook rate limit reached (HTTP 429${detail}). Wait a moment and retry. Previous imports were kept.`);
+      throw Error(`Outlook request failed (HTTP ${response.status}${detail}). Previous imports were kept.`);
+    }
     let value: unknown;
     try { value = await response.json(); } catch { throw Error('Outlook returned an invalid response. Previous imports were kept.'); }
     if (!object(value) || value.error) throw Error('Outlook returned an invalid response. Previous imports were kept.');
@@ -53,7 +75,7 @@ export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch 
   }
   async function identity(token: string, signal: AbortSignal): Promise<ExternalAccount> {
     const user = await get('https://graph.microsoft.com/oidc/userinfo', token, signal);
-    if (!nonempty(user.sub)) throw new CalendarAuthError('Could not verify the Outlook account. Reconnect Outlook.');
+    if (!nonempty(user.sub)) throw new CalendarAuthError('Could not verify the Outlook account. Reconnect Outlook.', { ...graphDiagnostic('https://graph.microsoft.com/oidc/userinfo', true), stage: 'account-verification' });
     return { id: `outlook:${user.sub}`, provider: 'outlook', mode: 'outlook', label: nonempty(user.email) ? user.email : nonempty(user.name) ? user.name : 'Microsoft account', syncEnabled: true };
   }
   async function pages(first: string, token: string, signal: AbortSignal): Promise<Json[]> {
@@ -74,7 +96,9 @@ export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch 
       if (account.provider !== 'outlook' || account.mode !== 'outlook') throw Error('This is not a live Outlook account.');
       if (!isDateKey(window.from) || !isDateKey(window.through) || window.from > window.through) throw Error('Invalid calendar sync window.');
       const token = await sessions.token(account.id);
-      return timed(async signal => {
+      const tokenComparison = await sessions.compare(account.id, token);
+      activeTokenComparison = tokenComparison;
+      try { return await timed(async signal => {
         if ((await identity(token, signal)).id !== account.id) { await sessions.disconnect(account.id); throw new CalendarAuthError('Outlook account changed. Reconnect this account. Previous imports were kept.'); }
         const list = await pages(`${API}/me/calendars?${new URLSearchParams({ '$select': 'id,name,hexColor', '$top': '100' })}`, token, signal);
         const ids = new Set<string>(); const snapshots: CalendarSnapshot[] = [];
@@ -99,7 +123,7 @@ export function createOutlookProvider(auth: CalendarAuth, fetcher: typeof fetch 
           snapshots.push({ calendar, events });
         }
         return snapshots;
-      });
+      }); } finally { activeTokenComparison = undefined; }
     },
     disconnect: accountId => sessions.disconnect(accountId),
   };

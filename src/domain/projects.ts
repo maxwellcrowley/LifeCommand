@@ -83,6 +83,20 @@ export function getProjectProgress(tasks: Task[], project: Project) {
   return { ...progress, value: project.trackCompletion ? (project.useWeightedProgress ? progress.weighted : progress.simple) : null };
 }
 
+export function getProjectNextTask(tasks: Task[], project: Project, today: string, preferredId?: string) {
+  const open = project.status === 'archived' ? [] : tasks.filter(task => task.projectId === project.id && task.status !== 'complete' && task.status !== 'archived');
+  const preferred = preferredId ? open.find(task => task.id === preferredId) : undefined;
+  if (preferred) return { task: preferred, kind: preferred.dueDate && preferred.dueDate > today ? 'upcoming' as const : 'selected' as const, choices: open };
+  const priority = { high: 0, normal: 1, low: 2 } as const;
+  const sort = (a: Task, b: Task) => priority[a.priority] - priority[b.priority] || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+  const due = open.filter(task => !!task.dueDate && task.dueDate <= today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || sort(a, b));
+  if (due[0]) return { task: due[0], kind: 'due' as const, choices: open };
+  const backlog = open.filter(task => !task.dueDate).sort(sort);
+  if (backlog[0]) return { task: backlog[0], kind: 'backlog' as const, choices: open };
+  const future = open.filter(task => !!task.dueDate).sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? '') || sort(a, b));
+  return { task: future[0], kind: future[0] ? 'upcoming' as const : 'none' as const, choices: open };
+}
+
 export function groupProjectsByStatus(data: Pick<AppData, 'projects' | 'tasks'>, showArchived = false) {
   const tasksByProject = new Map<string, Task[]>();
   for (const task of data.tasks) {

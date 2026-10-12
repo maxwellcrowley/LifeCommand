@@ -8,7 +8,7 @@ The **LifeCommand publisher** performs this setup once and supplies public IDs i
 
 1. Create an app registration in Microsoft Entra. Choose work/school plus personal Microsoft accounts if both are needed; the default authority is `common`. For a single organization, set `EXPO_PUBLIC_MICROSOFT_TENANT` to its tenant UUID and align the registration's supported account types. `organizations` and `consumers` are also supported. This implementation uses the public Microsoft cloud.
 2. Set the public Application (client) ID as `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Never create or bundle a client secret for this public-client flow.
-3. Add the delegated Microsoft Graph permission **Calendars.ReadBasic**, plus OpenID `openid`, `profile` and `email`. Basic calendar access supplies the titles and dates used here without message bodies, attachments or write access. Remove unnecessary permissions from the registration. Organizational policy may require administrator consent.
+3. Add the delegated Microsoft Graph permission **Calendars.Read**, plus OpenID `openid`, `profile` and `email`. LifeCommand uses it only for read-only calendar listing and event synchronization; it never creates, changes, or deletes Microsoft calendar data. Remove unnecessary permissions from the registration. Organizational policy may require administrator consent.
 4. Configure platform redirects as below. The client uses a code flow; leave implicit access-token/ID-token grants disabled.
 
 | Platform | Redirect configuration |

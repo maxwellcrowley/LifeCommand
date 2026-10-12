@@ -26,6 +26,11 @@ test('personal sections round trip, archive retains tasks, reassignment guards d
 });
 test('device preferences validate independently and week/date formats agree', () => {
   assert.equal(normalizePresentation({ textSize: 'tiny', density: 'compact' }).textSize, 'standard');
+  const focus = normalizePresentation({ density: 'detailed', focusVisible: true, focusLimit: 3, focusTaskIds: ['one', 'one', 'two'], expandedDescriptions: ['one', 'one'] });
+  assert.equal(focus.density, 'detailed');
+  assert.deepEqual(focus.focusTaskIds, ['one', 'two']);
+  assert.deepEqual(focus.expandedDescriptions, ['one']);
+  assert.equal(normalizePresentation({ focusLimit: 99 }).focusLimit, 3);
   assert.equal(formatDate('2026-10-02', 'day-first'), '02/10/2026');
   assert.equal(weekStart('2026-10-02', 'sunday'), '2026-09-27');
   assert.equal(weekStart('2026-10-02'), '2026-09-28');

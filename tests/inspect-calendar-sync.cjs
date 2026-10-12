@@ -91,14 +91,22 @@ async function main() {
   await a.go('/', 'Family morning');
   await choose(`Add from backlog · ${today}`);
   await a.ready('Add backlog tasks to');
-  await choose('Select backlog task: Today one'); await choose('Select backlog task: Today two');
+  await choose('Select backlog task: Today one');
+  const todayProject = 'Home, Scheduling project: 4 available, 1 selected';
+  await choose(todayProject); assert.equal(await a.evaluate(`document.querySelector('[aria-label=${JSON.stringify(todayProject)}]')?.getAttribute('aria-expanded')`), 'false');
+  await choose(todayProject); assert.equal(await a.evaluate(`document.querySelector('[aria-label="Select backlog task: Today one"]')?.getAttribute('aria-checked')`), 'true');
+  await a.fill('Filter backlog tasks', 'Today two'); await a.ready('Today two');
+  assert.ok((await body()).includes('1 selected'));
+  await a.fill('Filter backlog tasks', ''); await a.ready('Today one');
+  assert.equal(await a.evaluate(`document.querySelector('[aria-label="Select backlog task: Today one"]')?.getAttribute('aria-checked')`), 'true');
+  await choose('Select backlog task: Today two');
   await bounds();
   await a.evaluate(`window.originalSet = Storage.prototype.setItem; Storage.prototype.setItem = function(k,v) { if(k === 'lifecommand:data:v1') throw Error('Bulk write failure'); return window.originalSet.call(this,k,v); }`);
-  await a.click('Schedule selected (2)'); await a.ready('Bulk write failure');
+  await a.click('Add'); await a.ready('Bulk write failure');
   assert.ok((await read()).tasks.filter(task => ['Today one', 'Today two'].includes(task.title)).every(task => !task.dueDate));
   await a.evaluate('Storage.prototype.setItem = window.originalSet');
   const revision = (await read()).revision;
-  await a.click('Schedule selected (2)');
+  await a.click('Retry Add');
   await a.ready("Today's tasks · 2");
   let saved = await read(); assert.equal(saved.revision, revision + 1);
   for (const title of ['Today one', 'Today two']) {
@@ -108,7 +116,7 @@ async function main() {
   await a.go('/calendar', 'Events and scheduled tasks');
   await a.fill('Date, required, YYYY-MM-DD', chosenDay); await choose('Add from backlog · ' + chosenDay);
   await choose('Select backlog task: Day one'); await choose('Select backlog task: Day two');
-  await a.click('Schedule selected (2)'); await a.ready('Day one');
+  await a.click('Add'); await a.ready('Day one');
   await a.go('/calendar', 'Events and scheduled tasks');
   await a.fill('Date, required, YYYY-MM-DD', chosenDay); await a.ready('Day two');
   assert.equal((await read()).tasks.find(task => task.title === 'Day two').dueDate, chosenDay);

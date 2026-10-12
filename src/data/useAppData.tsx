@@ -1,3 +1,4 @@
+import { mutateSavedView } from '../domain/savedViews';
 import { materializeRecurrences, saveSeries } from '../domain/recurrence';
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
@@ -15,7 +16,7 @@ import { deleteProject as removeProject, changeProject, createProject, insertPro
 
 type AppDataValue = {
   finishSetup: () => Promise<void>;
-  saveView: (view: SavedView) => Promise<void>; deleteView: (id: string) => Promise<void>; saveRecurringSeries: (series: RecurringSeries, expected?: string) => Promise<void>;
+  saveView: (view: SavedView, expected?: SavedView) => Promise<void>; deleteView: (id: string, expected?: SavedView) => Promise<void>; saveRecurringSeries: (series: RecurringSeries, expected?: string) => Promise<void>;
   acceptCloud: (next: AppData, expected: string) => Promise<void>;
   undoLabel?: string; undo: () => Promise<void>; feedback: string;
   saveSection: (section: Section, expected?: Section) => Promise<void>;
@@ -212,7 +213,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reload local data. Please retry.'); }
     finally { resetting.current = false; }
   };
-  return <AppDataContext.Provider value={{ finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: view => commit(current => { if (!view.name.trim()) throw Error('Name is required.'); return { ...current, savedViews: [...(current.savedViews ?? []).filter(v => v.id !== view.id), view] }; }), deleteView: id => commit(current => ({ ...current, savedViews: (current.savedViews ?? []).filter(v => v.id !== id) })), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date())), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, externalChange, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment></AppDataContext.Provider>;
+  return <AppDataContext.Provider value={{ finishSetup: () => commit(current => ({ ...current, onboardingComplete: true })), saveView: (view, expected) => commit(current => mutateSavedView(current, view.id, view, expected)), deleteView: (id, expected) => commit(current => mutateSavedView(current, id, undefined, expected)), saveRecurringSeries: (series, expected) => commit(current => materializeRecurrences(saveSeries(current, series, expected), new Date())), acceptCloud: async (next, expected) => { setData(await repository.applyCloudData(next, expected)); setFeedback('Cloud changes received. Open editors retain their drafts.'); }, feedback, undoLabel: getUndo()?.label, undo: async () => { const entry = getUndo(); if (!entry) return; setData(await undoAppData(entry.id)); setFeedback('Undone. Saved.'); }, saveSection: (section, expected) => commit(current => saveSection(current, section, expected)), moveSection: (id, direction) => commit(current => moveSection(current, id, direction)), reassignSection: (source, target) => commit(current => reassignSection(current, source, target)), data, error, externalChange, recoveryNotice, retry, startFresh, importData, previewMerge, mergeData, restoreBackup, resetVersion, deleteTask, deleteProject, addProject, editProject, addTask, schedule, editTask, addEvent, editEvent, archiveEvent, actOnReminder, updateSetting }}><Fragment key={reloadVersion}>{children}</Fragment></AppDataContext.Provider>;
 }
 
 export function useAppData() {

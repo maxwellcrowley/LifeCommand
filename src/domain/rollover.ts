@@ -26,6 +26,7 @@ export function rolloverTasks(tasks: Task[], rolloverDay: string, settings: AppS
       status: 'overdue' as const,
       priority: settings.raiseMissedTasksToHigh ? 'high' as const : task.priority,
       originalDueDate: task.originalDueDate || (settings.preserveOriginalDueDate ? task.dueDate : undefined),
+      rolloversSinceCompletion: (task.rolloversSinceCompletion ?? 0) + 1,
       rolloverCount: task.rolloverCount + (settings.addRolloverCount ? 1 : 0),
       dueDate: settings.moveIncompleteTasksToNextDay ? nextDay : task.dueDate,
       lastRolledOverAt: timestamp,

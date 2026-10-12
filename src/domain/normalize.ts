@@ -5,6 +5,7 @@ import { familyCategories, sourceColors } from './events';
 import { normalizeReminder } from './reminders';
 import { isDateKey } from './dates';
 import { sections as defaultSections } from './defaults';
+import { isSectionIconId } from './sectionAppearance';
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): value is RecordValue => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -38,6 +39,7 @@ export function normalizeAppData(value: unknown): AppData {
     id: sectionId(s.id, i), name: text(s.name) ?? 'Personal',
     color: typeof s.color === 'string' && /^#[\da-f]{6}$/i.test(s.color) ? s.color : '#5A9A75', order: count(s.order),
     ...(s.archived !== undefined ? { archived: bool(s.archived, false) } : {}),
+    ...(isSectionIconId(s.icon) ? { icon: s.icon } : {}),
   }));
   if (!sections.length) sections.push(...defaultSections.map(s => ({ ...s })));
   const ensureSection = (value: unknown) => {
@@ -65,6 +67,8 @@ export function normalizeAppData(value: unknown): AppData {
       priority: choice(t.priority, ['low', 'normal', 'high'], 'normal'), owner: choice(t.owner, ['me', 'kellyn', 'shared', 'system'], 'me'),
       dueDate, originalDueDate: date(t.originalDueDate), completedAt: instant(t.completedAt),
       createdAt: instant(t.createdAt) ?? epoch, updatedAt: instant(t.updatedAt) ?? instant(t.createdAt) ?? epoch,
+      ...(t.manualPostponementsSinceCompletion !== undefined ? { manualPostponementsSinceCompletion: count(t.manualPostponementsSinceCompletion) } : {}),
+      ...(t.rolloversSinceCompletion !== undefined ? { rolloversSinceCompletion: count(t.rolloversSinceCompletion) } : {}),
       storyPoints: positive(t.storyPoints, settings.defaultStoryPoints), rolloverCount: count(t.rolloverCount), manuallyDeferredCount: count(t.manuallyDeferredCount),
       lastRolledOverAt: instant(t.lastRolledOverAt), lastRolloverDate: date(t.lastRolloverDate),
       tags: Array.isArray(t.tags) ? t.tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
@@ -100,6 +104,6 @@ export function normalizeAppData(value: unknown): AppData {
     const series: RecurringSeries = { id: text(s.id) ?? '', title: text(s.title) ?? '', sectionId: text(s.sectionId) ?? '', projectId: text(s.projectId), priority: choice(s.priority, ['low', 'normal', 'high'], 'normal'), storyPoints: positive(s.storyPoints), startDate: date(s.startDate) ?? '', timeZone: text(s.timeZone) ?? '', frequency: choice(s.frequency, ['daily', 'weekdays', 'weekly', 'monthly'], 'daily'), weekdays: Array.isArray(s.weekdays) ? s.weekdays.filter((d): d is number => typeof d === 'number') : [], monthEnd: choice(s.monthEnd, ['last-day', 'skip'], 'last-day'), generatedThrough: date(s.generatedThrough), endDate: date(s.endDate), createdAt: instant(s.createdAt) ?? epoch, updatedAt: instant(s.updatedAt) ?? epoch };
     validateSeries(series); return compact(series);
   });
-  const savedViews: SavedView[] | undefined = data.savedViews === undefined ? undefined : records(data.savedViews).map(v => compact<SavedView>({ id: text(v.id) ?? '', name: text(v.name) ?? '', query: typeof v.query === 'string' ? v.query : '', sectionId: text(v.sectionId), projectId: text(v.projectId), priority: v.priority === undefined ? undefined : choice<'low' | 'normal' | 'high'>(v.priority, ['low', 'normal', 'high'], 'normal'), schedule: v.schedule === undefined ? undefined : choice<'all' | 'scheduled' | 'backlog'>(v.schedule, ['all', 'scheduled', 'backlog'], 'all') }));
+  const savedViews: SavedView[] | undefined = data.savedViews === undefined ? undefined : records(data.savedViews).map(v => compact<SavedView>({ ...(Array.isArray(v.sectionIds) ? { sectionIds: v.sectionIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.projectIds) ? { projectIds: v.projectIds.filter((id): id is string => typeof id === 'string') } : {}), ...(Array.isArray(v.priorities) ? { priorities: v.priorities.filter((p): p is 'high' | 'normal' | 'low' => ['high', 'normal', 'low'].includes(String(p))) } : {}), ...(v.dateMode !== undefined ? { dateMode: choice(v.dateMode, ['any', 'today', 'this-week', 'overdue', 'fixed'] as const, 'any') } : {}), dateFrom: date(v.dateFrom), dateThrough: date(v.dateThrough), id: text(v.id) ?? '', name: text(v.name) ?? '', query: typeof v.query === 'string' ? v.query : '', sectionId: text(v.sectionId), projectId: text(v.projectId), priority: v.priority === undefined ? undefined : choice<'low' | 'normal' | 'high'>(v.priority, ['low', 'normal', 'high'], 'normal'), schedule: v.schedule === undefined ? undefined : choice<'all' | 'scheduled' | 'backlog'>(v.schedule, ['all', 'scheduled', 'backlog'], 'all'), completion: v.completion === undefined ? undefined : choice<'all' | 'open' | 'complete'>(v.completion, ['all', 'open', 'complete'], 'all') }));
   return { onboardingComplete: bool(data.onboardingComplete, true), ...(recurringSeries ? { recurringSeries } : {}), ...(savedViews ? { savedViews } : {}), sections, tasks, projects, calendarEvents, familyEvents, settings, lastRolloverSummary };
 }

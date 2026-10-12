@@ -1,3 +1,4 @@
+import { useSubscriptions } from './useSubscriptions';
 import { accountStorage } from '../data/accountStorage';
 import { useAccount } from '../cloud/accountContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,7 +11,7 @@ import { createCalendarStore } from './storage';
 import { config, manualProvider, manualSample } from './provider';
 import { googleAuth, googleSupport } from './googleAuthAdapter';
 import { outlookAuth, outlookSupport } from './outlookAuthAdapter';
-import { CalendarAuthError } from './auth';
+import { CalendarAuthError, type CalendarDiagnostic } from './auth';
 import { createGoogleProvider } from './googleProvider';
 import { createOutlookProvider } from './outlookProvider';
 import { getCalendarTokens } from './tokenStorage';
@@ -18,6 +19,7 @@ import { getCalendarTokens } from './tokenStorage';
 const auth = { google: googleAuth, outlook: outlookAuth };
 const support = { google: googleSupport, outlook: outlookSupport };
 function useCalendarState() {
+  const subscriptions = useSubscriptions();
   const { scope } = useAccount();
   const store = useMemo(() => createCalendarStore(accountStorage(AsyncStorage, scope), withStorageLock), [scope]);
   const calendarTokens = useMemo(() => getCalendarTokens(scope), [scope]);
@@ -34,6 +36,7 @@ function useCalendarState() {
   const [authReady, setAuthReady] = useState({ google: false, outlook: false });
   const [authError, setAuthError] = useState({ google: '', outlook: '' });
   const [accountErrors, setAccountErrors] = useState<Record<string, string>>({});
+  const [accountDiagnostics, setAccountDiagnostics] = useState<Record<string, CalendarDiagnostic>>({});
   const [needsReconnect, setNeedsReconnect] = useState<Record<string, boolean>>({});
   const [manualJSON, setManualJSON] = useState(() => manualSample());
   const running = useRef(false);
@@ -110,7 +113,16 @@ function useCalendarState() {
       const message = cause instanceof Error ? cause.message : 'Calendar sync failed. Previous events were kept.';
       if (accountId) {
         setAccountErrors(current => ({ ...current, [accountId]: message }));
-        if (cause instanceof CalendarAuthError) setNeedsReconnect(current => ({ ...current, [accountId]: true }));
+        if (cause instanceof CalendarAuthError) {
+          setNeedsReconnect(current => ({ ...current, [accountId]: true }));
+          if (cause.diagnostic) setAccountDiagnostics(current => {
+            const previous = current[accountId];
+            // A Graph 401 intentionally removes a rejected credential. Keep that
+            // request's evidence when the next Sync can only report its absence.
+            if (cause.diagnostic!.stage === 'credential-lookup' && previous?.httpStatus) return current;
+            return { ...current, [accountId]: cause.diagnostic! };
+          });
+        }
       } else setError(message);
       lastError.current = message;
       return false;
@@ -128,6 +140,7 @@ function useCalendarState() {
     const connected = { ...current, accounts: existing ? current.accounts.map(item => item.id === account.id ? { ...item, label: account.label } : item) : [...current.accounts, account] };
     setActiveAccount(account.id);
     setAccountErrors(current => ({ ...current, [account.id]: '' }));
+    setAccountDiagnostics(current => { const { [account.id]: _ignored, ...remaining } = current; return remaining; });
     setNeedsReconnect(current => ({ ...current, [account.id]: false }));
     try {
       const now = new Date(); const window = syncWindow(now);
@@ -137,7 +150,7 @@ function useCalendarState() {
       // Consent succeeded: keep the account and old snapshot so a network failure
       // can be retried without making the user repeat consent.
       setAccountErrors(current => ({ ...current, [account.id]: cause instanceof Error ? cause.message : 'Could not load calendars. Retry sync.' }));
-      if (cause instanceof CalendarAuthError) setNeedsReconnect(current => ({ ...current, [account.id]: true }));
+      if (cause instanceof CalendarAuthError) { setNeedsReconnect(current => ({ ...current, [account.id]: true })); if (cause.diagnostic) setAccountDiagnostics(current => ({ ...current, [account.id]: cause.diagnostic! })); }
       return connected;
     }
   }, accountId).finally(() => { void prepare(provider); });
@@ -154,7 +167,7 @@ function useCalendarState() {
     const now = new Date(); const window = syncWindow(now);
     const snapshots = await provider.fetchSnapshot(account, window, current.calendars);
     return reconcileExternal(current, snapshots, window, now, account.id);
-  }, accountId, async () => { setNeedsReconnect(current => ({ ...current, [accountId]: false })); });
+  }, accountId, async () => { setNeedsReconnect(current => ({ ...current, [accountId]: false })); setAccountDiagnostics(current => { const { [accountId]: _ignored, ...remaining } = current; return remaining; }); });
   const disconnect = (accountId: string) => {
     const account = currentCache.current.accounts.find(item => item.id === accountId);
     return run(async current => {
@@ -170,20 +183,22 @@ function useCalendarState() {
   const clearInvalidCache = async () => {
     if (running.current) return;
     running.current = true; setBusy(true); generation.current++; reads.current++;
-    try { publish(await store.clear()); setReady(true); setError(''); setNeedsReconnect({}); setAccountErrors({}); await forgetAll(); await Promise.all([prepare('google'), prepare('outlook')]); }
+    try { publish(await store.clear()); setReady(true); setError(''); setNeedsReconnect({}); setAccountErrors({}); setAccountDiagnostics({}); await forgetAll(); await Promise.all([prepare('google'), prepare('outlook')]); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not clear imported cache.'); }
     finally { running.current = false; setBusy(false); }
   };
   const updateCalendar = (accountId: string, id: string, patch: Partial<Pick<ExternalCalendar, 'syncEnabled' | 'visible' | 'colorOverride' | 'family'>>) => run(async current => ({ ...current, calendars: current.calendars.map(calendar => calendar.accountId === accountId && calendar.id === id ? { ...calendar, ...patch } : calendar) }), accountId);
   const hideEvent = async (id: string, hidden: boolean) => {
+    if (id.startsWith('ics:')) return subscriptions.hide(id, hidden);
     const saved = await run(async current => setExternalEventHidden(current, id, hidden));
     if (!saved) throw Error(lastError.current || 'Could not update event visibility. Please retry.');
   };
   const unhideAllEvents = async () => {
+    await subscriptions.unhide();
     const saved = await run(async current => ({ ...current, hiddenEventIds: [] }));
     if (!saved) throw Error(lastError.current || 'Could not restore hidden events. Please retry.');
   };
-  return { hideEvent, unhideAllEvents, cache, events: visibleExternalEvents(cache), ready, busy, activeAccount, error, credentialError, accountErrors, manualJSON, setManualJSON, connect, connectProvider, authReady, authError, prepare, support, needsReconnect, sync, disconnect, clearInvalidCache, updateCalendar, reload };
+  return { subscriptions, hideEvent, unhideAllEvents, cache, events: [...visibleExternalEvents(cache), ...subscriptions.events], ready, busy, activeAccount, error, credentialError, accountErrors, accountDiagnostics, manualJSON, setManualJSON, connect, connectProvider, authReady, authError, prepare, support, needsReconnect, sync, disconnect, clearInvalidCache, updateCalendar, reload };
 }
 const Context = createContext<ReturnType<typeof useCalendarState> | null>(null);
 export function CalendarSyncProvider({ children }: { children: ReactNode }) {

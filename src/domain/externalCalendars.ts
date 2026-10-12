@@ -10,8 +10,10 @@ export interface ExternalEvent extends EventFields {
   sourceCalendarName: string; allDay: boolean; start: string; end: string; lastSyncedAt: string; occurrenceId?: string;
   sourceAccountLabel?: string; sourceColor?: string; family?: boolean;
 }
-export type DisplayEvent = LocalEvent | ExternalEvent;
-export const isExternalEvent = (event: DisplayEvent): event is ExternalEvent => event.source === 'google' || event.source === 'outlook';
+export type SubscriptionEvent = Omit<ExternalEvent, 'source' | 'provider'> & { source: 'ics'; provider: 'ics' };
+export type ImportedEvent = ExternalEvent | SubscriptionEvent;
+export type DisplayEvent = LocalEvent | ImportedEvent;
+export const isExternalEvent = (event: DisplayEvent): event is ImportedEvent => event.source === 'google' || event.source === 'outlook' || event.source === 'ics';
 export interface ExternalCalendarCache { hiddenEventIds?: string[]; version: 2; accounts: ExternalAccount[]; calendars: ExternalCalendar[]; events: ExternalEvent[] }
 export const emptyExternalCache = (): ExternalCalendarCache => ({ version: 2, accounts: [], calendars: [], events: [] });
 export interface GoogleEvent {
@@ -47,13 +49,13 @@ export function normalizeGoogleEvent(raw: GoogleEvent, accountId: string, calend
     allDay, start, end, lastSyncedAt: now.toISOString() };
 }
 
-export function externalOnDate(event: ExternalEvent, date: string): boolean {
+export function externalOnDate(event: ImportedEvent, date: string): boolean {
   if (event.allDay) return date >= event.start && date < event.end; // Google end dates are exclusive.
   const from = new Date(`${date}T00:00:00`).getTime();
   const through = new Date(`${addDays(date, 1)}T00:00:00`).getTime();
   return Date.parse(event.start) < through && Date.parse(event.end) > from;
 }
-export function externalForDate(event: ExternalEvent, date: string): ExternalEvent {
+export function externalForDate<T extends ImportedEvent>(event: T, date: string): T {
   return { ...event, date, startTime: event.allDay ? undefined : localDateKey(new Date(event.start)) === date ? time(new Date(event.start)) : '00:00',
     endTime: event.allDay ? undefined : localDateKey(new Date(event.end)) === date ? time(new Date(event.end)) : '24:00' };
 }

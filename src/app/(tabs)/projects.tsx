@@ -5,9 +5,14 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { ProjectProgress } from '@/src/components/ProjectProgress';
+import { ProjectNextStep } from '@/src/components/ProjectNextStep';
+import { ProjectScope, ProjectHeader } from '@/src/components/ProjectAppearance';
+import { SectionHeader } from '@/src/components/SectionHeader';
 import { Card, Label, Muted, Page } from '@/src/components/ui';
 import { useAppData } from '@/src/data/useAppData';
 import { groupProjectsByStatus, projectStatusLabels } from '@/src/domain/projects';
+import { localDateKey } from '@/src/domain/dates';
+import { useLocalClock } from '@/src/hooks/useLocalClock';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 
 export default function ProjectsScreen() {
@@ -15,8 +20,10 @@ export default function ProjectsScreen() {
   const { colors } = useAppTheme();
   const [showArchived, setShowArchived] = useState(false);
   const { preferences, save } = useDevicePreferences();
+  const now = useLocalClock();
   const collapsed = preferences.collapsed;
   if (!data) return <Page title="Projects" subtitle="Loading your projects…" />;
+  const today = now ? localDateKey(now) : localDateKey(new Date());
   const archivedCount = data.projects.filter(project => project.status === 'archived').length;
   return <Page title="Projects" subtitle="Progress across the work that matters.">
     <Pressable accessibilityRole="button" onPress={() => router.push('/project/new')} style={{ minHeight: 44, padding: 15, borderRadius: 12, backgroundColor: colors.accent }}><Text style={{ color: colors.onAccent, fontWeight: '700' }}>Create project</Text></Pressable>
@@ -33,13 +40,14 @@ export default function ProjectsScreen() {
           <Text accessibilityRole="header" style={{ color: colors.text, fontWeight: '700', fontSize: 15, flex: 1, minWidth: 0 }}>{projectStatusLabels[status]} · {projects.length}</Text>
           <Text style={{ color: colors.muted, fontSize: 18 }}>{expanded ? '⌄' : '›'}</Text>
         </Pressable>
-        {expanded ? projects.map(project => <Card key={project.id} title={project.name}>
+        {expanded ? projects.map(project => <ProjectScope key={project.id} project={project} sections={data.sections}><Card><ProjectHeader title={project.name} />
           <Muted>{projectStatusLabels[project.status]}</Muted>
           {project.description ? <Muted>{project.description}</Muted> : null}
-          <Muted>{data.sections.find(section => section.id === project.sectionId)?.name ?? 'No section'}</Muted>
+          {(() => { const section = data.sections.find(item => item.id === project.sectionId); return section ? <SectionHeader section={section} /> : <Muted>No section</Muted>; })()}
           <ProjectProgress project={project} tasks={data.tasks} />
+          <ProjectNextStep project={project} today={today} />
           <Action label={`Edit project: ${project.name}`} text="Edit project and linked tasks" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} />
-        </Card>) : null}
+        </Card></ProjectScope>) : null}
       </View>;
     })}
   </Page>;

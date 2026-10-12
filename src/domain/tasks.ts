@@ -42,6 +42,7 @@ export function updateTask(task: Task, changes: TaskChanges, now = new Date()): 
   if (changes.status === 'backlog') { merged.dueDate = undefined; merged.status = 'backlog'; }
   if (changes.status === 'complete') merged.completedAt = task.status === 'complete' ? task.completedAt : now.toISOString();
   else if (changes.status) merged.completedAt = undefined;
+  if (changes.status === 'complete' && task.status !== 'complete') { merged.manualPostponementsSinceCompletion = 0; merged.rolloversSinceCompletion = 0; }
   validateReminder(merged);
   return merged;
 }
@@ -127,7 +128,7 @@ export function getProjectTasks(tasks: Task[], projectId: string): Task[] {
       || (a.status !== 'complete' ? (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') : 0));
 }
 
-export type ScheduleSelection = Pick<Task, 'id' | 'updatedAt'>;
+export type ScheduleSelection = Pick<Task, 'id' | 'updatedAt'> & { title?: string };
 // Validate the entire selection before returning one snapshot for one durable write.
 export function scheduleTasks(data: AppData, selection: ScheduleSelection[], dueDate: string, backlogOnly = false, now = new Date()): AppData {
   validateDueDate(dueDate);
@@ -137,8 +138,8 @@ export function scheduleTasks(data: AppData, selection: ScheduleSelection[], due
   const tasksById = new Map(data.tasks.map(task => [task.id, task]));
   for (const item of selection) {
     const task = tasksById.get(item.id);
-    if (!task || task.updatedAt !== item.updatedAt || task.status === 'complete' || task.status === 'archived' || (backlogOnly && task.dueDate)) {
-      throw Error('A selected task changed or is no longer available. Nothing was scheduled. Reopen the selection and try again.');
+    if (!task || task.updatedAt !== item.updatedAt || task.status === 'complete' || task.status === 'archived' || (backlogOnly && (task.dueDate || (task.projectId && !data.projects.some(project => project.id === task.projectId && project.status === 'active'))))) {
+      throw Error(`${task?.title ?? item.title ?? 'A selected task'} changed or is no longer available. Nothing was scheduled. Clear the selection and select it again.`);
     }
   }
   return { ...data, tasks: data.tasks.map(task => selected.has(task.id)
@@ -161,6 +162,11 @@ export function needsPushbackChoice(task: Task, dueDate: string | undefined, now
 }
 
 export function updateTaskSchedule(task: Task, changes: TaskChanges, settings: AppSettings, choice?: PushbackChoice, now = new Date()): Task {
+  const next = applyTaskSchedule(task, changes, settings, choice, now);
+  const postponed = task.status !== 'complete' && task.status !== 'archived' && next.status !== 'complete' && next.status !== 'archived' && !!task.dueDate && (!next.dueDate || next.dueDate > task.dueDate);
+  return postponed ? { ...next, manualPostponementsSinceCompletion: (task.manualPostponementsSinceCompletion ?? 0) + 1 } : next;
+}
+function applyTaskSchedule(task: Task, changes: TaskChanges, settings: AppSettings, choice?: PushbackChoice, now = new Date()): Task {
   const dueDate = changes.status === 'backlog' ? '' : changes.dueDate;
   const relevant = dueDate !== undefined && needsPushbackChoice(task, dueDate, now)
     && changes.status !== 'complete' && changes.status !== 'archived';

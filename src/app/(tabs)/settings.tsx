@@ -1,3 +1,4 @@
+import { HelpSettings } from '@/src/components/HelpSettings';
 import { useAccount } from '@/src/cloud/accountContext';
 import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { AmbientProfiles } from '@/src/components/AmbientProfiles';
@@ -18,6 +19,12 @@ import { FormError } from '@/src/components/TaskForm';
 import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { useAppData } from '@/src/data/useAppData';
 import type { AppSettings } from '@/src/domain/models';
+import { Disclosure } from '@/src/components/Disclosure';
+import { Action } from '@/src/components/TaskScheduling';
+import { useDevicePreferences } from '@/src/data/DevicePreferences';
+import { useCalendarSync } from '@/src/calendar/CalendarSyncProvider';
+import { useAutomaticSync } from '@/src/cloud/AutomaticSyncProvider';
+import { ReviewPreferences } from '@/src/components/ReviewPreferences';
 
 const toggles = [
   ['raiseMissedTasksToHigh', 'Raise missed tasks to High'],
@@ -29,7 +36,12 @@ const toggles = [
 export default function SettingsScreen() {
   const { label: accountLabel } = useAccount();
   const { colors, settings, updateSetting, ready } = useAppTheme();
-  const { error: storageError, resetVersion } = useAppData();
+  const { data, error: storageError, resetVersion } = useAppData();
+  const device = useDevicePreferences();
+  const calendar = useCalendarSync();
+  const cloud = useAutomaticSync();
+  const p = device.preferences;
+  const connectionAttention = !!(calendar.subscriptions.error || calendar.error || calendar.credentialError || Object.values(calendar.authError).some(Boolean) || Object.values(calendar.accountErrors).some(Boolean) || Object.values(calendar.needsReconnect).some(Boolean) || cloud.status.state === 'error' || cloud.status.state === 'conflict');
   const [timeDraft, setTime] = useState<string>();
   const time = timeDraft ?? settings.rolloverTime;
   const [error, setError] = useState('');
@@ -45,15 +57,22 @@ export default function SettingsScreen() {
   if (!ready) return <Page title="Settings" subtitle={storageError || 'Loading settings…'} />;
   return <Page title="Settings" subtitle="Shape how LifeCommand fits your day.">
     {error || storageError ? <FormError>{error || storageError}</FormError> : null}
-    <Label style={{ fontSize: 20, fontWeight: '700' }}>Account and data</Label>
     <Muted>Active: {accountLabel}</Muted>
-    <AutomaticSyncCard /><CloudSyncCard disabled={saving} />
-    <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
-    <Label style={{ fontSize: 20, fontWeight: '700' }}>Calendars</Label>
-    <Muted>External calendar refresh is separate from LifeCommand task and project sync.</Muted>
-    <CalendarSyncCard />
-    <Label style={{ fontSize: 20, fontWeight: '700' }}>Account planning preferences</Label>
-    <PersonalizationSettings mode="sections" /><RecurrenceSettings /><DayPlanningSettings />
+    {device.error ? <FormError>{device.error}</FormError> : null}
+    {connectionAttention ? <Card><FormError>A connection needs attention. Your saved work is kept.</FormError><Action label="Review accounts and connections" onPress={() => void device.save({ collapsed: { 'Settings:accounts': false } }).catch(() => undefined)} /></Card> : null}
+    <Card><Disclosure title="What do I see?" summary={`${p.showCompleted ? 'Completed tasks shown' : 'Completed tasks hidden'} · Focus ${p.focusVisible ? 'on' : 'off'} · ${p.hiddenSections.length} hidden sections`} storageKey="Settings:visibility" defaultCollapsed keepMounted>
+      <TodaySettings /><ReviewPreferences /><AmbientSettingsCard settings={settings} saving={saving} save={save} />
+    </Disclosure></Card>
+    <Card><Disclosure title="How is it organized?" summary={`${data?.sections.filter(s => !s.archived).length ?? 0} active sections · section order and recurring tasks`} storageKey="Settings:organization" defaultCollapsed keepMounted>
+      <PersonalizationSettings mode="sections" />
+      <Disclosure title="Recurring task templates" storageKey="Settings:recurrence" defaultCollapsed keepMounted><RecurrenceSettings /></Disclosure>
+    </Disclosure></Card>
+    <Card><Disclosure title="How does it look?" summary={`${p.appearance} theme · ${p.density} density · ${p.textSize} text`} storageKey="Settings:appearance" defaultCollapsed keepMounted>
+      <PersonalizationSettings mode="appearance" />
+      <Disclosure title="Ambient display profiles" storageKey="Settings:ambient-profiles" defaultCollapsed keepMounted><AmbientProfiles /></Disclosure>
+    </Disclosure></Card>
+    <Card><Disclosure title="How does it behave?" summary={`Rollover ${settings.rolloverTime} · ${settings.defaultStoryPoints} default story points · reminders and notifications`} storageKey="Settings:behavior" defaultCollapsed keepMounted>
+    <DayPlanningSettings />
     <Card title="Daily rollover">
       <Muted>At this local time, unfinished work from the previous day moves forward. If the app is closed, it catches up when you return.</Muted>
       <Label>Rollover time · 24-hour HH:MM</Label>
@@ -64,11 +83,15 @@ export default function SettingsScreen() {
     <Card title="Defaults"><Row><Label>Default story points</Label><View style={{ flexDirection: 'row', gap: 12 }}><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Decrease default story points" onPress={() => void save('defaultStoryPoints', Math.max(1, settings.defaultStoryPoints - 1))}><Label>−</Label></Pressable><Label>{settings.defaultStoryPoints}</Label><Pressable disabled={saving} accessibilityRole="button" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Increase default story points" onPress={() => void save('defaultStoryPoints', Math.min(13, settings.defaultStoryPoints + 1))}><Label>＋</Label></Pressable></View></Row></Card>
 
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
-    <Label style={{ fontSize: 20, fontWeight: '700' }}>This device</Label>
-    <PersonalizationSettings mode="appearance" /><TodaySettings />
     <NotificationSettingsCard />
-    <AmbientProfiles />
-    <AmbientSettingsCard settings={settings} saving={saving} save={save} />
-
+    </Disclosure></Card>
+    <Card><Disclosure title="Accounts and connections" summary={`${cloud.enabled ? `Cloud sync: ${cloud.status.state}` : 'Cloud sync off'} · ${calendar.cache.accounts.length} calendar connections${connectionAttention ? ' · Needs attention' : ''}`} storageKey="Settings:accounts" defaultCollapsed keepMounted>
+      <AutomaticSyncCard /><CloudSyncCard disabled={saving} />
+      <Muted>External calendar refresh is separate from LifeCommand task and project sync.</Muted><CalendarSyncCard />
+    </Disclosure></Card>
+    <Card><Disclosure title="Data and recovery" summary={`${data?.tasks.length ?? 0} tasks · ${data?.projects.length ?? 0} projects · import, export, and recovery`} storageKey="Settings:data" defaultCollapsed keepMounted>
+      <DataManagementCard saving={saving} onReset={() => { setTime(undefined); setError(''); }} />
+    </Disclosure></Card>
+    <HelpSettings />
   </Page>;
 }

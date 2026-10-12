@@ -1,5 +1,51 @@
 # Local Data Model
 
+## Product completion additions — 2026-10-10
+
+Optional schema-4 task fields `manualPostponementsSinceCompletion` and
+`rolloversSinceCompletion` are nonnegative integer counters, absent on older
+records (treated as zero going forward, not inferred from lifetime counters or
+dates). Actual manual moves to a later date/backlog increment the first; actual
+automatic rollovers increment the second, independently of legacy penalty
+settings. A transition to complete resets both; Undo restores the saved previous
+record. Existing date/priority/penalty semantics are unchanged. Normalization,
+strict snapshot validation, export/import, recovery and cloud JSON serialization
+carry these fields. No existing record/key is renamed or reseeded.
+
+Backward compatibility here means this reader accepts older snapshots. Older app
+versions with strict unknown-field validation may reject new view/history fields;
+upgrade participating clients before exchanging new exports/snapshots. They must
+not silently strip these fields or overwrite a newer cloud revision.
+
+SavedView adds optional `sectionIds`, `projectIds`, `priorities`, `dateMode`
+(`any`, `today`, `this-week`, `overdue`, `fixed`), `dateFrom`, `dateThrough`.
+Legacy singular filters remain readable. OR within each array, AND across axes;
+missing referenced IDs produce no task/project matches plus an update warning.
+Relative dates use the current local day/week-start preference; fixed ranges are
+inclusive and ordered. Definitions are portable account data; Search currently
+supports them. Event search uses text only, independent of task filters.
+
+Device presentation remains **account-namespaced**, not shared by signed-in users:
+`activeSavedViewId`, planner search/section/project/day-pane preferences,
+Review group order/exclusions/threshold/source, `projectNextTaskIds`, and
+`focusDate` with ordered `focusTaskIds`. Default Review threshold is three actual
+manual postponements; an explicitly saved older threshold is retained. Empty
+Review group lists are valid. Focus pins are active only on their recorded day;
+legacy undated pins are adopted on the first upgraded hydration day, with no new
+IDs invented. Completion, deletion, rescheduling and archival exclude ineligible
+pins; undo can restore same-day eligibility. Hiding Focus returns tasks to normal
+groups. Neither presentation preferences nor explicit next-task choices enter
+portable exports/cloud snapshots. Section icons/colors remain portable account
+fields as documented below.
+
+ICS foundation adds a separate account/device cache key
+`lifecommand:subscriptions:v1`, version 1, containing subscriptions, normalized
+read-only events and hidden IDs, **never feed URLs**. The existing accountStorage
+prefix, write lock and complete-snapshot CAS protect it; ordinary record exports
+exclude it. Existing calendar cache/credential keys are unchanged. Live URL
+storage/fetch/refresh is not enabled pending the secure backend described in
+[ICS setup](../integrations/ICS_SUBSCRIPTIONS.md).
+
 ## Current contract: usability upgrade, schema 4
 
 This section supersedes historical slice descriptions below. Routes now live in
@@ -10,6 +56,13 @@ occurrence identities and dangling references. Failed backups prevent replacemen
 
 - Sections have arbitrary nonblank names and optional `archived`. Archive retains
   references. Reassignment moves tasks, projects and recurring templates atomically.
+  Optional `icon` stores a stable application identifier (e.g. `home`, `pets`,
+  `none`), independent of platform symbol names. Missing icons render General
+  without rewriting older records. Well-formed unknown identifiers are retained
+  and render General; malformed supplied identifiers reject on import/save.
+  Icons are account data and follow existing sync/export/recovery paths. No
+  schema number, storage key or account namespace changes. See
+  [section appearance](../SECTION_APPEARANCE.md) for the catalog and color rules.
 - `recurringSeries` contains explicit IANA timezone, start/end dates, frequency,
   selected weekdays, month-end `last-day`/`skip`, template fields and
   `generatedThrough`. Tasks carry optional `recurrenceId` and `occurrenceDate`.

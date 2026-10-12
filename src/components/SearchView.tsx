@@ -1,44 +1,48 @@
-import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { View } from 'react-native';
 import { useAppData } from '../data/useAppData';
+import { useDevicePreferences } from '../data/DevicePreferences';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
 import { searchData } from '../domain/search';
+import { viewProblems, type TaskFilter } from '../domain/savedViews';
+import { localDateKey } from '../domain/dates';
+import { useLocalClock } from '../hooks/useLocalClock';
 import type { SavedView } from '../domain/models';
 import { useAppTheme } from '../theme/ThemeProvider';
+import { AppTextInput } from './AppText';
 import { TaskList, TaskRow } from './TaskList';
 import { EventRow } from './EventRow';
-import { Card, Label, Muted, Page, Row } from './ui';
-import { Action } from './TaskScheduling';
+import { Card, Muted, Page, Row } from './ui';
+import { Action } from './Action';
 import { FormError } from './TaskForm';
+import { SavedViewEditor } from './SavedViewEditor';
 import { eventKey } from '../domain/events';
+const newViewId = () => `view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 export function SearchView() {
-  const { data, saveView, deleteView } = useAppData(), { events } = useCalendarSync(), { colors } = useAppTheme();
-  const [filter, setFilter] = useState<Omit<SavedView, 'id' | 'name'>>({ query: '', schedule: 'all' });
-  const [name, setName] = useState(''), [id, setId] = useState<string>(), [error, setError] = useState(''), [message, setMessage] = useState('');
-  if (!data) return <Page title="Search" subtitle="Loading…" />;
-  const results = searchData(data, [...data.calendarEvents, ...data.familyEvents, ...events], filter);
-  const run = (promise: Promise<void>) => { setError(''); void promise.then(() => setMessage('Saved.')).catch(cause => setError(cause.message)); };
-  const input = { minHeight: 48, padding: 12, color: colors.text, backgroundColor: colors.background, borderRadius: 10 };
-  const choice = (label: string, key: 'sectionId' | 'projectId' | 'priority' | 'schedule', values: { value: string; label: string }[]) => <View style={{ gap: 6 }}><Label>{label}</Label><Row>{values.map(v => <Action key={v.value} label={`${label}: ${v.label}${filter[key] === v.value ? ', selected' : ''}`} onPress={() => setFilter({ ...filter, [key]: v.value || undefined })} />)}</Row></View>;
-  return <Page hasHeader title="Search" subtitle="Tasks, projects and visible events. Event results have no task section, priority or project.">
-    <Card><TextInput accessibilityLabel="Search tasks, projects and events" value={filter.query} onChangeText={query => setFilter({ ...filter, query })} placeholder="Search" placeholderTextColor={colors.muted} style={input} />
-      {choice('Section', 'sectionId', [{ value: '', label: 'All' }, ...data.sections.map(s => ({ value: s.id, label: s.name }))])}
-      {choice('Project', 'projectId', [{ value: '', label: 'All' }, ...data.projects.map(p => ({ value: p.id, label: p.name }))])}
-      {choice('Priority', 'priority', ['', 'high', 'normal', 'low'].map(value => ({ value, label: value || 'All' })))}
-      {choice('Schedule', 'schedule', ['all', 'scheduled', 'backlog'].map(value => ({ value, label: value })))}
-      <Action label="Clear search filters" onPress={() => { setFilter({ query: '', schedule: 'all' }); setId(undefined); setName(''); }} />
+  const { data } = useAppData(), { events } = useCalendarSync(), { colors } = useAppTheme(), { preferences: p, save } = useDevicePreferences();
+  const now = useLocalClock();
+  const [custom, setCustom] = useState<TaskFilter>(), [editor, setEditor] = useState<SavedView>(), [error, setError] = useState('');
+  if (!data || !now) return <Page title="Search" subtitle="Loading…" />;
+  const active = data.savedViews?.find(view => view.id === p.activeSavedViewId);
+  const filter: TaskFilter = custom ?? active ?? { query: '', schedule: 'all' };
+  const missing = viewProblems(data, filter);
+  const results = searchData(data, [...data.calendarEvents, ...data.familyEvents, ...events], filter, localDateKey(now), p.weekStart);
+  if (p.activeSavedViewId && !active && !custom) { results.tasks = []; results.projects = []; }
+  const select = (id?: string) => { setCustom(undefined); setError(''); void save({ activeSavedViewId: id ?? '' }).catch(() => setError('Could not remember the active view. Retry.')); };
+  const clear = () => { select(); setCustom({ query: '', schedule: 'all' }); };
+  const makeEditor = () => setEditor({ ...filter, id: active?.id ?? newViewId(), name: active?.name ?? '', sectionIds: filter.sectionIds ?? (filter.sectionId ? [filter.sectionId] : []), projectIds: filter.projectIds ?? (filter.projectId ? [filter.projectId] : []), priorities: filter.priorities ?? (filter.priority ? [filter.priority] : []), sectionId: undefined, projectId: undefined, priority: undefined });
+  return <Page hasHeader title="Search" subtitle="Saved task views and independent event search.">
+    <Card title={active ? `Active view: ${active.name}${custom ? ' · modified' : ''}` : 'Active filters'}>
+      <AppTextInput accessibilityLabel="Search tasks, projects and events" value={filter.query} onChangeText={query => setCustom({ ...filter, query })} placeholder="Search" style={{ minHeight: 48, padding: 12, color: colors.text, backgroundColor: colors.background }} />
+      <Muted>{(filter.sectionIds ?? (filter.sectionId ? [filter.sectionId] : [])).map(id => data.sections.find(s => s.id === id)?.name ?? 'Missing section').join(', ') || 'All sections'} · {(filter.projectIds ?? (filter.projectId ? [filter.projectId] : [])).map(id => data.projects.find(project => project.id === id)?.name ?? 'Missing project').join(', ') || 'All projects'} · {filter.priorities?.join(', ') || filter.priority || 'All priorities'} · {filter.completion || 'all'} · {filter.schedule || 'all'} · {filter.dateMode || 'any date'}{filter.dateMode === 'fixed' ? ` ${filter.dateFrom}–${filter.dateThrough}` : ''}</Muted>
+      <Row><Action label="Clear search filters" text="Clear filters" onPress={clear} /><Action label="Preset High priority" text="High priority" onPress={() => { select(); setCustom({ query: '', priority: 'high' }); }} /><Action label="Edit view filters" text="Customize / save view" onPress={makeEditor} /></Row>
+      {missing.length || (p.activeSavedViewId && !active && !custom) ? <FormError>This view needs updating. A referenced section, project, or saved view no longer exists. Results have not been broadened.</FormError> : null}
+      {error ? <FormError>{error}</FormError> : null}
     </Card>
-    <Card title="Saved views">
-      <Muted>Load a view, change its filters or name, then Save view to update it.</Muted>
-      <Row>{[['Workday', 'work', ''], ['Family', 'family', ''], ['High Priority', '', 'high']].map(([label, sectionId, priority]) => <Action key={label} label={`Preset ${label}`} onPress={() => { setId(undefined); setName(label); setFilter({ query: '', sectionId: data.sections.some(s => s.id === sectionId) ? sectionId : undefined, priority: priority === 'high' ? 'high' : undefined }); }} />)}</Row>
-      {data.savedViews?.map(view => <Row key={view.id}><Action label={`Load view ${view.name}`} onPress={() => { setId(view.id); setName(view.name); setFilter({ query: view.query, sectionId: view.sectionId, projectId: view.projectId, priority: view.priority, schedule: view.schedule }); }} /><Action label={`Delete saved view ${view.name}`} danger onPress={() => run(deleteView(view.id))} /></Row>)}
-      <TextInput accessibilityLabel="Saved view name" value={name} onChangeText={setName} placeholder="View name" placeholderTextColor={colors.muted} style={input} /><Action label="Save view" disabled={!name.trim()} onPress={() => run(saveView({ ...filter, id: id ?? `view-${Date.now()}`, name: name.trim() }))} />
-      {message ? <Label>{message}</Label> : null}{error ? <FormError>{error}</FormError> : null}
-    </Card>
-    <Card title={`Tasks · ${results.tasks.length}`}><TaskList tasks={results.tasks.slice(0, 100)} data={data} collapsibleGroups="Search" renderTask={task => <TaskRow task={task} data={data} />} />{!results.tasks.length ? <><Muted>No matching tasks.</Muted><Action label="Capture a task" onPress={() => router.push('/(tabs)/capture')} /></> : results.tasks.length > 100 ? <Muted>Showing the first 100. Refine your filters.</Muted> : null}</Card>
-    <Card title={`Projects · ${results.projects.length}`}>{results.projects.slice(0, 100).map(p => <Action key={p.id} label={`Open project ${p.name}`} onPress={() => router.push({ pathname: '/project/[id]', params: { id: p.id } })} />)}{!results.projects.length ? <Muted>No matching projects.</Muted> : null}</Card>
-    <Card title={`Events · ${results.events.length}`}>{results.events.slice(0, 100).map(e => <EventRow key={eventKey(e)} event={e} showDate />)}{!results.events.length ? <Muted>No matching visible events.</Muted> : null}</Card>
+    <Card title="Saved views"><Muted>Definitions sync with your account; the active view stays on this device for this account. Views currently support Search task results.</Muted><Row>{data.savedViews?.map(view => <Action key={view.id} label={`Load view ${view.name}`} text={`${active?.id === view.id ? '✓ ' : ''}${view.name}`} onPress={() => select(view.id)} />)}</Row></Card>
+    <Card title={`Tasks · ${results.tasks.length}`}><TaskList tasks={results.tasks} data={data} collapsibleGroups="Search" renderTask={task => <TaskRow task={task} data={data} />} />{!results.tasks.length ? <><Muted>No matching tasks. Clear filters or update this view.</Muted><Action label="Clear empty search filters" text="Clear filters" onPress={clear} /></> : null}</Card>
+    <Card title={`Projects · ${results.projects.length}`}>{results.projects.map(project => <Action key={project.id} label={`Open project ${project.name}`} onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} />)}</Card>
+    <Card title={`Events · ${results.events.length}`}><Muted>Only search text applies to events. Task sections, priorities, completion and dates never hide appointments.</Muted>{results.events.map(event => <EventRow key={eventKey(event)} event={event} showDate />)}</Card>
+    {editor ? <SavedViewEditor key={editor.id} initial={editor} existing={!!data.savedViews?.some(v => v.id === editor.id)} onClose={() => setEditor(undefined)} onSaved={view => { setEditor(undefined); select(view?.id); }} /> : null}
   </Page>;
 }

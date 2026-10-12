@@ -1,5 +1,31 @@
 # LifeCommand Product Spec
 
+## Current product-completion refinement (2026-10-10)
+
+The warm visual system now derives subordinate project tones/buttons from the
+project's existing section association. Global brand actions, section identity,
+calendar sources and semantic priority/status colors remain independent. The
+section editor previews the complete nested color family in either theme.
+
+Project next steps order overdue dates oldest first, then today, backlog, and
+future dates nearest first (Upcoming), with priority and stable ties. Optional
+device/account-specific choices never edit dates/priority. Planner sessions use
+fresh selection, remembered filters, a responsive day schedule and atomic saves.
+Review deduplicates task rows using configurable group order; Needs a date is a
+planning opportunity, actual postponements default to three since completion,
+and project attention states its reason without inventing inactivity/overdue
+history. Search saved views support multi-value and relative/fixed date filters.
+
+Settings remains compact and adds Help plus replayable, skippable setup/capture.
+Live ICS is **not available**: parsing/cache groundwork is tested, but a secure
+authenticated feed service is absent. Alongside remains an uncleared working
+name with material existing product overlap; no technical identity changes.
+
+See [current inventory](../PRODUCT_COMPLETION_PLAN.md),
+[delivery and exact checks](../PRODUCT_COMPLETION_DELIVERY.md),
+[color rules](../design/README.md), [brand screen](BRAND_PRELIMINARY_SCREEN.md),
+and [remaining device/release checks](../qa/PRODUCT_RELEASE_CHECKLIST.md).
+
 ## Implemented usability and personalization upgrade
 
 Story 027 extends the established mobile/web design with personal sections and

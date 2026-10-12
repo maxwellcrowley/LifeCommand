@@ -1,3 +1,4 @@
+import { validateSavedView } from './savedViews';
 import type { AppData } from './models';
 import { normalizeAppData } from './normalize';
 import { isDateKey } from './dates';
@@ -85,7 +86,7 @@ export function validateSnapshot(value: unknown, allowUnresolvedTaskProjects = f
     for (const item of collection) { nonempty(item.id, 'ID'); if (ids.has(item.id)) throw Error('Duplicate view or series ID.'); ids.add(item.id); }
   }
   for (const series of data.recurringSeries ?? []) if (!data.sections.some(s => s.id === series.sectionId) || (series.projectId && !data.projects.some(p => p.id === series.projectId))) throw Error('Recurring series has a missing section or project.');
-  for (const view of data.savedViews ?? []) { nonempty(view.name, 'Saved view name'); }
+  for (const view of data.savedViews ?? []) { nonempty(view.name, 'Saved view name'); validateSavedView(view); }
   const occurrences = new Set<string>();
   for (const task of data.tasks) if (task.recurrenceId || task.occurrenceDate) {
     const key = `${task.recurrenceId}:${task.occurrenceDate}`;

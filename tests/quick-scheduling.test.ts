@@ -5,6 +5,7 @@ import { createTask, getProjectTasks, getTodayTasks, scheduleTasks } from '../sr
 import { calendarDays } from '../src/domain/events';
 import { createRepository, STORAGE_KEY } from '../src/data/storage';
 import { persistedSnapshot } from '../src/domain/migrations';
+import { createProject } from '../src/domain/projects';
 
 const now = new Date('2026-09-29T08:00:00');
 function fixture() {
@@ -15,6 +16,7 @@ function fixture() {
 for (const [flow, date] of [['Today', '2026-09-29'], ['Calendar selected day', '2026-10-15']]) {
   test(`${flow}: multiple selected backlog tasks are updated once and retain every unrelated field`, () => {
     const data = fixture(); data.tasks[0].projectId = 'linked-project';
+    data.projects = [{ ...createProject({ name: 'Linked project', sectionId: 'home' }, now), id: 'linked-project' }];
     const before = structuredClone(data);
     const next = scheduleTasks(data, data.tasks.slice(0, 2), date, true, new Date('2026-09-29T09:00:00'));
     assert.equal(next.tasks.length, 3);

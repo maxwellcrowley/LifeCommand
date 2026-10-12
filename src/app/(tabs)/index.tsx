@@ -1,6 +1,8 @@
+import { activeFocus } from '@/src/domain/focus';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
+import { TaskCheck } from '@/src/components/TaskPresentation';
 import { AppText } from '@/src/components/AppText';
 import { Action, AddFromBacklog } from '@/src/components/TaskScheduling';
 import { TaskList, TaskRow } from '@/src/components/TaskList';
@@ -37,6 +39,9 @@ export default function TodayScreen() {
   if (!data || !now || !ready) return <Page title="Today" subtitle="Loading your day…" />;
   const today = localDateKey(now);
   const tasks = todayTaskGroups(data.tasks, today, preferences.hiddenSections);
+  const focus = activeFocus(data, preferences, today);
+  const focusIds = new Set(focus.map(task => task.id));
+  const regularTasks = tasks.open.filter(task => !focusIds.has(task.id));
   const events = eventsOnDate({ ...data, externalEvents: calendar.events }, today);
   const schedule = todaySchedule(events, now);
   const showTasks = preferences.todayAreas.includes('tasks'), showSchedule = preferences.todayAreas.includes('calendar');
@@ -54,12 +59,9 @@ export default function TodayScreen() {
     } catch (cause) { setFailure(cause instanceof Error ? cause.message : 'Could not save.'); }
     finally { setBusy(undefined); }
   };
-  const row = (task: Task) => <TaskRow grouped task={task} data={data} date={today} disabled={!!busy} action={
-    <Pressable accessibilityRole="checkbox" accessibilityLabel={`${task.status === 'complete' ? 'Reopen' : 'Complete'} ${task.title}`}
-      accessibilityState={{ checked: task.status === 'complete', disabled: !!busy, busy: busy === task.id }} aria-checked={task.status === 'complete'} disabled={!!busy}
-      onPress={() => void toggle(task)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10 }}>
-      <AppText style={{ color: colors.accent, fontSize: 24 }}>{busy === task.id ? '…' : task.status === 'complete' ? '✓' : '○'}</AppText>
-    </Pressable>} />;
+  const setFocus = (task: Task, pinned: boolean) => void save({ focusVisible: true, focusDate: today, focusTaskIds: pinned ? preferences.focusTaskIds.filter(id => id !== task.id) : [...(preferences.focusDate === today ? preferences.focusTaskIds.filter(id => id !== task.id) : []), task.id] }).catch(() => setFailure('Could not save Focus preferences. Retry.'));
+  const row = (task: Task, focusRow = false) => <TaskRow grouped task={task} data={data} date={today} disabled={!!busy} action={
+    <TaskCheck label={`${task.status === 'complete' ? 'Reopen' : 'Complete'} ${task.title}`} checked={task.status === 'complete'} disabled={!!busy} busy={busy === task.id} onPress={() => void toggle(task)} />}>{task.status !== 'complete' && task.status !== 'archived' && task.dueDate === today && !data.sections.find(s => s.id === task.sectionId)?.archived && (!task.projectId || data.projects.some(p => p.id === task.projectId && p.status !== 'archived')) ? <Action label={`${focusRow ? 'Unpin' : 'Pin'} ${task.title} ${focusRow ? 'from' : 'for'} Focus today`} text={focusRow ? 'Unpin' : 'Pin for Focus'} disabled={!!busy || (!focusRow && focus.length >= preferences.focusLimit)} onPress={() => setFocus(task, focusRow)} /> : null}</TaskRow>;
   const jumpBar = !wide && showTasks && showSchedule ? <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
     <Action label="Jump to tasks" text={`Tasks · ${tasks.open.length}`} onPress={() => jump('tasks')} />
     <Action label="Jump to schedule" text={`Schedule · ${schedule.remainingCount}`} onPress={() => jump('calendar')} />
@@ -76,12 +78,16 @@ export default function TodayScreen() {
     {preferences.hiddenSections.length ? <View style={{ gap: 8 }}><Muted>Task section filters active{tasks.hiddenOpenCount ? ` · ${tasks.hiddenOpenCount} tasks hidden` : ''}.</Muted><Action label="Show all Today sections" onPress={() => void save({ hiddenSections: [] }).catch(() => undefined)} /></View> : null}
     <View onLayout={event => { positions.current.columns = event.nativeEvent.layout.y; }} style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'stretch', gap: 18 }}>
       {showTasks ? <View ref={taskPane} tabIndex={-1} testID="today-tasks" onLayout={event => { positions.current.tasks = event.nativeEvent.layout.y; }} style={{ flex: wide ? 1.25 : undefined, minWidth: 0, gap: 12 }}>
-        <Card title={`Today's tasks · ${tasks.open.length}`}>
-          {tasks.open.length ? <TaskList collapsibleGroups="Today" tasks={tasks.open} data={data} renderTask={row} /> : <Muted>{tasks.hiddenOpenCount ? 'No tasks match the visible sections.' : 'No tasks due today.'}</Muted>}
+        {preferences.focusVisible ? <Card title={`Focus today · ${focus.length}/${preferences.focusLimit}`} style={{ backgroundColor: colors.soft, borderColor: colors.accent }}>
+          <Muted>Pinned tasks appear here once. Pinning never changes dates, priorities, or project membership.</Muted>
+          {focus.length ? focus.map((task, index) => <View key={task.id}>{row(task, true)}{index > 0 ? <Action label={`Move ${task.title} earlier in Focus`} text="Move earlier" onPress={() => { const ids = focus.map(t => t.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void save({ focusTaskIds: ids, focusDate: today }).catch(() => setFailure('Could not reorder Focus. Retry.')); }} /> : null}</View>) : <Muted>Pin an incomplete task scheduled for today to choose your next step.</Muted>}
+        </Card> : null}
+        <View style={{ gap: 12 }}><AppText accessibilityRole="header" style={{ fontWeight: '700', color: colors.text }}>{`Today's tasks · ${regularTasks.length}`}</AppText>
+          {regularTasks.length ? <TaskList collapsibleGroups="Today" sectionFooter={section => <AddFromBacklog date={today} section={section} />} tasks={regularTasks} data={data} renderTask={row} /> : <Muted>{focus.length ? 'All visible tasks are pinned in Focus today.' : tasks.hiddenOpenCount ? 'No tasks match the visible sections.' : 'No tasks due today.'}</Muted>}
           {tasks.completed.length ? <Disclosure title="Completed today" count={tasks.completed.length} storageKey="Today:completed" defaultCollapsed={!preferences.showCompleted}>
             <TaskList collapsibleGroups="Completed today" tasks={tasks.completed} data={data} renderTask={row} />
           </Disclosure> : null}
-        </Card>
+        </View>
       </View> : null}
       {showSchedule ? <View ref={schedulePane} tabIndex={-1} testID="today-schedule" onLayout={event => { positions.current.calendar = event.nativeEvent.layout.y; }} style={{ flex: wide ? 1 : undefined, minWidth: 0, gap: 12 }}>
         <Card title={`Schedule · ${events.length}`}>

@@ -1,6 +1,8 @@
-import { CalendarAuthError, type CalendarAuth } from './auth';
+import { CalendarAuthError, type CalendarAuth, type CalendarDiagnostic } from './auth';
 
-export const OUTLOOK_SCOPES = ['openid', 'profile', 'email', 'https://graph.microsoft.com/Calendars.ReadBasic'];
+// Calendars.Read is delegated, read-only Microsoft Graph access. An explicit
+// reconnect runs the authorization flow again and requests this scope afresh.
+export const OUTLOOK_SCOPES = ['openid', 'profile', 'email', 'https://graph.microsoft.com/Calendars.Read'];
 export interface OutlookConfig { clientId?: string; tenant?: string; redirectUri?: string }
 export function outlookAvailability(config: OutlookConfig, platform: string, expoGo = false) {
   const client = config.clientId?.trim();
@@ -25,6 +27,7 @@ export function createOutlookAuth(support: { configured: boolean; reason: string
   let preparing: Promise<void> | undefined;
   let cancelPending: (() => void) | undefined;
   let token = ''; let expires = 0; let epoch = 0;
+  let latestDiagnostic: CalendarDiagnostic | undefined;
   const prepare = async () => {
     if (!support.configured) throw new CalendarAuthError(support.reason);
     if (request) return;
@@ -48,9 +51,11 @@ export function createOutlookAuth(support: { configured: boolean; reason: string
         const result = await Promise.race([active.authorize(), interrupted]);
         if (version !== epoch) throw new CalendarAuthError('Outlook connection was cleared. Connect again.');
         const scopes = result.scope?.toLowerCase().split(' ') ?? [];
-        if (!scopes.some(scope => scope === 'calendars.readbasic' || scope === 'https://graph.microsoft.com/calendars.readbasic')) throw new CalendarAuthError('Grant read-only calendar access when reconnecting Outlook.');
-        if (!result.accessToken || !Number.isFinite(result.expiresIn) || result.expiresIn! <= 30) throw new CalendarAuthError('Outlook returned an invalid authorization. Reconnect Outlook.');
-        token = result.accessToken; expires = now() + result.expiresIn! * 1000 - 30_000;
+        const expiresAt = Number.isFinite(result.expiresIn) && result.expiresIn! > 30 ? now() + result.expiresIn! * 1000 - 30_000 : undefined;
+        latestDiagnostic = { stage: 'token-exchange', grantedScopes: scopes, ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}), tokenPresent: !!result.accessToken };
+        if (!scopes.some(scope => scope === 'calendars.read' || scope === 'https://graph.microsoft.com/calendars.read')) throw new CalendarAuthError('Grant read-only calendar access when reconnecting Outlook.', latestDiagnostic);
+        if (!result.accessToken || !expiresAt) throw new CalendarAuthError('Outlook returned an invalid authorization. Reconnect Outlook.', latestDiagnostic);
+        token = result.accessToken; expires = expiresAt;
         return token;
       } catch (cause) {
         if (cause instanceof CalendarAuthError) throw cause;
@@ -60,6 +65,7 @@ export function createOutlookAuth(support: { configured: boolean; reason: string
     async accessToken() { if (!token || now() >= expires) throw new CalendarAuthError('Outlook authorization expired. Reconnect Outlook.'); return token; },
     async invalidate(value) { if (token === value) { token = ''; expires = 0; } },
     tokenExpiresAt: () => expires || undefined,
-    async forget() { epoch++; token = ''; expires = 0; request = undefined; cancelPending?.(); },
+    diagnostic: () => latestDiagnostic,
+    async forget() { epoch++; token = ''; expires = 0; request = undefined; latestDiagnostic = undefined; cancelPending?.(); },
   };
 }

@@ -1,4 +1,4 @@
-import type { DisplayEvent, ExternalEvent } from './externalCalendars';
+import type { DisplayEvent, ImportedEvent } from './externalCalendars';
 import { addDays, localDateKey } from './dates';
 import { compareEvents, eventKey, eventsOnDate, nextEvent } from './events';
 import type { AmbientMode, AmbientSettings, AppData, ClockFormat, Task } from './models';
@@ -44,7 +44,7 @@ function limited<T>(items: T[], max: number, capacity: number) {
   return { items: visible, total: items.length, remaining: items.length - visible.length };
 }
 
-export function selectAmbient(data: AppData & { externalEvents?: ExternalEvent[] }, now: Date, capacity: AmbientCapacity = { tasks: 20, events: 20 }) {
+export function selectAmbient(data: AppData & { externalEvents?: ImportedEvent[] }, now: Date, capacity: AmbientCapacity = { tasks: 20, events: 20 }) {
   const settings = data.settings;
   const today = localDateKey(now);
   const family = settings.ambientMode === 'family';

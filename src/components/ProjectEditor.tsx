@@ -1,3 +1,5 @@
+import { ProjectScope, ProjectHeader } from './ProjectAppearance';
+import { Action } from './Action';
 import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { DeleteConfirmation } from './DeleteConfirmation';
@@ -42,7 +44,8 @@ export function ProjectEditor({ project }: { project?: Project }) {
   const choices = (key: 'sectionId' | 'status', label: string, options: { value: string; label: string }[]) => <View style={{ gap: 6 }}><Muted>{label}</Muted><View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{options.map(option => <Pressable key={option.value} disabled={saving} accessibilityRole="radio" accessibilityLabel={`${label}: ${option.label}`} aria-checked={draft[key] === option.value} accessibilityState={{ checked: draft[key] === option.value }} onPress={() => setDraft(current => ({ ...current, [key]: option.value }))} style={{ minHeight: 44, maxWidth: '100%', padding: 10, justifyContent: 'center', borderRadius: 10, backgroundColor: draft[key] === option.value ? colors.soft : colors.background }}><Label>{option.label}</Label></Pressable>)}</View></View>;
   const toggle = (key: 'trackCompletion' | 'useWeightedProgress' | 'includeBacklogTasks', label: string) => <Row><Label>{label}</Label><Switch accessibilityLabel={label} disabled={saving} value={draft[key]} onValueChange={value => setDraft(current => ({ ...current, [key]: value }))} /></Row>;
   if (!data) return <Page hasHeader title="Project" subtitle="Loading your projects…" />;
-  return <Page hasHeader title={project ? 'Edit project' : 'New project'} subtitle="Organize related tasks and choose how to track progress.">
+  return <ProjectScope project={{ sectionId: draft.sectionId }} sections={data.sections}><Page hasHeader title={project ? 'Edit project' : 'New project'} subtitle="Organize related tasks and choose how to track progress.">
+    <ProjectHeader title={draft.name || 'New project'} />
     {project ? <ProjectTasks project={project} /> : null}
     {unsaved.prompt}
     <Card title="Project details">
@@ -66,10 +69,9 @@ export function ProjectEditor({ project }: { project?: Project }) {
     {project ? <Card><Muted>Archive and restore also save the details above. Restoring makes the project Active.</Muted><EditorButton label={project.status === 'archived' ? 'Unarchive project' : 'Archive project'} onPress={() => void save(project.status === 'archived' ? 'active' : 'archived')} disabled={saving || stale} /></Card> : null}
     {snapshot ? <DeleteConfirmation kind="project" name={snapshot.name} disabled={saving || stale} onDelete={() => deleteProject(snapshot.id, snapshot.updatedAt)} onDeleted={() => { unsaved.allowLeave(); leave(); }} /> : null}
     <EditorButton label="Cancel" onPress={leave} disabled={saving} />
-  </Page>;
+  </Page></ProjectScope>;
 }
 
 function EditorButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled: boolean }) {
-  const { colors } = useAppTheme();
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={{ minHeight: 44, padding: 12, justifyContent: 'center', borderRadius: 10, backgroundColor: colors.soft, opacity: disabled ? 0.5 : 1 }}><Label>{label}</Label></Pressable>;
+  return <Action label={label} onPress={onPress} disabled={disabled} primary={label === 'Save project'} />;
 }

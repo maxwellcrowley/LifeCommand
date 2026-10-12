@@ -4,6 +4,8 @@ import { AppState, Platform } from 'react-native';
 import { cloudConfig } from './config';
 import { CloudConflictError, type CloudGateway, type CloudSnapshot } from './sync';
 
+// Expo inlines these static dot references when Metro builds the bundle on every platform.
+// Do not use destructuring, computed property access, or a runtime environment lookup here.
 export const config = cloudConfig(process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 let client: SupabaseClient | undefined;
 // Lazy creation keeps static web export and unconfigured native launches local-only.

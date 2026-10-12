@@ -1,6 +1,7 @@
 import type { AppData, Section } from './models';
+import { isSectionIconId } from './sectionAppearance';
 
-// Color is always accompanied by the section name; swatches are never text backgrounds.
+// Color is always accompanied by the section name; headers derive accessible tints.
 export const sectionColors = [
   ['Blue', '#3978C5'], ['Teal', '#16817E'], ['Gold', '#A47516'],
   ['Purple', '#8066B2'], ['Orange', '#B96527'], ['Rose', '#B55078'], ['Green', '#398052'],
@@ -9,10 +10,14 @@ export const activeSections = (sections: Section[]) => sections.filter(s => !s.a
 
 export function saveSection(data: AppData, section: Section, expected?: Section): AppData {
   const current = data.sections.find(s => s.id === section.id);
-  if (JSON.stringify(current) !== JSON.stringify(expected)) throw Error('This section changed. Reload Settings before saving.');
+  // Repository reads normalize property order. Compare values, not JSON key order,
+  // while still rejecting every actual intervening section edit.
+  const fields = ['id', 'name', 'color', 'order', 'icon', 'archived'] as const;
+  if (!!current !== !!expected || fields.some(key => current?.[key] !== expected?.[key])) throw Error('This section changed. Reload Settings before saving.');
   const name = section.name.trim();
   if (!name || name.length > 60) throw Error('Use a section name between 1 and 60 characters.');
   if (!/^#[\da-f]{6}$/i.test(section.color)) throw Error('Choose a valid section color.');
+  if (section.icon !== undefined && !isSectionIconId(section.icon)) throw Error('Choose a valid section icon.');
   if (!Number.isSafeInteger(section.order) || section.order < 0) throw Error('Invalid section order.');
   if (data.sections.some(s => s.id !== section.id && s.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw Error('A section already has this name.');
   if (section.archived && !data.sections.some(s => s.id !== section.id && !s.archived)) throw Error('Keep at least one active section.');

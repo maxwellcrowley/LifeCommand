@@ -1,11 +1,11 @@
-import { externalForDate, externalOnDate, isExternalEvent, type DisplayEvent, type ExternalEvent } from './externalCalendars';
+import { externalForDate, externalOnDate, isExternalEvent, type DisplayEvent, type ImportedEvent } from './externalCalendars';
 import { normalizeReminder, validateReminder } from './reminders';
 import { addDays, isDateKey, localDateKey } from './dates';
 import type { AppData, EventFields, EventSource, FamilyCategory, LocalEvent, Task } from './models';
 
 export const eventSources = ['work', 'personal', 'army', 'family'] as const;
-export const sourceLabels: Record<EventSource | 'google' | 'outlook', string> = { google: 'Google Calendar', outlook: 'Outlook', work: 'Work', personal: 'Personal', army: 'Army', family: 'Family' };
-export const sourceColors: Record<EventSource | 'google' | 'outlook', string> = { google: '#8962CF', outlook: '#0078D4', work: '#3978C5', personal: '#5E9C70', army: '#C7952D', family: '#31A3A0' };
+export const sourceLabels: Record<EventSource | 'google' | 'outlook' | 'ics', string> = { ics: 'Calendar subscription', google: 'Google Calendar', outlook: 'Outlook', work: 'Work', personal: 'Personal', army: 'Army', family: 'Family' };
+export const sourceColors: Record<EventSource | 'google' | 'outlook' | 'ics', string> = { ics: '#557D78', google: '#8962CF', outlook: '#0078D4', work: '#3978C5', personal: '#5E9C70', army: '#C7952D', family: '#31A3A0' };
 export const familyCategories: readonly FamilyCategory[] = ['Appointment', 'School', 'Pet/Foster', 'Errand', 'Family Plan', 'Other'];
 export type EventInput = Pick<EventFields, 'title' | 'date' | 'startTime' | 'endTime' | 'location' | 'notes' | 'reminderEnabled' | 'reminderAt' | 'reminderOffset'> & (
   { source: Exclude<EventSource, 'family'> } | { source: 'family'; addedBy: 'Max' | 'Kellyn'; category: FamilyCategory }
@@ -49,8 +49,8 @@ export function updateEvent(event: LocalEvent, input: EventInput, now = new Date
   return { ...next, id: event.id, createdAt: event.createdAt, updatedAt: new Date(timestamp).toISOString() };
 }
 
-type EventData = Pick<AppData, 'calendarEvents' | 'familyEvents'> & { externalEvents?: ExternalEvent[] };
-export const eventSourceLabel = (event: DisplayEvent) => isExternalEvent(event) ? `${event.provider === 'google' ? 'Google' : 'Outlook'} · ${event.sourceCalendarName}${event.sourceAccountLabel ? ` · ${event.sourceAccountLabel}` : ''} · read-only` : sourceLabels[event.source];
+type EventData = Pick<AppData, 'calendarEvents' | 'familyEvents'> & { externalEvents?: ImportedEvent[] };
+export const eventSourceLabel = (event: DisplayEvent) => isExternalEvent(event) ? `${event.provider === 'google' ? 'Google' : event.provider === 'ics' ? 'Subscription' : 'Outlook'} · ${event.sourceCalendarName}${event.sourceAccountLabel ? ` · ${event.sourceAccountLabel}` : ''} · read-only` : sourceLabels[event.source];
 export const eventSourceColor = (event: DisplayEvent) => isExternalEvent(event) && event.sourceColor ? event.sourceColor : sourceColors[event.source];
 const displayEvents = (data: EventData): DisplayEvent[] => [...allEvents(data), ...(data.externalEvents ?? [])];
 export function allEvents(data: EventData): LocalEvent[] {

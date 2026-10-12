@@ -1,4 +1,5 @@
 import { EXTERNAL_CALENDAR_KEY } from '../domain/externalCalendars';
+import { SUBSCRIPTIONS_KEY } from '../domain/ics';
 import type { AppData } from '../domain/models';
 import { normalizeAppData } from '../domain/normalize';
 import { CURRENT_SCHEMA_VERSION, migrateSnapshot, persistedSnapshot, snapshotData, snapshotRevision, snapshotVersion } from '../domain/migrations';
@@ -201,7 +202,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
       await write(data, []);
       recoveryNotice = '';
       try {
-        for (const key of [...backups, EXTERNAL_CALENDAR_KEY]) await storage.removeItem(key);
+        for (const key of [...backups, EXTERNAL_CALENDAR_KEY, SUBSCRIPTIONS_KEY]) await storage.removeItem(key);
       } catch {
         // AsyncStorage has no cross-key transaction. Let the UI reflect the durable state.
         throw new ResetCleanupError(data);

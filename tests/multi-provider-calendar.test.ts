@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { CalendarAuthError, type CalendarAuth } from '../src/calendar/auth';
+import { CalendarAuthError, createAccountSessions, type CalendarAuth } from '../src/calendar/auth';
+import { createMemoryTokenVault } from '../src/calendar/tokenVault';
 import { createGoogleProvider } from '../src/calendar/googleProvider';
 import { createOutlookProvider, normalizeOutlookEvent } from '../src/calendar/outlookProvider';
 import { createOutlookAuth, outlookAvailability, OUTLOOK_SCOPES, type OutlookToken } from '../src/calendar/outlookAuth';
@@ -18,7 +19,7 @@ const outlook: ExternalAccount = { id: 'outlook:one', provider: 'outlook', mode:
 const calendar = { id: 'shared-family', name: 'Household', color: '#31A3A0' };
 const event = { id: 'shared-event', summary: 'Family outing', start: { date: '2026-09-30' }, end: { date: '2026-10-01' } };
 const connected = () => ({ ...emptyExternalCache(), accounts: [google, other, outlook] });
-const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+const response = (data: unknown, status = 200, headers?: HeadersInit) => new Response(JSON.stringify(data), { status, headers });
 const timed = { id: 'timed', subject: 'Outlook meeting', isAllDay: false, start: { dateTime: '2026-09-30T14:00:00.0000000', timeZone: 'UTC' }, end: { dateTime: '2026-09-30T15:00:00.0000000', timeZone: 'UTC' } };
 function authFixture() {
   let token = 'one'; const forgotten: string[] = []; const invalidated: string[] = [];
@@ -172,6 +173,59 @@ test('Outlook rejects bad pages, hostile pagination, revoked consent and account
   }
 });
 
+test('Outlook reports sanitized Graph HTTP/provider failures without conflating them with a missing credential', async () => {
+  for (const [status, code, expected] of [[401, 'InvalidAuthenticationToken', /rejected the access token.*401.*InvalidAuthenticationToken/i], [403, 'ErrorAccessDenied', /denied calendar access.*403.*ErrorAccessDenied/i], [429, 'TooManyRequests', /rate limit.*429.*TooManyRequests/i], [500, 'InternalServerError', /request failed.*500.*InternalServerError/i]] as const) {
+    const fixture = authFixture();
+    const auth = { ...fixture.auth, diagnostic: () => ({ stage: 'token-exchange' as const, grantedScopes: ['openid', 'calendars.read'], expiresAt: '2026-09-30T09:00:00.000Z', tokenPresent: true }) };
+    const provider = createOutlookProvider(auth, async input => String(input).includes('userinfo')
+      ? response({ sub: 'one' }) : response({ error: { code, message: 'provider details must not surface' } }, status));
+    await assert.rejects(provider.fetchSnapshot(outlook, window), error => error instanceof Error && expected.test(error.message) && !error.message.includes('provider details')
+      && (!(error instanceof CalendarAuthError) || (error.diagnostic?.endpoint === '/v1.0/me/calendars' && error.diagnostic.providerCode === code && error.diagnostic.tokenPresent)));
+  }
+  const unavailable: CalendarAuth = { ...authFixture().auth, accessToken: async () => { throw new CalendarAuthError('expired'); } };
+  const sessions = createAccountSessions(unavailable, createMemoryTokenVault());
+  await assert.rejects(sessions.token(outlook.id), /No active calendar authorization/);
+});
+
+test('Outlook keeps the initial Graph 401 diagnostics while invalidating only the rejected stored credential', async () => {
+  const fixture = authFixture();
+  const vault = createMemoryTokenVault();
+  const received: boolean[] = [];
+  let revoked = false;
+  const auth: CalendarAuth = {
+    ...fixture.auth,
+    accessToken: async () => {
+      if (revoked) throw new CalendarAuthError('revoked');
+      return 'one';
+    },
+    invalidate: async value => { await fixture.auth.invalidate(value); revoked = true; },
+    diagnostic: () => ({ stage: 'token-exchange', grantedScopes: ['https://graph.microsoft.com/calendars.read'], expiresAt: '2026-09-30T09:00:00.000Z', tokenPresent: true }),
+  };
+  const provider = createOutlookProvider(auth, async (input, init) => {
+    const url = new URL(String(input));
+    const authorization = (init?.headers as Record<string, string>).Authorization;
+    received.push(authorization === 'Bearer one');
+    if (url.pathname === '/oidc/userinfo') return response({ sub: 'one' });
+    return response({ error: { code: 'InvalidAuthenticationToken', innerError: { code: 'TokenExpired' }, message: 'must never be surfaced' } }, 401, { 'content-type': 'application/json; charset=utf-8' });
+  }, vault);
+  const account = await provider.connect();
+  let first: CalendarAuthError | undefined;
+  await assert.rejects(provider.fetchSnapshot(account, window), error => {
+    if (error instanceof CalendarAuthError) first = error;
+    return error instanceof CalendarAuthError;
+  });
+  assert.deepEqual(received, [true, true, true]);
+  assert.deepEqual(first?.diagnostic, {
+    stage: 'graph-request', endpoint: '/v1.0/me/calendars', host: 'graph.microsoft.com', httpStatus: 401,
+    providerCode: 'InvalidAuthenticationToken', providerInnerCode: 'TokenExpired', responseContentType: 'application/json', responseBodyState: 'readable',
+    grantedScopes: ['https://graph.microsoft.com/calendars.read'], expiresAt: '2026-09-30T09:00:00.000Z', tokenPresent: true,
+    exchangedTokenMatchesStored: true, sentTokenMatchesStored: true,
+  });
+  assert.doesNotMatch(first?.message ?? '', /must never be surfaced/);
+  await assert.rejects(provider.fetchSnapshot(account, window), error => error instanceof CalendarAuthError && error.diagnostic?.stage === 'credential-lookup' && error.diagnostic.tokenPresent === false);
+  assert.deepEqual(fixture.invalidated, ['one']);
+});
+
 test('Outlook config is safe when missing; allows only configured public redirect flows and no write scopes', () => {
   const config = { clientId: '11111111-1111-1111-1111-111111111111', redirectUri: 'https://app.example.com/oauth/microsoft' };
   assert.equal(outlookAvailability({}, 'web').configured, false);
@@ -180,17 +234,19 @@ test('Outlook config is safe when missing; allows only configured public redirec
   assert.equal(outlookAvailability({ ...config, tenant: '../attacker' }, 'web').configured, false);
   assert.equal(outlookAvailability({ ...config, redirectUri: 'lifecommand://oauth/microsoft' }, 'ios').configured, true);
   assert.equal(outlookAvailability(config, 'ios', true).configured, false);
-  assert.deepEqual(OUTLOOK_SCOPES, ['openid', 'profile', 'email', 'https://graph.microsoft.com/Calendars.ReadBasic']);
+  assert.deepEqual(OUTLOOK_SCOPES, ['openid', 'profile', 'email', 'https://graph.microsoft.com/Calendars.Read']);
 });
 
 test('Outlook auth opens a prepared request on the user gesture, checks scopes/expiry and cancels late results after reset', async () => {
   let opened = false; let resolve!: (value: OutlookToken) => void; let clock = 1000;
   const auth = createOutlookAuth({ configured: true, reason: '' }, async () => ({ authorize: () => { opened = true; return new Promise(done => { resolve = done; }); } }), () => clock);
   await auth.prepare(); const pending = auth.authorize(); assert.equal(opened, true);
-  resolve({ accessToken: 'one', expiresIn: 3600, scope: 'Calendars.ReadBasic' }); assert.equal(await pending, 'one');
-  assert.equal(await auth.accessToken(), 'one'); clock += 3_600_000; await assert.rejects(auth.accessToken(), CalendarAuthError);
+  resolve({ accessToken: 'one', expiresIn: 3600, scope: 'Calendars.Read' }); assert.equal(await pending, 'one');
+  assert.deepEqual(auth.diagnostic?.(), { stage: 'token-exchange', grantedScopes: ['calendars.read'], expiresAt: '1970-01-01T00:59:31.000Z', tokenPresent: true });
+  assert.equal(await auth.accessToken(), 'one'); clock += 3_569_000; assert.equal(await auth.accessToken(), 'one'); clock += 1_000; await assert.rejects(auth.accessToken(), CalendarAuthError);
+  await auth.prepare(); const legacy = auth.authorize(); resolve({ accessToken: 'legacy', expiresIn: 3600, scope: 'Calendars.ReadBasic' }); await assert.rejects(legacy, /Grant/);
   await auth.prepare(); const partial = auth.authorize(); resolve({ accessToken: 'bad', expiresIn: 3600, scope: 'openid' }); await assert.rejects(partial, /Grant/);
-  await auth.prepare(); const reset = auth.authorize(); await auth.forget(); resolve({ accessToken: 'late', expiresIn: 3600, scope: 'Calendars.ReadBasic' }); await assert.rejects(reset, /cleared/);
+  await auth.prepare(); const reset = auth.authorize(); await auth.forget(); resolve({ accessToken: 'late', expiresIn: 3600, scope: 'Calendars.Read' }); await assert.rejects(reset, /cleared/);
   await assert.rejects(auth.accessToken(), CalendarAuthError);
   await assert.rejects(createOutlookAuth({ configured: false, reason: 'Missing config' }, async () => { throw Error('Should not load'); }).prepare(), /Missing config/);
 });

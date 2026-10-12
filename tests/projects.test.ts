@@ -2,12 +2,23 @@ import { persistedSnapshot } from '../src/domain/migrations';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { createDefaultAppData } from '../src/domain/defaults';
-import { changeProject, createProject, getActiveProjects, getProjectProgress, insertProject, updateProject, validateTaskProject } from '../src/domain/projects';
+import { changeProject, createProject, getActiveProjects, getProjectNextTask, getProjectProgress, insertProject, updateProject, validateTaskProject } from '../src/domain/projects';
 import { createTask, updateTask } from '../src/domain/tasks';
 import { createRepository, STORAGE_KEY, type SnapshotStorage } from '../src/data/storage';
 
 const now = new Date('2026-09-28T12:00:00Z');
 const makeProject = () => createProject({ name: '  Build shed  ' }, now);
+
+test('project next task prefers due work, then backlog, then upcoming and honors a valid explicit choice', () => {
+  const project = makeProject();
+  const overdue = createTask({ title: 'Overdue', sectionId: 'home', projectId: project.id, dueDate: '2026-09-27', priority: 'low' }, now);
+  const backlog = createTask({ title: 'Backlog', sectionId: 'home', projectId: project.id, priority: 'high' }, now);
+  const future = createTask({ title: 'Future', sectionId: 'home', projectId: project.id, dueDate: '2026-09-30' }, now);
+  assert.equal(getProjectNextTask([backlog, future, overdue], project, '2026-09-28').task?.id, overdue.id);
+  assert.equal(getProjectNextTask([backlog, future], project, '2026-09-28').task?.id, backlog.id);
+  assert.equal(getProjectNextTask([future], project, '2026-09-28').kind, 'upcoming');
+  assert.equal(getProjectNextTask([backlog, future, overdue], project, '2026-09-28', future.id).task?.id, future.id);
+});
 
 test('project creation uses trimmed fields and product defaults with independent IDs', () => {
   const project = makeProject();

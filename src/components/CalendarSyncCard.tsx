@@ -1,3 +1,4 @@
+import { SubscriptionSettings } from './SubscriptionSettings';
 import { AppTextInput as TextInput } from '@/src/components/AppText';
 import { Platform, Pressable, Switch, View } from 'react-native';
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
@@ -7,10 +8,28 @@ import { useAppTheme } from '../theme/ThemeProvider';
 import { Action } from './TaskScheduling';
 import { FormError } from './TaskForm';
 import { Card, Label, Muted, Row } from './ui';
+import { Disclosure } from './Disclosure';
 
 const providers = ['google', 'outlook'] as const;
 const names = { google: 'Google Calendar', outlook: 'Outlook Calendar' };
 const palette = [{ name: 'Purple', color: '#8962CF' }, { name: 'Blue', color: '#3978C5' }, { name: 'Green', color: '#5E9C70' }, { name: 'Teal', color: '#31A3A0' }, { name: 'Gold', color: '#C7952D' }];
+function diagnosticText(diagnostic: NonNullable<ReturnType<typeof useCalendarSync>['accountDiagnostics'][string]>) {
+  return [
+    `Outlook diagnostics: ${diagnostic.stage}`,
+    diagnostic.host,
+    diagnostic.endpoint,
+    diagnostic.httpStatus ? `HTTP ${diagnostic.httpStatus}` : undefined,
+    diagnostic.providerCode,
+    diagnostic.providerInnerCode ? `inner ${diagnostic.providerInnerCode}` : undefined,
+    diagnostic.responseContentType ? `content ${diagnostic.responseContentType}` : undefined,
+    diagnostic.responseBodyState ? `body ${diagnostic.responseBodyState}` : undefined,
+    diagnostic.grantedScopes?.length ? `scopes ${diagnostic.grantedScopes.join(', ')}` : undefined,
+    diagnostic.expiresAt ? `expires ${diagnostic.expiresAt}` : undefined,
+    diagnostic.tokenPresent ? 'token present' : 'token unavailable',
+    diagnostic.exchangedTokenMatchesStored === undefined ? undefined : `exchange=stored ${diagnostic.exchangedTokenMatchesStored}`,
+    diagnostic.sentTokenMatchesStored === undefined ? undefined : `sent=stored ${diagnostic.sentTokenMatchesStored}`,
+  ].filter(Boolean).join(' · ');
+}
 export function CalendarSyncCard() {
   const sync = useCalendarSync();
   const { colors } = useAppTheme();
@@ -24,6 +43,7 @@ export function CalendarSyncCard() {
       {!sync.support[provider].configured ? <Muted>{sync.support[provider].reason}</Muted> : !sync.authReady[provider] && !sync.authError[provider] ? <Muted>Loading {names[provider]} sign-in…</Muted> : null}
       {sync.authError[provider] ? <><FormError>{sync.authError[provider]}</FormError><Action label={`Retry loading ${names[provider]} sign-in`} disabled={sync.busy} onPress={() => void sync.prepare(provider)} /></> : null}
     </View>)}
+    <SubscriptionSettings />
     <Muted>Connect to sign in and choose the calendars to show. Use Connect again to add another account.</Muted>
     <Muted>{Platform.OS === 'web' ? 'For your privacy, sign-in lasts only for this browser session. Reconnect after reloading or when authorization expires.' : 'Sign-in is saved securely on this device. Reconnect when authorization expires.'}</Muted>
     {sync.cache.accounts.map(account => <View key={account.id} testID={`calendar-account-${account.id}`} style={{ gap: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.soft }}>
@@ -35,7 +55,7 @@ export function CalendarSyncCard() {
         {account.mode !== 'manual' ? <Action label={`Reconnect ${names[account.provider]}`} disabled={sync.busy || !sync.ready || !sync.authReady[account.provider]} onPress={() => void sync.connectProvider(account.provider, account.id)} /> : null}
         <Action label="Disconnect account" disabled={sync.busy || !sync.ready} onPress={() => void sync.disconnect(account.id)} />
       </View>
-      {sync.accountErrors[account.id] ? <><FormError>{sync.accountErrors[account.id]}</FormError><Action label="Retry sync" disabled={sync.busy || !sync.ready || (account.mode === 'manual' ? !config.manualEnabled : !sync.support[account.provider].configured)} onPress={() => void sync.sync(account.id)} /></> : null}
+      {sync.accountErrors[account.id] ? <><FormError>{sync.accountErrors[account.id]}</FormError>{account.provider === 'outlook' && sync.accountDiagnostics[account.id] ? <Disclosure title="Connection diagnostics" storageKey={`Settings:diagnostics:${account.id}`} defaultCollapsed><View testID={`outlook-diagnostics-${account.id}`}><Muted>{diagnosticText(sync.accountDiagnostics[account.id])}</Muted></View></Disclosure> : null}<Action label="Retry sync" disabled={sync.busy || !sync.ready || (account.mode === 'manual' ? !config.manualEnabled : !sync.support[account.provider].configured)} onPress={() => void sync.sync(account.id)} /></> : null}
       {sync.cache.events.filter(event => event.accountId === account.id && sync.cache.hiddenEventIds?.includes(event.id)).map(event => <Action key={event.id} label={`Unhide event: ${event.title}`} disabled={sync.busy} onPress={() => void sync.hideEvent(event.id, false)} />)}
       <Label>Calendars to show · {sync.cache.calendars.filter(calendar => calendar.accountId === account.id && calendar.syncEnabled).length} selected</Label>
       {!sync.cache.calendars.some(calendar => calendar.accountId === account.id) ? <Muted>{account.lastSyncedAt ? 'No readable calendars were found for this account.' : 'Your calendars will appear after a successful sync. Use Sync now to retry.'}</Muted> : null}

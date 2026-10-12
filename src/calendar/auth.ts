@@ -1,7 +1,25 @@
 import type { ExternalAccount } from '../domain/externalCalendars';
 import { createMemoryTokenVault, type TokenVault } from './tokenVault';
 
-export class CalendarAuthError extends Error {}
+export interface CalendarDiagnostic {
+  stage: 'token-exchange' | 'credential-lookup' | 'account-verification' | 'graph-request';
+  endpoint?: string;
+  host?: string;
+  httpStatus?: number;
+  providerCode?: string;
+  providerInnerCode?: string;
+  responseContentType?: string;
+  responseBodyState?: 'empty' | 'unreadable' | 'readable';
+  grantedScopes?: string[];
+  expiresAt?: string;
+  tokenPresent: boolean;
+  exchangedTokenMatchesStored?: boolean;
+  sentTokenMatchesStored?: boolean;
+}
+
+export class CalendarAuthError extends Error {
+  constructor(message: string, readonly diagnostic?: CalendarDiagnostic) { super(message); }
+}
 export interface CalendarAuth {
   prepare(): Promise<void>;
   authorize(): Promise<string>;
@@ -9,6 +27,7 @@ export interface CalendarAuth {
   invalidate(token: string): Promise<void>;
   forget(): Promise<void>;
   tokenExpiresAt?(): number | undefined;
+  diagnostic?(): CalendarDiagnostic | undefined;
 }
 
 // Account-bound credentials never enter AsyncStorage, backups or cloud sync.
@@ -33,12 +52,23 @@ export function createAccountSessions(auth: CalendarAuth, vault: TokenVault = cr
     async token(accountId: string) {
       const saved = await vault.get(accountId);
       if (saved && saved.expiresAt > now()) { tokens.set(accountId, saved.value); return saved.value; }
-      if (saved) { await vault.remove(accountId); tokens.delete(accountId); throw new CalendarAuthError('Calendar authorization expired. Reconnect this account. Cached events are still available offline.'); }
-      return auth.accessToken(); // Native Google may restore its SDK session; adapters verify identity.
+      if (saved) { await vault.remove(accountId); tokens.delete(accountId); throw new CalendarAuthError('Calendar authorization expired. Reconnect this account. Cached events are still available offline.', { stage: 'credential-lookup', expiresAt: new Date(saved.expiresAt).toISOString(), tokenPresent: false }); }
+      // Native providers may restore an SDK session. Web deliberately keeps no
+      // credential across a reload, so distinguish that from an expired token.
+      try { return await auth.accessToken(); }
+      catch { throw new CalendarAuthError('No active calendar authorization is available. Reconnect this account. Cached events are still available offline.', { stage: 'credential-lookup', tokenPresent: false }); }
     },
     async invalidate(token: string) {
       for (const [id, value] of tokens) if (value === token) { tokens.delete(id); await vault.remove(id); }
       await auth.invalidate(token);
+    },
+    async compare(accountId: string, sentToken: string) {
+      const stored = await vault.get(accountId);
+      const exchanged = tokens.get(accountId);
+      return {
+        ...(stored && exchanged ? { exchangedTokenMatchesStored: stored.value === exchanged } : {}),
+        ...(stored ? { sentTokenMatchesStored: stored.value === sentToken } : { sentTokenMatchesStored: false }),
+      };
     },
     async disconnect(accountId?: string) {
       epoch++;

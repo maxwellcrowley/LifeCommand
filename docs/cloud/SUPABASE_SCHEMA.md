@@ -4,8 +4,10 @@ Slice 16 adds optional email/password authentication and manual snapshot upload/
 
 ## Setup for Max
 
+For the installed Android preview APK, use the [Android configuration and rebuild runbook](./ANDROID_CLOUD_SYNC.md). Local dotenv setup alone does not configure EAS builds, and EAS Update is not currently enabled.
+
 1. Create a project in the [Supabase dashboard](https://supabase.com/dashboard). Keep email/password authentication enabled.
-2. Copy the project URL and the public **anon** key from the project's Connect/API settings. Never use the service role key, secret key, database password, or user password as an environment variable.
+2. Copy the project URL and a public **publishable** key (or legacy **anon** JWT) from the project's Connect/API settings. Never use the service role key, secret key, database password, or user password as an environment variable. The variable name remains `EXPO_PUBLIC_SUPABASE_ANON_KEY` for both supported public key types.
 3. Copy `.env.example` to `.env.local` in the LifeCommand root and fill both values:
 
    ```dotenv

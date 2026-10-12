@@ -1,5 +1,5 @@
 import { useCalendarSync } from '../calendar/CalendarSyncProvider';
-import { Action } from './TaskScheduling';
+import { Action } from './Action';
 import { useDevicePreferences } from '../data/DevicePreferences';
 import { formatDate } from '../domain/presentation';
 import { ReminderIndicator } from './TodayReminders';

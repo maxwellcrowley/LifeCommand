@@ -95,7 +95,7 @@ export function CloudSyncCard({ disabled }: { disabled: boolean }) {
   const inputStyle = { minHeight: 48, padding: 12, borderRadius: 10, color: colors.text, backgroundColor: colors.background };
   return <Card title="Cloud Sync">
     <Muted>Manual backup and restore across your devices. Use explicit previews to resolve conflicts. Signing in opens isolated account data; guest data is kept separately.</Muted>
-    {!config ? <Muted>Not configured · Local-only mode. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env.local and restart Expo to enable Cloud Sync.</Muted> : <>
+    {!config ? <Muted>Not configured · Local-only mode. Cloud Sync is unavailable in this version of the app. Your local data is still available. Install an updated version from your app provider with Cloud Sync enabled.</Muted> : <>
       <Label>{!authReady ? 'Checking sign-in…' : user ? `Signed in as ${user.email ?? user.id}` : 'Signed out'}</Label>
       {!user ? <>
         <TextInput accessibilityLabel="Cloud email" placeholder="Email" placeholderTextColor={colors.muted} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} value={email} onChangeText={setEmail} editable={!blocked} style={inputStyle} />

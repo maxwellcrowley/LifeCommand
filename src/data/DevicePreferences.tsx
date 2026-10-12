@@ -1,3 +1,4 @@
+import { localDateKey } from '../domain/dates';
 import { useAccount } from '../cloud/accountContext';
 import { accountStorage } from './accountStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,7 +22,9 @@ export function DevicePreferencesProvider({ children }: { children: ReactNode })
     void (async () => {
       const raw = await storage.getItem(KEY);
       const next = normalizePresentation(raw ? { ...JSON.parse(raw), ambient: JSON.parse(raw).ambient ?? legacySettings } : { appearance: legacySettings.appearance, ambient: legacySettings });
-      if (!raw) await storage.setItem(KEY, JSON.stringify(next));
+      const migrateFocus = next.focusTaskIds.length > 0 && !next.focusDate;
+      if (migrateFocus) next.focusDate = localDateKey(new Date());
+      if (!raw || migrateFocus) await storage.setItem(KEY, JSON.stringify(next));
       if (active) { current.current = next; setPreferences(next); setReady(true); setError(''); }
     })().catch(cause => { if (active) setError(`Could not load device preferences: ${String(cause)}. Retry in Settings.`); });
     return () => { active = false; };

@@ -641,8 +641,11 @@ draft. The preview names consequences and any automatic follow-on transitions.
 Disabled plans retain structure and assignments while suspending gates. Completing
 a disabled project follows its ordinary lifecycle; re-enabling exposes any issues.
 
-Load, rollover-only updates, imports, merge imports, recovery and Undo do not replay
-automatic transitions. Merge keeps existing local plans; incompatible incoming
+Load, rollover-only updates, recurring maintenance generation/completion, imports,
+merge imports, recovery and Undo do not replay automatic transitions. The relevant
+work set contains finite tasks only; converting finite work to recurrence still
+changes that set and invalidates affected milestone approvals. Merge keeps existing
+local plans; incompatible incoming
 phase assignments are skipped with explicit warnings. New plans retain states and
 history; skipped/deduplicated task links become Needs attention. Replacement and
 recovery keep the existing exact-byte backups. Old clients reject unsupported

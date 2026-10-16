@@ -302,3 +302,27 @@ test('next milestone follows phase order into upcoming work when current milesto
   data = done(done(data, 'work-0'), 'work-1');
   assert.equal(nextMilestone(data.tasks, p(data))!.id, 'future');
 });
+
+
+test('foreground recurring maintenance cannot replay imported ready phase transitions', async () => {
+  let imported = run(planFixture(), { type: 'start' });
+  imported = finishPhaseTasks(imported, 0);
+  p(imported).plan!.phases[0].rule.mode = 'required'; // preserve this recorded import state
+  imported.recurringSeries = [{ id: 'imported-maintenance', title: 'Daily maintenance', projectId: 'planned', sectionId: 'work', priority: 'normal', storyPoints: 1, startDate: '2026-10-12', timeZone: 'UTC', frequency: 'daily', weekdays: [], monthEnd: 'last-day', createdAt: now.toISOString(), updatedAt: now.toISOString() }];
+  const repository = createRepository(memory(createDefaultAppData()));
+  await repository.loadAppData();
+  await repository.importAppData(JSON.stringify(createExport(imported, now)));
+  const retained = (await repository.loadAppData()).projects[0].plan!;
+  const generated = await repository.changeAppData(current => materializeRecurrences(current, now, 30));
+  assert.equal(generated.tasks.filter(t => t.recurrenceId).length, 31);
+  assert.deepEqual(p(generated).plan, retained, 'foreground maintenance must retain imported phase state and history');
+  const occurrence = generated.tasks.find(t => t.recurrenceId)!;
+  const completed = await repository.changeAppData(current => changeTask(current, occurrence.id, { status: 'complete' }, undefined, occurrence.updatedAt, now));
+  assert.deepEqual(p(completed).plan, retained, 'maintenance completion is outside finite plan gates');
+  assert.deepEqual(p(await repository.loadAppData()).plan, retained);
+  const reopened = await repository.changeAppData(current => changeTask(current, 'work-0', { status: 'backlog' }, undefined, undefined, now));
+  assert.equal(p(reopened).plan!.phases[0].state, 'current');
+  const advanced = await repository.changeAppData(current => changeTask(current, 'work-0', { status: 'complete' }, undefined, undefined, now));
+  assert.deepEqual(p(advanced).plan!.phases.map(phase => phase.state), ['complete', 'current', 'upcoming']);
+  assert.equal(p(advanced).plan!.history.length, retained.history.length + 2, 'finite work still advances exactly once');
+});

@@ -1,5 +1,9 @@
 # Optional project plans — delivery
 
+Latest completion verification and the maintenance/progression correction are in
+[PROJECT_PLANS_COMPLETION.md](PROJECT_PLANS_COMPLETION.md). The October 12 results
+below are retained receipts; the fresh suite has 396 passing tests.
+
 2026-10-12. Implementation inventory was recorded before code changes in
 `PROJECT_PLANS_IMPLEMENTATION.md`. This delivery extends the existing task,
 project, recurrence, repository, cloud conflict and presentation paths. No live

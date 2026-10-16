@@ -154,3 +154,7 @@ screen-reader verification. Use disposable accounts with synthetic records only.
   preferences stay isolated; Focus pins and calendar connections are preserved.
 
 Automation results and screenshot paths: [project-plan delivery](../PROJECT_PLANS_DELIVERY.md).
+
+- [ ] Import a recorded ready automatic phase with recurring maintenance, reopen
+  the app and complete a maintenance occurrence. The phase/history must remain
+  unchanged until a relevant finite-work or plan change; maintenance is not a gate.

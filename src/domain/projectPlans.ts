@@ -156,7 +156,9 @@ export function applyPlanCommand(data: AppData, projectId: string, expected: str
 }
 
 function relevant(data: AppData, projectId: string) {
-  return JSON.stringify(data.tasks.filter(t => t.projectId === projectId).map(t => [t.id, t.phaseId, t.planRequired, t.status === 'complete' || t.status === 'archived' ? t.status : 'open', t.recurrenceId]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  // Maintenance creation/completion cannot replay an imported ready gate. A
+  // finite-to-recurring conversion still changes this set and repairs approvals.
+  return JSON.stringify(data.tasks.filter(t => t.projectId === projectId && finiteTask(t)).map(t => [t.id, t.phaseId, t.planRequired, t.status === 'complete' || t.status === 'archived' ? t.status : 'open', t.recurrenceId]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
 }
 
 // Called inside the same repository queue as relevant mutations. Import, restore,

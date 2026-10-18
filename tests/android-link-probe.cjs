@@ -25,13 +25,15 @@ if (!args.includes('--disposable')) {
 }
 const serial = option('--serial'), name = option('--case'), state = option('--state');
 const build = option('--build'), commit = option('--commit');
+const scheme = args.includes('--scheme') ? option('--scheme') : 'lifecommand';
+if (!['lifecommand', 'exp+lifecommand'].includes(scheme)) throw Error('Use only an APK-declared scheme');
 if (!['--serial', '--case', '--state', '--build', '--commit'].every(name => args.includes(name)) || ![serial, build, commit].every(s => typeof s === 'string' && /^[\w.-]+$/.test(s)) || !probes[name] || !['cold', 'warm', 'foreground'].includes(state)) throw Error('Supply explicit disposable device, case, lifecycle, build and commit identities.');
 const adb = args.includes('--adb') ? option('--adb') : 'adb';
 const pkg = 'com.crowleymh.LifeCommand';
 const run = command => spawnSync(adb, ['-s', serial, ...command], { encoding: 'utf8', timeout: 8000, windowsHide: true });
 const read = property => { const r = run(['shell', 'getprop', property]); if (r.status !== 0) throw Error('Cannot read device identity'); return r.stdout.trim(); };
 const model = read('ro.product.model'), android = read('ro.build.version.release');
-const record = { case: `LINK-${name}`, state, model, android, build, commit, startedAt: new Date().toISOString(), status: 'NOT RUN', observed: '', operator: 'Record delivery, UI response and Back behavior separately; no automatic acceptance inference.' };
+const record = { case: `LINK-${name}`, scheme, state, model, android, build, commit, startedAt: new Date().toISOString(), status: 'NOT RUN', observed: '', operator: 'Record delivery, UI response and Back behavior separately; no automatic acceptance inference.' };
 const output = resolve('.test-build/android-native-evidence'); mkdirSync(output, { recursive: true });
 const file = resolve(output, `${Date.now()}-${name}-${state}.json`);
 const stop = () => run(['shell', 'am', 'force-stop', pkg]);
@@ -40,7 +42,7 @@ if (state === 'warm') { const r = run(['shell', 'input', 'keyevent', 'KEYCODE_HO
 // No secret-bearing URLs are accepted as input; only fixed synthetic probes above.
 const watchdog = spawn(process.execPath, ['-e', `const {spawnSync}=require('node:child_process');setTimeout(()=>{const r=spawnSync(process.argv[1],['-s',process.argv[2],'shell','am','force-stop',process.argv[3]],{timeout:5000,windowsHide:true,stdio:'ignore'});process.exitCode=r.status===0?0:1},15000)`, adb, serial, pkg], { windowsHide: true, stdio: 'ignore' });
 watchdog.on('error', () => { stop(); console.error('Watchdog failed; app stop attempted.'); process.exitCode = 1; });
-const result = run(['shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'${probes[name]}'`, pkg]);
+const result = run(['shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'${probes[name].replace(/^lifecommand:/, scheme + ':')}'`, pkg]);
 record.status = 'BLOCKED';
 record.observed = result.error ? 'ADB delivery timed out/failed; delivery unknown' : /unable to resolve|Error:/i.test(result.stdout + result.stderr) ? 'Android rejected intent; application parser not exercised' : `ADB exited ${result.status}; operator must establish app delivery and responsiveness`;
 writeFileSync(file, JSON.stringify(record, null, 2));

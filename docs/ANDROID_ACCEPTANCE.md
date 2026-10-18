@@ -2,6 +2,8 @@
 
 **Partial evidence; native acceptance is blocked, not complete.** No connected
 Android device/emulator or disposable authenticated clients were available.
+The user explicitly confirmed device/account access is unavailable and requested
+operator steps; no further access request is needed.
 The smallest next action is to connect a disposable Android device/profile with
 USB debugging and supply two independently signed-in clients for account A plus
 a separate disposable account B. Do not send passwords/tokens to a transcript.
@@ -142,8 +144,8 @@ Configuration declares Android package `com.crowleymh.LifeCommand`, scheme
 `/event/[id]`, `/projects`, `/calendar`, `/capture`, `/settings` and a not-found
 screen. No HTTP(S) App Links hosts/intent filters are declared. The owner's old
 generated manifest also has `exp+lifecommand` for development and an HTTPS
-package-visibility query; that query is not an App Link. Inspect the candidate
-APK's actual manifest/installed intent resolution before recording native passes.
+package-visibility query; that query is not an App Link. The candidate APK manifest has now been inspected (details below); installed
+Android intent resolution still requires device execution.
 
 Microsoft calendar OAuth returns to `lifecommand://oauth/microsoft`; AuthSession
 requires matching state, PKCE verifier and successful code return before token
@@ -200,7 +202,9 @@ records; device/OS/settings absent, observed **no device available**, status
    ```
 
    Repeat normal/percent/truncated/invalid/repeated/nearby/small/bounded for
-   cold/warm/foreground. Warm/foreground require first launching the app manually.
+   cold/warm/foreground, then repeat with `--scheme exp+lifecommand`, which is
+   also declared by the actual APK. Warm/foreground require first launching the
+   app manually.
    A separate host Node process force-stops ONLY this package after 15 seconds;
    ADB subprocesses also have timeouts. This is independent of the app's JS
    thread, not a Promise.race on the parser thread. The script performs no
@@ -217,6 +221,11 @@ records; device/OS/settings absent, observed **no device available**, status
    outcome/state only, never complete redirect URIs, codes or tokens. For
    notifications schedule a real disposable reminder and tap the notification
    itself in each lifecycle state, including startup, while checking Back.
+   For a cold notification case, schedule it first, press Home and use
+   `adb -s <serial> shell am kill com.crowleymh.LifeCommand` on the disposable
+   device to remove the background process. Do not use force-stop for that case:
+   Android may suppress notifications for a force-stopped package. Verify the
+   process is absent before the actual notification tap and record the result.
 
 ## Offline, isolation and recovery native/live matrix
 
@@ -269,6 +278,7 @@ and focus target, not screenshots alone.
 | AX-01 | Today/Capture/task editor; input errors, save/cancel, keyboard and Back | Unique names, roles/states, logical reading order, reachable controls; dirty guard prevents silent loss |
 | AX-02 | Projects Tasks/Plan tabs; expand phases/milestones; complete and reopen | Selected/expanded/disabled state spoken, repeated Edit/Delete distinguish records, decorative icons skipped |
 | AX-ORDER | Upcoming phase → Move up/down → review → confirm/cancel; first/last and current-phase boundary | Actual saved position announced, focus returns to moved header, no illegal reorder, cancel unchanged; native focus timing verified |
+| AX-FEEDBACK | Trigger saved feedback/undo; scroll screen and long feedback at maximum text/display sizes | Separate themed region, readable text, reachable underlying controls, bounded scroll area and usable Undo |
 | AX-03 | Planning/Calendar; day navigation, task/event editing | All essential actions reachable without drag; meaningful grouping, no overlapping targets |
 | AX-04 | Settings dialogs, recovery/import preview and confirmation | Focus enters modal; background isolated; dismissal returns meaningful focus; errors understandable/announced |
 | AX-05 | Accepted completion during editor/review; sync conflict, retry, phase progression and save | Draft remains while mounted, disabled controls explained, live messages spoken without losing focus |
@@ -332,3 +342,71 @@ Owner master remained clean at `223a5124eb9b036f172060c744560eda566d2c1a` on fin
 inspection; existing feature HEAD `8ebca3b`, preservation stash/ref
 `4fd148d1e48ca3f32fd3bff2e17bff40d5e495f9` and the external preservation directory
 remain available. No unfinished work was committed and no master push occurred.
+
+
+## Replacement APK and installation handoff
+
+The final application candidate is `dd99bf1f08d8ffba1138c772462ead800de7f5a3`.
+Replacement build:
+[62304fec-a24d-4829-a6aa-2a048956db62](https://expo.dev/accounts/crowleymh/projects/LifeCommand/builds/62304fec-a24d-4829-a6aa-2a048956db62).
+Both submissions first checked for an existing exact-commit preview build and
+found none. The superseded build's remote status was verified **CANCELED**.
+Later documentation-only commits do not change the candidate application.
+
+Use the build installation page on the disposable Android device, or run these
+commands after backing up its test data. They verify build identity before
+fetching; do not uninstall/clear data on installation failure:
+
+```powershell
+Set-Location 'C:\Users\crowl\Documents\Expo Apps\LifeCommand\.test-build\android-acceptance'
+$buildId = '62304fec-a24d-4829-a6aa-2a048956db62'
+$buildJson = npx.cmd --yes eas-cli@latest build:view $buildId --json
+if ($LASTEXITCODE -ne 0) { throw 'Build lookup failed' }
+$build = $buildJson | ConvertFrom-Json
+if ($build.status -ne 'FINISHED' -or $build.gitCommitHash -ne 'dd99bf1f08d8ffba1138c772462ead800de7f5a3') { throw 'Wrong or unfinished candidate' }
+Invoke-WebRequest -Uri $build.artifacts.buildUrl -OutFile '.test-build/LifeCommand-62304fec.apk'
+$adb = '.test-build/android-tools/platform-tools/adb.exe'
+& $adb devices -l
+$serial = '<disposable-device-serial>'
+& $adb -s $serial install -r '.test-build/LifeCommand-62304fec.apk'
+if ($LASTEXITCODE -ne 0) { throw 'Install failed; preserve data and resolve signing/device issue' }
+```
+
+After install: verify retained test records and app identity; execute LINK-01/06
+normal navigation/reminders first; execute bounded LINK-07 with the watchdog;
+exercise AX-ORDER/AX-FEEDBACK with TalkBack and maximum font/display size; run
+OFF/REC cases on independent clients; record all observations before considering
+broader distribution. Do not count successful installation as those later passes.
+Do not resubmit this build. If subsequent code corrections require another APK,
+commit/validate them, check `build:list --git-commit-hash <new-hash>` first, then use:
+
+```powershell
+npx.cmd --yes eas-cli@latest build --platform android --profile preview --non-interactive --freeze-credentials
+```
+
+
+### Verified native build and artifact result
+
+EAS reports replacement build **FINISHED** at `2026-10-18T15:57:13.990Z`, source
+`dd99bf1f08d8ffba1138c772462ead800de7f5a3`, internal preview APK. Submission and
+status commands exited 0. This establishes remote Android compilation/packaging
+for that source; **no installation or native runtime case was executed here**.
+
+The downloaded `.test-build/LifeCommand-62304fec.apk` is **101,688,064 bytes**.
+SHA-256:
+`C38345CA07B2911B85AFA05EE7C1DEACD5390E01F7294AADEDFEFCB0D7C76EEF`.
+Google's standalone AAPT2 9.4.1-15978811 (local ignored inspection tooling, not an
+app dependency/SDK upgrade) successfully read its manifest and badging:
+
+- Package `com.crowleymh.LifeCommand`, versionName `1.0.0`, versionCode `1`.
+- Compile/target SDK 36. This is APK metadata, not the OS version of a tested device.
+- BROWSABLE VIEW activity filter declares `lifecommand` and `exp+lifecommand`.
+  Repeat device link probes for both schemes. Neither declares a host filter.
+- HTTPS occurs under package-visibility queries, not an inbound App Link filter.
+  No HTTP(S) App Links acceptance is claimed or needed for undeclared filters.
+
+Raw manifest/badging and build metadata stay private in `.test-build/`; the
+sanitized facts above and hash are the shareable artifact record. The existing
+EAS preview environment and frozen signing credentials were used. Dependencies,
+application IDs, callback URLs and EAS association are unchanged. No emulator or
+physical Android device appeared in the final ADB check.

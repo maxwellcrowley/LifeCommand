@@ -1,5 +1,32 @@
 # Optional project plans — delivery
 
+## Minimal shell-quote remediation (2026-10-18, separate change)
+
+The initial-plan correction is isolated in `02cb870`. Fresh pre-change audit still
+reported 31 affected package entries: 11 moderate, 19 high, 1 critical. The installed
+path was react-native 0.86.3 -> react-devtools-core 6.1.5 -> shell-quote 1.10.0;
+the parent's range is `^1.6.1`. Registry metadata and
+[GHSA-pqg4-j6r4-53mv](https://github.com/advisories/GHSA-pqg4-j6r4-53mv) confirmed
+1.11.0 is a compatible fixed version. Although npm update selected newer 1.12.0,
+the lock resolution was narrowed to 1.11.0 using its published URL/integrity,
+then independently installed using `npm ci --ignore-scripts --no-audit --no-fund`.
+Only that package's version, URL and integrity changed; package.json is unchanged.
+The advisory's comment/newline quote input now throws TypeError. No generated
+shell command was executed. This does not update DevTools' separately bundled parser.
+
+Fresh post-change audit reports 30 affected package entries: 11 moderate, 19 high,
+0 critical; shell-quote is absent. Remaining entries are not suppressed. Decoder,
+braces and node-forge findings remain open with the review's applicability limits.
+No forced fixes, SDK downgrades, overrides or application identity changes were made.
+
+Post-change full suite: 400 passed, 0 failed, 0 skipped; typecheck and lint passed.
+Expo compatibility and private configuration loading passed; Expo Doctor passed
+21/21. Web, Android and iOS production JavaScript exports passed, followed by the
+complete phone/desktop browser workflow including both completed-project fixes.
+`git diff --check` passed. Receipts: `.test-build/remediation-audit-before.json`,
+`remediation-audit-after.json`, `remediation-full-tests.log` and the private config/
+export receipts. JavaScript exports do not establish native compilation.
+
 ## Initial-plan creation correction (2026-10-18)
 
 Started clean on feature/project-plans at `06fc96ada91818ce23771066f5c6e374383c9514`.

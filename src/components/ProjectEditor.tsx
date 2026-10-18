@@ -36,7 +36,7 @@ export function ProjectEditor({ project, initialView }: { project?: Project; ini
     busy.current = true; setSaving(true); setError('');
     try {
       const input = { ...draft, status, defaultTaskPoints: Number(draft.defaultTaskPoints) };
-      if (snapshot?.plan && data && status !== snapshot.status && !confirmPlan) {
+      if (snapshot && (snapshot.plan || (snapshot.status === 'complete' && status === 'active')) && data && status !== snapshot.status && !confirmPlan) {
         const next = reconcilePlans(data, changeProject(data, snapshot.id, input, snapshot.updatedAt));
         setLifecyclePreview({ token: planToken(data, project!), status, summary: transitionSummary(data, next) }); return;
       }
@@ -54,7 +54,8 @@ export function ProjectEditor({ project, initialView }: { project?: Project; ini
   if (!data) return <Page hasHeader title="Project" subtitle="Loading your projects…" />;
   return <ProjectScope project={{ sectionId: draft.sectionId }} sections={data.sections}><Page hasHeader title={project ? initialView === 'plan' ? project.name : 'Edit project' : 'New project'} subtitle={initialView === 'plan' ? 'One phase at a time, with the whole plan in view.' : 'Organize related tasks and choose how to track progress.'}>
     {initialView !== 'plan' ? <ProjectHeader title={draft.name || 'New project'} /> : null}
-    {project ? <ProjectPlanView project={project} initialView={initialView} /> : null}
+    {lifecyclePreview ? <Card title="Review project lifecycle change"><Muted>Save project as {projectStatusLabels[lifecyclePreview.status]}. Task records and dates are retained.{snapshot?.plan ? ' Resuming a plan evaluates its explicit automatic rules; finishing uses all plan requirements.' : ' No plan is created until you choose Add project plan after reopening.'}</Muted>{lifecyclePreview.summary ? <Label>{lifecyclePreview.summary}</Label> : null}<Action primary label="Confirm project lifecycle change" disabled={saving || stale} onPress={() => void save(lifecyclePreview.status, true)} /><Action label="Cancel project lifecycle preview" onPress={() => setLifecyclePreview(undefined)} /></Card> : null}
+    {project ? <ProjectPlanView project={project} initialView={initialView} onReopenProject={() => { setDetails(true); void save('active'); }} /> : null}
     {unsaved.prompt}
     {project ? <Action label="Project details and lifecycle" expanded={details} onPress={() => setDetails(!details)} /> : null}
     {details || !project ? <>
@@ -76,7 +77,6 @@ export function ProjectEditor({ project, initialView }: { project?: Project; ini
     {stale ? <Card title="This project changed"><Muted>Reload the saved details before continuing.</Muted><EditorButton label="Reload project" disabled={saving} onPress={() => { setSnapshot(project); setLifecyclePreview(undefined); setDraft(toDraft(project)); setError(''); }} /></Card> : null}
     {error ? <FormError>{error}</FormError> : null}
     <EditorButton label={saving ? 'Saving…' : 'Save project'} onPress={() => void save()} disabled={saving || stale} />
-    {lifecyclePreview ? <Card title="Review project lifecycle change"><Muted>Save project as {projectStatusLabels[lifecyclePreview.status]}. Task records and dates are retained. Resuming a plan evaluates its explicit automatic rules; finishing uses all plan requirements.</Muted><Label>{lifecyclePreview.summary || 'No phase transition.'}</Label><Action primary label="Confirm project lifecycle change" disabled={saving || stale} onPress={() => void save(lifecyclePreview.status, true)} /><Action label="Cancel project lifecycle preview" onPress={() => setLifecyclePreview(undefined)} /></Card> : null}
     {project ? <Card><Muted>Archive and restore also save the details above. Restoring makes the project Active.</Muted><EditorButton label={project.status === 'archived' ? 'Unarchive project' : 'Archive project'} onPress={() => void save(project.status === 'archived' ? 'active' : 'archived')} disabled={saving || stale} /></Card> : null}
     {snapshot ? <DeleteConfirmation kind="project" name={snapshot.name} disabled={saving || stale} onDelete={() => deleteProject(snapshot.id, snapshot.updatedAt)} onDeleted={() => { unsaved.allowLeave(); leave(); }} /> : null}
     <EditorButton label="Cancel" onPress={leave} disabled={saving} />

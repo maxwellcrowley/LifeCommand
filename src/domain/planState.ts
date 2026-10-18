@@ -7,7 +7,7 @@ export const currentPhase = (project: Project) => project.plan?.enabled && proje
 export function phaseAdditionBlocker(project: Project): string | undefined {
   const plan = project.plan;
   if (project.status === 'complete' || (plan?.started && plan.phases.length > 0 && plan.phases.every(p => p.state === 'complete'))) {
-    return 'Reopen the project before adding phases.';
+    return project.plan ? 'Reopen the project before adding phases.' : 'Reopen the project before creating a plan.';
   }
 }
 

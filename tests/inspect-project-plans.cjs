@@ -57,5 +57,6 @@ async function main() {
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `if(location.origin===${JSON.stringify(origin)}&&!sessionStorage.getItem('section-fixture')) {localStorage.setItem('lifecommand:data:v1',${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))}); sessionStorage.setItem('section-fixture','yes');}` });
   await require('./project-plan-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause, data, today });
   await require('./project-plan-reopen-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause });
+  await require('./project-plan-create-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause });
 }
 main().catch(error => { console.error(error.stack); process.exitCode = 1; }).finally(() => { clearTimeout(watchdog); ws?.close(); chrome?.kill(); server.close(); });

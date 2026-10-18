@@ -1,5 +1,43 @@
 # Optional project plans — delivery
 
+## Initial-plan creation correction (2026-10-18)
+
+Started clean on feature/project-plans at `06fc96ada91818ce23771066f5c6e374383c9514`.
+The retained `.test-build/rereview-completed-draft.cjs` reproduced a completed
+ordinary project saving new draft phases without reopening. Two new domain
+regressions failed before the correction: creation was permitted with a current
+token, and accepted cloud completion produced only the generic stale error.
+
+Initial plan creation now shares the existing phase-addition availability check
+at the entry point, mounted editor and guarded command submission. A completed
+ordinary project shows reopening guidance and Review reopening project instead
+of Add project plan. That action uses ProjectEditor's existing lifecycle preview
+and confirmation with the ordinary guarded project-status mutation; it neither
+assumes a plan nor silently reopens. Cancel leaves saved data unchanged. The
+existing lifecycle confirmation now also covers Complete-to-Active changes without
+a plan. Confirming saves Active; normal multiphase draft creation then works.
+Existing completed-plan Reopen phase behavior is retained.
+
+Accepted completion while initial-plan editing is open retains the mounted draft,
+disables Add another draft phase and review/confirmation, and explains reopening.
+Completion after review is checked again inside the queued mutation, before any
+creation. Revision checks, validation, and editing existing phases remain intact.
+Drafts are not promised after closing or reload. If the enclosing Project details
+snapshot changed, the guidance directs the user to explicitly reload it first.
+
+Fresh verification: 31/31 project-plan tests; full suite 400 passed, 0 failed,
+0 skipped; typecheck, lint and all-platform JavaScript exports passed. The full
+isolated browser workflow passed at phone 390x844 and desktop 1440x1000, including
+cancel/confirm reopening, multiphase creation, completion during editing and
+between review/confirmation, blocked appending, mounted draft retention and the
+original completed-plan regression. Save waits observe persisted state or dialog
+closure, not fixed delays. Phone confirmation/stale-draft and desktop stale-draft
+screenshots were visually inspected. Receipts include
+`.test-build/create-guard-before.log`, `.test-build/creation-full-tests.log` and
+`project-plans-*-initial-plan-*.png`. Physical-device, assistive-technology,
+reminder and live two-device acceptance remain pending. Dependency remediation
+and decoder investigation are separate follow-ups.
+
 ## SDK 57 patch alignment (2026-10-18, separate change)
 
 The UI correction is isolated in `859aee94ba0bb5e0b1d5f1c0fa5a35a0ef5bd523`.

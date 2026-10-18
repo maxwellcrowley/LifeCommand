@@ -49,7 +49,7 @@ export type PlanCommand =
 
 export function applyPlanCommand(data: AppData, projectId: string, expected: string, command: PlanCommand, now = new Date()): AppData {
   const project = data.projects.find(p => p.id === projectId);
-  if (project && command.type === 'phase' && !project.plan?.phases.some(p => p.id === command.phase.id)) {
+  if (project && (command.type === 'create' || (command.type === 'phase' && !project.plan?.phases.some(p => p.id === command.phase.id)))) {
     const blocker = phaseAdditionBlocker(project);
     if (blocker) throw Error(blocker);
   }

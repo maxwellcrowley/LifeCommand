@@ -28,7 +28,7 @@ export function ProjectPlanSummary({ project, data, showAction = true }: { proje
   </View>;
 }
 
-export function ProjectPlanView({ project, initialView }: { project: Project; initialView?: string }) {
+export function ProjectPlanView({ project, initialView, onReopenProject }: { project: Project; initialView?: string; onReopenProject: () => void }) {
   const { data } = useAppData(), { preferences, save } = useDevicePreferences(), { colors } = useAppTheme(), appearance = useProjectAppearance();
   const [editor, setEditor] = useState<{ request: PlanEditorRequest; data: AppData; project: Project }>();
   const [error, setError] = useState('');
@@ -46,7 +46,7 @@ export function ProjectPlanView({ project, initialView }: { project: Project; in
   const changeView = (value: string) => { setView(value); pref(viewKey, value === 'plan'); };
   const notices = planNotices(data, project);
   return <View ref={focusRef} tabIndex={-1} style={{ gap: 14, width: '100%', maxWidth: 1000 }}>
-    {plan ? <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 8 }}>{['tasks', 'plan'].map(value => <Pressable key={value} accessibilityRole="tab" accessibilityLabel={`Project ${value} view`} accessibilityState={{ selected: view === value }} onPress={() => changeView(value)} style={{ minHeight: 44, padding: 12, borderRadius: 10, backgroundColor: view === value ? appearance?.secondaryBackground ?? colors.soft : colors.background }}><Label>{value === 'tasks' ? 'Tasks' : 'Plan'}</Label></Pressable>)}</View> : <Action label="Add project plan" onPress={() => open({ kind: 'create' })} />}
+    {plan ? <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 8 }}>{['tasks', 'plan'].map(value => <Pressable key={value} accessibilityRole="tab" accessibilityLabel={`Project ${value} view`} accessibilityState={{ selected: view === value }} onPress={() => changeView(value)} style={{ minHeight: 44, padding: 12, borderRadius: 10, backgroundColor: view === value ? appearance?.secondaryBackground ?? colors.soft : colors.background }}><Label>{value === 'tasks' ? 'Tasks' : 'Plan'}</Label></Pressable>)}</View> : addPhaseBlocker ? <View style={{ gap: 6 }}><Muted>{addPhaseBlocker} Review and confirm reopening to make the project Active; saved tasks are kept.</Muted><Action label="Reopen project to create a plan" text="Review reopening project" onPress={onReopenProject} /></View> : <Action label="Add project plan" onPress={() => open({ kind: 'create' })} />}
     {error ? <FormError>{error}</FormError> : null}
     {view === 'tasks' || !plan ? <ProjectTasks project={project} /> : <>
       <Muted>{!plan.started ? 'Draft plan' : currentPhase(project) ? `${currentPhase(project)!.name} · Phase ${plan.phases.findIndex(p => p.state === 'current') + 1} of ${plan.phases.length}` : 'All phases complete'} · {plan.automaticCompletion ? 'Automatic final completion enabled' : 'Final completion by confirmation'}</Muted>

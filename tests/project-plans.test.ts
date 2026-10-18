@@ -72,6 +72,32 @@ test('cloud completion rejects a pending Add phase with actionable guidance and 
   assert.deepEqual(await repository.loadAppData(), accepted);
 });
 
+test('completed ordinary project blocks initial plan creation until explicit reopening', () => {
+  const data = planFixture(); delete p(data).plan; data.tasks = [];
+  const complete = changeProject(data, p(data).id, { status: 'complete' }, p(data).updatedAt, now);
+  const before = structuredClone(complete);
+  assert.throws(() => run(complete, { type: 'create', phases: phases() }), /Reopen the project/);
+  assert.deepEqual(complete, before);
+  const reopened = changeProject(complete, p(complete).id, { status: 'active' }, p(complete).updatedAt, now);
+  const created = run(reopened, { type: 'create', phases: phases() });
+  assert.equal(p(created).status, 'active');
+  assert.deepEqual(p(created).plan!.phases.map(p => p.state), ['upcoming', 'upcoming', 'upcoming']);
+  assert.doesNotThrow(() => validateSnapshot(created));
+});
+
+test('cloud completion between initial plan review and confirmation rejects creation without overwriting', async () => {
+  const data = planFixture(); delete p(data).plan; data.tasks = [];
+  const repository = createRepository(memory(data)); const local = await repository.loadAppData();
+  const token = planToken(local, p(local));
+  const draft: PlanCommand = { type: 'create', phases: phases() };
+  assert.ok(previewPlanCommand(local, p(local).id, token, draft).projects[0].plan);
+  const complete = changeProject(local, p(local).id, { status: 'complete' }, p(local).updatedAt, now);
+  const accepted = await repository.applyCloudData(complete, fingerprint(local));
+  await assert.rejects(repository.changeAppData(current => applyPlanCommand(current, p(local).id, token, draft)), /Reopen the project/);
+  assert.deepEqual(await repository.loadAppData(), accepted);
+  assert.deepEqual(draft.phases, phases());
+});
+
 test('ordinary project lifecycle stays unchanged; draft creation and assignment preserve dates and status', () => {
   const data = planFixture(); delete p(data).plan;
   const complete = changeProject(data, p(data).id, { status: 'complete' }, p(data).updatedAt, now);

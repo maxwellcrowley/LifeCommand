@@ -1,8 +1,9 @@
 import { validateFeedURL } from '../domain/ics';
-// Deliberately fail closed: there is no deployed/verified authenticated ICS gateway
-// in this repository. Do not replace this with fetch(url), a CORS proxy, or an
-// arbitrary Supabase function call. See docs/integrations/ICS_SUBSCRIPTIONS.md.
+// Legacy raw-feed API remains forbidden on clients. Live subscriptions use
+// liveIcsClient's authenticated connection/snapshot API instead; only the Node
+// service may fetch provider URLs. Retained as a regression guard against
+// accidentally reintroducing device/browser direct downloads.
 export async function fetchSubscriptionFeed(url: string): Promise<string> {
   validateFeedURL(url);
-  throw Error('Calendar subscriptions need a secure feed service, which is not available in this build. Google and Outlook connections remain available. No subscription was saved.');
+  throw Error('Direct feed downloads are unavailable. Use Connected calendars and its secure feed service. No subscription was saved.');
 }

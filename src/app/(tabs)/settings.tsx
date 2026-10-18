@@ -41,7 +41,7 @@ export default function SettingsScreen() {
   const calendar = useCalendarSync();
   const cloud = useAutomaticSync();
   const p = device.preferences;
-  const connectionAttention = !!(calendar.subscriptions.error || calendar.error || calendar.credentialError || Object.values(calendar.authError).some(Boolean) || Object.values(calendar.accountErrors).some(Boolean) || Object.values(calendar.needsReconnect).some(Boolean) || cloud.status.state === 'error' || cloud.status.state === 'conflict');
+  const connectionAttention = !!(calendar.subscriptions.error || calendar.subscriptions.live.error || calendar.subscriptions.live.calendars.some(item => item.error) || calendar.error || calendar.credentialError || Object.values(calendar.authError).some(Boolean) || Object.values(calendar.accountErrors).some(Boolean) || Object.values(calendar.needsReconnect).some(Boolean) || cloud.status.state === 'error' || cloud.status.state === 'conflict');
   const [timeDraft, setTime] = useState<string>();
   const time = timeDraft ?? settings.rolloverTime;
   const [error, setError] = useState('');
@@ -85,7 +85,7 @@ export default function SettingsScreen() {
     <ReminderSettingsCard key={resetVersion} settings={settings} saving={saving} save={save} />
     <NotificationSettingsCard />
     </Disclosure></Card>
-    <Card><Disclosure title="Accounts and connections" summary={`${cloud.enabled ? `Cloud sync: ${cloud.status.state}` : 'Cloud sync off'} · ${calendar.cache.accounts.length} calendar connections${connectionAttention ? ' · Needs attention' : ''}`} storageKey="Settings:accounts" defaultCollapsed keepMounted>
+    <Card><Disclosure title="Accounts and connections" summary={`${cloud.enabled ? `Cloud sync: ${cloud.status.state}` : 'Cloud sync off'} · ${calendar.cache.accounts.length + calendar.subscriptions.live.calendars.length} calendar connections${connectionAttention ? ' · Needs attention' : ''}`} storageKey="Settings:accounts" defaultCollapsed keepMounted>
       <AutomaticSyncCard /><CloudSyncCard disabled={saving} />
       <Muted>External calendar refresh is separate from LifeCommand task and project sync.</Muted><CalendarSyncCard />
     </Disclosure></Card>

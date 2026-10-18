@@ -15,6 +15,7 @@ import { useAppTheme } from '@/src/theme/ThemeProvider';
 import { addDays, isDateKey, localDateKey } from '@/src/domain/dates';
 import { calendarDays, dateLabel, eventKey, eventSources, sourceColors, sourceLabels, weekStart } from '@/src/domain/events';
 import { useLocalClock } from '@/src/hooks/useLocalClock';
+import { LiveCalendarStatus } from '@/src/components/LiveCalendarStatus';
 
 export default function CalendarScreen() {
   const { date, selection } = useLocalSearchParams<{ date?: string; selection?: string }>();
@@ -52,6 +53,7 @@ function CalendarContent({ initialDate }: { initialDate?: string }) {
   };
   const shift = (direction: number) => setSelected(addDays(from, direction * (view === 'Week' ? 7 : view === 'Agenda' ? agendaLength : 1)));
   return <Page title="Calendar" subtitle="Events and scheduled tasks, together by date.">
+    <LiveCalendarStatus from={from} through={through} />
     {error ? <Label style={{ color: colors.danger }}>{error}</Label> : null}
     <Link href={{ pathname: '/event/new', params: valid ? { date } : {} }} asChild><Pressable accessibilityRole="button" style={{ backgroundColor: colors.soft, padding: 15, borderRadius: 12 }}><Label>+ Add event</Label></Pressable></Link>
     <Card>

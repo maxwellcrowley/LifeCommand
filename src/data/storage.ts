@@ -203,7 +203,7 @@ export function createRepository(storage: SnapshotStorage, exclusive: <T>(operat
       await write(data, []);
       recoveryNotice = '';
       try {
-        for (const key of [...backups, EXTERNAL_CALENDAR_KEY, SUBSCRIPTIONS_KEY]) await storage.removeItem(key);
+        for (const key of [...backups, EXTERNAL_CALENDAR_KEY, SUBSCRIPTIONS_KEY, 'lifecommand:live-ics:v1']) await storage.removeItem(key);
       } catch {
         // AsyncStorage has no cross-key transaction. Let the UI reflect the durable state.
         throw new ResetCleanupError(data);

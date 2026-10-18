@@ -6,7 +6,9 @@ import { useAppData } from '../data/useAppData';
 import { subscribeToStorageChanges, withStorageLock } from '../data/coordination';
 import { emptySubscriptions } from '../domain/ics';
 import { createSubscriptionStore } from './subscriptionStore';
+import { useLiveIcs } from './useLiveIcs';
 export function useSubscriptions() {
+  const live = useLiveIcs();
   const { scope } = useAccount();
   const { resetVersion } = useAppData();
   const store = useMemo(() => createSubscriptionStore(accountStorage(AsyncStorage, scope), withStorageLock), [scope]);
@@ -17,7 +19,9 @@ export function useSubscriptions() {
     reload(); const unsubscribe = subscribeToStorageChanges(reload);
     return () => { active = false; unsubscribe(); };
   }, [store, resetVersion]);
-  return { cache, error, events: cache.events.filter(event => !cache.hidden.includes(event.id)),
+  const liveEvents = live.calendars.filter(calendar => calendar.visible).flatMap(calendar => calendar.events);
+  return { live, cache: { ...cache, events: [...cache.events, ...live.calendars.flatMap(calendar => calendar.events)] }, error,
+    events: [...cache.events, ...liveEvents].filter(event => !cache.hidden.includes(event.id)),
     async hide(id: string, hidden: boolean) { setCache(await store.change(current => ({ ...current, hidden: hidden ? [...new Set([...current.hidden, id])] : current.hidden.filter(value => value !== id) }))); },
     async unhide() { setCache(await store.change(current => ({ ...current, hidden: [] }))); },
     async disconnect(id: string) { setCache(await store.change(current => ({ ...current, subscriptions: current.subscriptions.filter(s => s.id !== id), events: current.events.filter(e => e.accountId !== id) }))); },

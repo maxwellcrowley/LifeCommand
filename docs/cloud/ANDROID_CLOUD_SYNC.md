@@ -1,5 +1,22 @@
 # Android Cloud Sync configuration
 
+## User-reported Android acceptance at integration (2026-10-18)
+
+The user supplied build `a6930ff0-ab78-4e32-9887-1c8b29e9165e` and reported
+successful Android installation and initial checks, then passing two-device sync,
+project lifecycle and reminder testing. These reports advance the acceptance
+record below; they were not independently observed, and this integration did not
+verify the build's source commit or submit a new build. The approved feature is
+`8ebca3bacd8f049bc508c9b801332152cf299290`.
+
+Exhaustive offline-conflict, account-isolation/recovery, accessibility,
+malformed-link and iOS acceptance remain open. Keep the bounded external-link
+checks and dependency applicability limits in
+[the decoder investigation](../DEPENDENCY_ADVISORY_FOLLOWUP.md).
+See [the integration record](../PROJECT_PLANS_DELIVERY.md) for unchanged-code
+verification and owner-checkout preservation. Earlier entries below describe
+evidence available when written, not a claim of exhaustive current acceptance.
+
 ## Preview acceptance handoff (2026-10-18)
 
 The follow-up corrections `02cb870` (initial-plan creation) and `39513c9`

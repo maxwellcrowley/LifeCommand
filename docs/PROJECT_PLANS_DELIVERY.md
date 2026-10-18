@@ -1,5 +1,42 @@
 # Optional project plans — delivery
 
+## Approved integration and user-reported Android acceptance (2026-10-18)
+
+The independent review approved `8ebca3bacd8f049bc508c9b801332152cf299290`.
+The user supplied Android build `a6930ff0-ab78-4e32-9887-1c8b29e9165e` and
+reported successful installation and initial checks, followed by passing
+two-device sync, project lifecycle and reminder testing. These are user-reported
+results, not independently observed device tests or verified build provenance.
+They do not establish exhaustive offline-conflict, accessibility, malformed-link
+or iOS acceptance. The dated verification entries below retain their original scope.
+
+Integration was prepared on `integration/project-plans-approved-20261018` in a
+separate checkout based on freshly fetched `origin/master` at
+`1491d7e0408815ecab5576a00be08082f20959a3`. Master was an ancestor of the approved
+commit, so integration required no conflict resolution or application changes.
+No later feature commits were included. The approved ancestry includes the
+prerequisite snapshot `cc3eb9b` and recurring-task implementation `162df91`.
+Only this acceptance documentation and its Android handoff were added afterward.
+
+Application, configuration, dependency and test files remain identical to the
+approved feature. Its independent 31-test/browser review and recorded full-suite,
+Expo compatibility/Doctor, private configuration and all-platform JavaScript
+export evidence therefore remain applicable; they are reused evidence, not
+new integration executions. Integration lint, typecheck and diff checks passed.
+No remote build, release, release tag or deployment is part of this integration.
+
+The owner's dirty master checkout was inventoried afresh (307 tracked/untracked
+nonignored files). Its HEAD, local master ref, index and inventoried file contents
+must remain unchanged. Keep the feature checkout available. Remote integration
+does not update that local master checkout; reconcile its unfinished work before
+any later pull or branch movement.
+
+Remaining acceptance includes exhaustive offline/conflict/account-isolation and
+recovery cases, assistive technology/large text/focus, bounded cold/warm malformed
+external links and iOS. The decoder, braces and node-forge follow-ups in
+[DEPENDENCY_ADVISORY_FOLLOWUP.md](DEPENDENCY_ADVISORY_FOLLOWUP.md) remain open.
+User-reported reminder and two-device success does not close those separate risks.
+
 ## Decoder follow-up and acceptance (2026-10-18)
 
 The creation correction is `02cb870`; minimal shell-quote remediation is `39513c9`.

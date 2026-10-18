@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: disposable-local-ics-only
+      POSTGRES_DB: live_ics_test
+    ports:
+      - "127.0.0.1:55438:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./test/bootstrap.sql:/docker-entrypoint-initdb.d/01-bootstrap.sql:ro
+      - ../../docs/cloud/migrations/20261018_live_ics.sql:/docker-entrypoint-initdb.d/02-live-ics.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d live_ics_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

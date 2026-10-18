@@ -19,12 +19,34 @@ export async function parseICS(text: string, subscription: Subscription, window:
   try {
     const { default: ICAL } = await import('ical.js');
     if (new TextEncoder().encode(text).length > ICS_LIMIT) throw Error();
+    // ical.js accepts some truncated documents. Never publish those as an empty
+    // or partial calendar: verify the component envelope before parsing.
+    const stack: string[] = [];
+    let roots = 0;
+    for (const line of text.replace(/\r?\n[ \t]/g, '').split(/\r?\n/)) {
+      if (/^BEGIN:/i.test(line)) { if (!stack.length) roots++; stack.push(line.slice(6).toUpperCase()); if (stack.length > 8) throw Error(); }
+      else if (/^END:/i.test(line) && stack.pop() !== line.slice(4).toUpperCase()) throw Error();
+      else if (!stack.length && line.trim() && !/^END:/i.test(line)) throw Error();
+    }
+    if (stack.length || roots !== 1) throw Error();
     const root = new ICAL.Component(ICAL.parse(text));
-    if (root.name !== 'vcalendar') throw Error();
+    if (root.name !== 'vcalendar' || root.getFirstPropertyValue('version') !== '2.0'
+      || root.getAllProperties('version').length !== 1
+      || (root.hasProperty('method') && root.getFirstPropertyValue('method') !== 'PUBLISH')) throw Error();
+    if (root.getAllSubcomponents().some(part => !['vevent', 'vtimezone'].includes(part.name))) throw Error();
     // Component-local VTIMEZONE resolution avoids a global timezone registry that
     // could leak definitions between feeds/accounts. Unresolved named zones fail.
     const parts = root.getAllSubcomponents('vevent');
     if (parts.length > 10000) throw Error();
+    // Reject unsupported recurrence semantics rather than silently publishing a
+    // partial snapshot. VALARM, descriptions and embedded resources are ignored.
+    for (const part of parts) {
+      if (part.hasProperty('exrule') || part.getAllProperties('rrule').length > 1
+        || part.getFirstProperty('recurrence-id')?.getParameter('range')
+        || part.getAllProperties('rdate').some(property => property.type === 'period')
+        || String(part.getFirstPropertyValue('uid') ?? '').length > 1024
+        || String(part.getFirstPropertyValue('summary') ?? '').length > 1000) throw Error();
+    }
     for (const part of parts) for (const name of ['dtstart', 'dtend', 'recurrence-id', 'exdate', 'rdate']) {
       for (const property of part.getAllProperties(name)) {
         const tzid = property.getParameter('tzid');
@@ -75,6 +97,7 @@ export async function parseICS(text: string, subscription: Subscription, window:
       }
     }
     if (components.some(part => part.hasProperty('recurrence-id') && !components.some(master => !master.hasProperty('recurrence-id') && master.getFirstPropertyValue('uid') === part.getFirstPropertyValue('uid')))) throw Error();
+    if (events.size > 5000) throw Error();
     return [...events.values()];
   } catch { throw Error('This feed could not be read completely. Check its timezone definitions and recurrence format, or ask the calendar provider for a compatible feed. Cached events were kept.'); }
 }

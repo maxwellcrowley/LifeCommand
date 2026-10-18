@@ -1,0 +1,13 @@
+**
+!backend/
+!backend/live-ics/
+!backend/live-ics/package.json
+!backend/live-ics/package-lock.json
+!backend/live-ics/tsconfig.json
+!backend/live-ics/src/
+!backend/live-ics/src/**
+!backend/live-ics/scripts/
+!backend/live-ics/scripts/**
+!src/
+!src/domain/
+!src/domain/**

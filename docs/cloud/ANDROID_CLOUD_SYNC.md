@@ -1,5 +1,63 @@
 # Android Cloud Sync configuration
 
+## Preview acceptance handoff (2026-10-18)
+
+Fresh read-only EAS history confirms both `d8d0e2fa-5a01-4180-bb5e-8124c9fdee05`
+and the later `bf4a7fff-9b86-4f0b-9bd6-96cdcf8002d8` are **FINISHED** with APK
+artifacts. The earlier `require is not defined` config-loader issue is therefore
+verified resolved remotely, followed by successful builds after supplying the
+missing cloud variables. These builds were made from the earlier dirty owner
+checkout (reported Git HEAD `1491d7e`); they do not validate the current feature
+branch or its SDK patches. No new remote build was submitted in this task.
+
+A fresh names-only GraphQL query confirms these names at project scope in EAS
+**preview**; neither is supplied at account scope:
+
+- `EXPO_PUBLIC_SUPABASE_URL`: present.
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`: present.
+
+No variable values were requested or printed by that query. Preview remains
+`environment: preview`, internal distribution, `developmentClient: false`, Android
+`buildType: apk`. Application IDs, EAS association, signing configuration, OAuth
+callbacks and environment guards are unchanged. There is no currently reproduced
+config-loader/missing-variable blocker. Compilation of the new feature HEAD and
+device acceptance are still unverified.
+
+After independent re-review, use the isolated feature checkout for the next build
+(commands below are a handoff, not an executed build):
+
+```powershell
+Set-Location 'C:\Users\crowl\Documents\Expo Apps\LifeCommand\.test-build\project-plans-delivery'
+npx eas-cli@latest build --platform android --profile preview --non-interactive --freeze-credentials
+```
+
+Open that new build's installation link on the Android test device and install
+the APK. Alternatively, with Android platform-tools and USB debugging available,
+substitute the ID returned by the build command and run:
+
+```powershell
+$previewBuildId = '<new-build-id>'
+$previewBuild = npx eas-cli@latest build:view $previewBuildId --json | ConvertFrom-Json
+Invoke-WebRequest -Uri $previewBuild.artifacts.buildUrl -OutFile '.test-build/LifeCommand-preview.apk'
+adb install -r '.test-build/LifeCommand-preview.apk'
+```
+
+Keep existing signing credentials. If installation reports a signature mismatch,
+resolve signing before continuing; do not uninstall or clear user data as a
+workaround. Use disposable accounts and synthetic records for acceptance:
+
+- Native/device: install/upgrade, cold start, keyboard, Back/dirty cancellation,
+  completed-plan guidance, explicit reopen/add, and background/foreground sync.
+- Accessibility: TalkBack/VoiceOver, largest system text, focus return, selected
+  states, error announcement, and non-drag phase reorder.
+- Reminders: permission states, quiet hours, complete/reopen/reschedule, one-time
+  delivery and tap routing with the app foregrounded, backgrounded and terminated.
+- Two devices: same-gate completion, divergent/offline edits, CAS conflict review,
+  sync completion while Add phase is open, account isolation and export/recovery.
+
+JavaScript exports and local config checks do not establish native compilation or
+physical-device readiness. npm audit advisories remain separate dependency work.
+
 ## EAS Read app config investigation and verification (2026-10-11)
 
 The remote logs show two distinct failures, not a repeated helper-import failure:

@@ -4,7 +4,8 @@ exports.run = async ({ send, evaluate, ready, click, fill, go, snap, shot, pause
   const phone = () => send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   const theme = async appearance => { await evaluate(`localStorage.setItem('lifecommand:device:presentation:v1', JSON.stringify({...JSON.parse(localStorage.getItem('lifecommand:device:presentation:v1')||'{}'),appearance:${JSON.stringify(appearance)}}))`); };
   const saved = async predicate => { for (let i = 0; i < 50; i++) { const data = await snap(); if (predicate(data)) return data; await pause(100); } throw Error('Expected saved mutation did not appear: ' + await evaluate(`document.querySelector('[data-testid="settings-dialog"]')?.innerText || document.body.innerText`)); };
-  const confirm = async () => { await click('Review plan changes'); await ready('Review plan changes'); await click('Confirm plan changes'); for(let i=0;i<100;i++){ if(await evaluate(`!document.querySelector('[data-testid="settings-dialog"]')`)) return; await pause(100); } throw Error('Dialog save did not finish: '+await evaluate(`document.querySelector('[data-testid="settings-dialog"]')?.innerText`)); };
+  const savedDialog = async () => { for(let i=0;i<100;i++){ if(await evaluate(`!document.querySelector('[data-testid="settings-dialog"]')`)) return; await pause(100); } throw Error('Dialog save did not finish: '+await evaluate(`document.querySelector('[data-testid="settings-dialog"]')?.innerText`)); };
+  const confirm = async () => { await click('Review plan changes'); await ready('Review plan changes'); await click('Confirm plan changes'); await savedDialog(); };
   const scrollTo = async selector => evaluate(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:'start'})`);
   const plan = () => go('/project/plan-garden?view=plan', 'Agree on the essentials');
   await desktop(); await go('/projects', 'Garden studio'); await shot('desktop-light-card');
@@ -38,7 +39,7 @@ exports.run = async ({ send, evaluate, ready, click, fill, go, snap, shot, pause
   await click('Phase Discover, Complete'); await click('Reopen phase: Discover'); await click('Review plan changes'); await ready('Later phases return to Upcoming'); await click('Confirm plan changes');
   await saved(d => d.projects[0].plan.phases[0].state === 'current');
   await desktop(); await plan(); await shot('desktop-dark-plan');
-  await click('Edit phase: Discover'); await click('Phase progression options'); await click('Phase progression: When required work is complete'); await click('Review plan changes'); await ready('Immediate effect: Garden studio: Discover complete; Build is now current'); await shot('desktop-dark-rule-preview'); await click('Confirm plan changes');
+  await click('Edit phase: Discover'); await click('Phase progression options'); await click('Phase progression: When required work is complete'); await click('Review plan changes'); await ready('Immediate effect: Garden studio: Discover complete; Build is now current'); await shot('desktop-dark-rule-preview'); await click('Confirm plan changes'); await savedDialog();
   await click('Assign or move project tasks'); await click('Assign task: Unassigned materials budget'); await click('Move selected tasks to: Build'); await confirm(); await saved(d => d.tasks.find(t => t.id === 'garden-loose').phaseId === 'garden-1');
   await go('/calendar', 'Calendar'); await ready('Milestone target'); assert.ok(await evaluate(`document.body.innerText.includes('Design ready')`)); await shot('desktop-dark-calendar-marker');
   await go('/project/ordinary-project', 'Add project plan'); await click('Add project plan');

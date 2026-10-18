@@ -1,5 +1,67 @@
 # Optional project plans — delivery
 
+## SDK 57 patch alignment (2026-10-18, separate change)
+
+The UI correction is isolated in `859aee94ba0bb5e0b1d5f1c0fa5a35a0ef5bd523`.
+The following compatibility change updates package manifests/lockfile,
+delivery/Android acceptance notes, and one browser-harness save wait. Expo's live compatibility tooling confirmed the
+nine review targets. `expo install --fix --npm`, followed by `expo install
+expo-constants --npm` to align its manifest range as well as installed version,
+produced these results:
+
+| Package | Before | After (manifest uses `~`) |
+| --- | --- | --- |
+| expo | 57.0.26 | 57.0.30 |
+| expo-auth-session | 57.0.13 | 57.0.16 |
+| expo-constants | 57.0.20 | 57.0.22 |
+| expo-crypto | 57.0.3 | 57.0.4 |
+| expo-dev-client | 57.0.19 | 57.0.20 |
+| expo-linking | 57.0.11 | 57.0.13 |
+| expo-notifications | 57.0.21 | 57.0.23 |
+| expo-router | 57.0.24 | 57.0.28 |
+| expo-splash-screen | 57.0.9 | 57.0.10 |
+
+The existing npm lockfile includes the resulting transitive dependency updates;
+SDK major, React/React Native versions and other direct dependencies are unchanged.
+Before installation, the isolated checkout's verified node_modules junction was
+removed without deleting its target, then `npm ci` installed its own dependencies.
+The owner's installed Expo remains 57.0.26. All 307 tracked/untracked nonignored
+owner files, HEAD and index matched the captured pre-task fingerprints.
+
+Fresh checks after alignment: full suite 398 passed / 0 failed / 0 skipped;
+typecheck and lint passed; `expo install --check` reports up to date; current
+`npx --yes expo-doctor@latest` passed 21/21. The exact
+`expo config --json --full --type public` command passed with synthetic EAS values,
+`EAS_BUILD=true`, and dotenv disabled; resolved identity fields matched app.json.
+Config stdout/stderr were captured privately, not printed. Configuration tests
+also exercise native ESM loading and rejection of missing/unsafe environment data.
+
+Web, Android and iOS JavaScript exports passed together using
+`expo export --platform all --max-workers 2`; web produced 22 static routes.
+The full browser workflow passed against that export, including the existing
+34-task scenario, phone/desktop light/dark checks and the new completed-plan,
+explicit reopen/add and accepted-cloud stale-draft cases. The first post-alignment
+browser run reached a stale-snapshot guard when the harness opened bulk assignment
+before the preceding rule save finished. The harness now awaits dialog closure
+at that step; the full rerun and lint passed. Application stale-write protection
+is unchanged. `git diff --check` passed.
+
+Fresh local receipts are in ignored `.test-build/alignment-tests.log`,
+`.test-build/alignment-export.log`, private configuration captures and the
+`project-plans-` screenshots described below. These JavaScript and browser checks
+do not establish native compilation or physical-device readiness.
+
+npm reports 31 remaining advisories (11 moderate, 19 high, 1 critical). They are
+not suppressed or fixed by forced audit changes. No additional application-code
+compatibility correction was necessary. Original compatibility failures and
+earlier checks below remain historical receipts.
+
+The [Android acceptance handoff](cloud/ANDROID_CLOUD_SYNC.md) records fresh remote
+build-history verification, names-only preview environment presence, exact next
+build/install commands and remaining device checks. No remote build, merge, tag,
+deployment or review approval is part of this task. Re-review the two task commits
+from `9eb549b`; the complete project-plan feature still starts at `162df91`.
+
 ## Independent review correction (2026-10-18)
 
 The review of `162df91..9eb549b` found that Add phase remained visible after
@@ -36,7 +98,7 @@ This correction is prepared for independent re-review, not self-approval.
 
 Latest completion verification and the maintenance/progression correction are in
 [PROJECT_PLANS_COMPLETION.md](PROJECT_PLANS_COMPLETION.md). The October 12 results
-below are retained receipts; the fresh suite has 396 passing tests.
+below and October 16's 396-test suite are retained receipts; current results are above.
 
 2026-10-12. Implementation inventory was recorded before code changes in
 `PROJECT_PLANS_IMPLEMENTATION.md`. This delivery extends the existing task,

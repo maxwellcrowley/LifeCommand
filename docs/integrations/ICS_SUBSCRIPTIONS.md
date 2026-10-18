@@ -1,4 +1,10 @@
-# ICS subscriptions — verified foundation, live connection blocked
+# ICS subscriptions — foundation history
+
+Update (2026-10-18): the live service and app workflow are implemented on `feature/live-ics`.
+See [implementation/deployment](../LIVE_ICS_IMPLEMENTATION.md) and
+[current acceptance evidence](../LIVE_ICS_ACCEPTANCE.md). Hosted deployment is still
+required. The section below records the earlier foundation state, not the current
+implementation. Legacy device caches remain available without automatic fetching.
 
 Status (2026-10-10): **not a working live calendar connection yet**. Settings exposes a private URL/name/color draft and explains the unavailable secure service. Preview fails closed; it does not fetch the URL or save a connection. Do not advertise live ICS support in store copy.
 

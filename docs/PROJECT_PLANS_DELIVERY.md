@@ -1,5 +1,27 @@
 # Optional project plans — delivery
 
+## Decoder follow-up and acceptance (2026-10-18)
+
+The creation correction is `02cb870`; minimal shell-quote remediation is `39513c9`.
+[Dependency advisory follow-up](DEPENDENCY_ADVISORY_FOLLOWUP.md) records the
+installed native/fallback routing trace, authoritative advisory/registry evidence,
+bounded diagnostic results and exact Android cold/warm link tests. The direct
+decoder and React Navigation fallback each exceeded the isolated three-second
+limit; Expo's query helper returned. These Node diagnostics are reproducible with
+`node tests/inspect-router-decoder.cjs`, and do not execute native URL delivery.
+
+No published SDK-57-compatible decoder fix was confirmed. Current Expo Router
+supplies its own URLSearchParams parser to the native link listener, while the
+vulnerable fallback remains shipped. Application reachability is not confirmed;
+native/Hermes behavior remains unverified. No incompatible ESM override or SDK
+upgrade was made. The follow-up retains braces/node-forge applicability limits.
+Before broader distribution, resolve native-link uncertainty and complete the
+[Android acceptance handoff](cloud/ANDROID_CLOUD_SYNC.md): install/upgrade and
+cold/warm lifecycle; both reopening workflows and sync during creation; large
+text, screen readers and focus; reminder delivery/tap routing; two-device races,
+offline conflicts, account isolation and recovery. Prior remote APK successes
+predate these commits. No new build, merge, tag or deployment was submitted.
+
 ## Minimal shell-quote remediation (2026-10-18, separate change)
 
 The initial-plan correction is isolated in `02cb870`. Fresh pre-change audit still

@@ -2,6 +2,15 @@
 
 ## Preview acceptance handoff (2026-10-18)
 
+The follow-up corrections `02cb870` (initial-plan creation) and `39513c9`
+(shell-quote 1.11.0) have passed local verification, but have not been natively
+compiled. Include completed ordinary projects, cancel/confirm reopening, and
+accepted completion during initial-plan editing/review in the device sequence.
+The [decoder investigation](../DEPENDENCY_ADVISORY_FOLLOWUP.md) adds exact
+cold/warm malformed-link commands and explains the unverified native reachability.
+The fresh audit after remediation has 30 affected package entries: 19 high,
+11 moderate, no critical. See that investigation for remaining applicability limits.
+
 Fresh read-only EAS history confirms both `d8d0e2fa-5a01-4180-bb5e-8124c9fdee05`
 and the later `bf4a7fff-9b86-4f0b-9bd6-96cdcf8002d8` are **FINISHED** with APK
 artifacts. The earlier `require is not defined` config-loader issue is therefore

@@ -32,11 +32,15 @@ export function ProjectPlanView({ project, initialView, onReopenProject }: { pro
   const { data } = useAppData(), { preferences, save } = useDevicePreferences(), { colors } = useAppTheme(), appearance = useProjectAppearance();
   const [editor, setEditor] = useState<{ request: PlanEditorRequest; data: AppData; project: Project }>();
   const [error, setError] = useState('');
-  const focusRef = useRef<View>(null);
+  const focusRef = useRef<View>(null), returnFocusRef = useRef<View | null>(null);
+  const phaseHeaders = useRef(new Map<string, View>());
   const viewKey = `Plan:view:${project.id}`;
   const [view, setView] = useState(initialView ?? (preferences.collapsed[viewKey] ? 'plan' : 'tasks'));
   if (!data) return null;
-  const open = (request: PlanEditorRequest) => setEditor({ request, data, project });
+  const open = (request: PlanEditorRequest) => {
+    returnFocusRef.current = request.command?.type === 'reorder' ? phaseHeaders.current.get(request.command.phaseId) ?? focusRef.current : focusRef.current;
+    setEditor({ request, data, project });
+  };
   const pref = (key: string, value: boolean) => void save({ collapsed: { [key]: value } }).catch(e => setError(String(e)));
   const plan = project.plan;
   const addPhaseBlocker = phaseAdditionBlocker(project);
@@ -60,7 +64,7 @@ export function ProjectPlanView({ project, initialView, onReopenProject }: { pro
         const key = `Plan:phase:${project.id}:${phase.id}`, expanded = !(preferences.collapsed[key] ?? phase.state !== 'current');
         const tasks = data.tasks.filter(t => t.projectId === project.id && t.phaseId === phase.id);
         return <PhaseDrag key={phase.id} id={phase.id} enabled={phase.state === 'upcoming'} onMove={(from, to) => { const ids = plan.phases.map(p => p.id), source = ids.indexOf(from), target = ids.indexOf(to); if (source < 0 || target < 0) return; ids.splice(source, 1); ids.splice(target, 0, from); command('Reorder phases', { type: 'order', phaseIds: ids }); }}><View testID={`plan-phase-${phase.id}`} style={{ borderLeftWidth: phase.state === 'current' ? 3 : 1, borderLeftColor: phase.state === 'current' ? appearance?.secondaryBorder ?? colors.accent : colors.border, paddingLeft: 12, gap: 8, paddingVertical: 8 }}>
-          <ProjectHeader title={`${index + 1}. ${phase.name}`} summary={gate.label} expanded={expanded} label={`Phase ${phase.name}, ${gate.label}`} onPress={() => pref(key, expanded)} />
+          <ProjectHeader focusRef={node => { if (node) phaseHeaders.current.set(phase.id, node); else phaseHeaders.current.delete(phase.id); }} title={`${index + 1}. ${phase.name}`} summary={gate.label} expanded={expanded} label={`Phase ${phase.name}, position ${index + 1} of ${plan.phases.length}, ${gate.label}`} onPress={() => pref(key, expanded)} />
           <Muted>{gate.total ? `${gate.done} of ${gate.total} required tasks complete` : 'No required tasks'}{phase.targetDate ? ` · Target ${phase.targetDate}` : ''}</Muted>
           <Muted>{milestone ? `◇ ${milestone.title} · ${milestoneState(data.tasks, milestone).label}` : gate.ready ? gate.empty ? 'No required work; explicit advancement only' : 'Required work complete' : `${gate.blockers.length} unfinished requirements`}</Muted>
           {expanded ? <>
@@ -89,6 +93,6 @@ export function ProjectPlanView({ project, initialView, onReopenProject }: { pro
       <Action label="Plan transition history" expanded={!(preferences.collapsed[`Plan:history:${project.id}`] ?? true)} onPress={() => pref(`Plan:history:${project.id}`, !(preferences.collapsed[`Plan:history:${project.id}`] ?? true))} />
       {preferences.collapsed[`Plan:history:${project.id}`] === false ? plan.history.map(t => <Muted key={t.id}>{t.at.slice(0, 16).replace('T', ' ')} · {plan.phases.find(p => p.id === t.phaseId)?.name ?? t.phaseName ?? project.name}: {t.from} → {t.to} · {t.cause}</Muted>) : null}
     </>}
-    {editor ? <PlanEditorDialog project={editor.project} initialData={editor.data} request={editor.request} returnFocusRef={focusRef} onClose={() => { if (editor.request.kind === 'create') changeView('plan'); setEditor(undefined); }} /> : null}
+    {editor ? <PlanEditorDialog project={editor.project} initialData={editor.data} request={editor.request} returnFocusRef={returnFocusRef} onClose={() => { if (editor.request.kind === 'create') changeView('plan'); setEditor(undefined); }} /> : null}
   </View>;
 }

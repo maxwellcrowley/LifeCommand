@@ -6,7 +6,7 @@ const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { Buffer } = require('node:buffer');
 const productMode = false, settingsMode = false;
-const root = resolve('.test-build/project-plans-export');
+const root = resolve(process.env.ACCEPTANCE_EXPORT_DIR || '.test-build/project-plans-export');
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const server = createServer((req, res) => {
   let file = resolve(root, '.' + new URL(req.url, 'http://local').pathname);
@@ -55,6 +55,10 @@ async function main() {
   const { persistedSnapshot } = require('../.test-build/src/domain/migrations.js');
   const { data, today } = require('./project-plan-fixture.cjs').fixture();
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `if(location.origin===${JSON.stringify(origin)}&&!sessionStorage.getItem('section-fixture')) {localStorage.setItem('lifecommand:data:v1',${JSON.stringify(JSON.stringify(persistedSnapshot(data, 1)))}); sessionStorage.setItem('section-fixture','yes');}` });
+  if (process.env.ACCEPTANCE_REORDER === '1') {
+    await require('./android-reorder-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause, data, today });
+    return;
+  }
   await require('./project-plan-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause, data, today });
   await require('./project-plan-reopen-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause });
   await require('./project-plan-create-workflow.cjs').run({ send, evaluate, ready, click, fill, go, snap, shot, pause });

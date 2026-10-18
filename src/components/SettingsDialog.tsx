@@ -1,13 +1,13 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, KeyboardAvoidingView, Modal, Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../theme/ThemeProvider';
 import { AppText } from './AppText';
 
 // RN Modal supplies web focus containment/Escape handling; only the body scrolls.
-export function SettingsDialog({ title, children, footer, onClose, onShow, returnFocusRef, maxWidth = 680 }: {
+export function SettingsDialog({ title, children, footer, onClose, onShow, returnFocusRef, restoreAccessibilityFocus = false, maxWidth = 680 }: {
   maxWidth?: number; title: string; children: ReactNode; footer: ReactNode; onClose: () => void;
-  onShow?: () => void; returnFocusRef?: RefObject<View | null>;
+  restoreAccessibilityFocus?: boolean; onShow?: () => void; returnFocusRef?: RefObject<View | null>;
 }) {
   const { colors } = useAppTheme();
   const { width } = useWindowDimensions();
@@ -22,8 +22,8 @@ export function SettingsDialog({ title, children, footer, onClose, onShow, retur
   }, [title]);
   useEffect(() => {
     const target = returnFocusRef?.current;
-    return () => { if (target) setTimeout(() => target.focus(), 0); };
-  }, [returnFocusRef]);
+    return () => { if (target) setTimeout(() => { target.focus(); if (restoreAccessibilityFocus && Platform.OS !== 'web') AccessibilityInfo.sendAccessibilityEvent(target, 'focus'); }, 0); };
+  }, [returnFocusRef, restoreAccessibilityFocus]);
   return <Modal visible transparent animationType="none" onRequestClose={onClose} onShow={onShow}>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined} style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', paddingTop: insets.top + (phone ? 0 : 20), paddingBottom: insets.bottom + (phone ? 0 : 20), paddingLeft: insets.left + (phone ? 0 : 20), paddingRight: insets.right + (phone ? 0 : 20) }}>
       <View accessibilityViewIsModal accessibilityLabel={title} testID="settings-dialog" style={{ alignSelf: 'center', width: '100%', maxWidth, height: phone ? '100%' : '90%', maxHeight: phone ? undefined : 880, backgroundColor: colors.surface, borderRadius: phone ? 0 : 20, overflow: 'hidden' }}>

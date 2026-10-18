@@ -36,7 +36,7 @@ exports.run = async ({ send, evaluate, ready, click, fill, go, snap, shot, pause
   await click('Approve milestone: Accessibility review'); await confirm();
   await click('Complete phase: Discover'); await confirm(); await saved(d => d.projects[0].plan.phases[1].state === 'current');
   assert.equal((await snap()).tasks.find(t => t.id === 'garden-task-2').status, 'backlog', 'optional work retained');
-  await click('Phase Discover, Complete'); await click('Reopen phase: Discover'); await click('Review plan changes'); await ready('Later phases return to Upcoming'); await click('Confirm plan changes');
+  await click('Phase Discover, position 1 of 3, Complete'); await click('Reopen phase: Discover'); await click('Review plan changes'); await ready('Later phases return to Upcoming'); await click('Confirm plan changes');
   await saved(d => d.projects[0].plan.phases[0].state === 'current');
   await desktop(); await plan(); await shot('desktop-dark-plan');
   await click('Edit phase: Discover'); await click('Phase progression options'); await click('Phase progression: When required work is complete'); await click('Review plan changes'); await ready('Immediate effect: Garden studio: Discover complete; Build is now current'); await shot('desktop-dark-rule-preview'); await click('Confirm plan changes'); await savedDialog();
@@ -47,7 +47,7 @@ exports.run = async ({ send, evaluate, ready, click, fill, go, snap, shot, pause
   assert.equal((await snap()).projects.find(p => p.id === 'ordinary-project').plan.started, false, 'draft did not start');
   await click('Review and start plan'); await confirm(); await saved(d => d.projects.find(p => p.id === 'ordinary-project').plan.started);
   await go('/project/ordinary-project?view=plan', 'Choose'); assert.equal((await snap()).projects.find(p => p.id === 'ordinary-project').plan.phases.filter(p => p.state === 'current').length, 1);
-  await click('Phase Reflect, Upcoming'); await click('Move phase Reflect up'); await confirm();
+  await click('Phase Reflect, position 3 of 3, Upcoming'); await click('Move phase Reflect up'); await confirm();
   await saved(d => d.projects.find(p => p.id === 'ordinary-project').plan.phases[1].name === 'Reflect');
   const ordered = (await snap()).projects.find(p => p.id === 'ordinary-project').plan.phases;
   await evaluate(`(() => { const from=document.querySelector('[data-testid="plan-phase-${ordered[1].id}"]').closest('[draggable="true"]'), to=document.querySelector('[data-testid="plan-phase-${ordered[2].id}"]').closest('[draggable="true"]'); const transfer=new DataTransfer(); from.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer})); to.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer})); })()`);

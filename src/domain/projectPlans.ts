@@ -210,12 +210,18 @@ export function previewPlanCommand(data: AppData, projectId: string, token: stri
 
 export function transitionSummary(before: AppData, after: AppData): string {
   return after.projects.flatMap(p => {
+    const previousPhases = before.projects.find(item => item.id === p.id)?.plan?.phases;
+    const phases = p.plan?.phases;
+    const reordered = previousPhases && phases && previousPhases.length === phases.length &&
+      phases.every(phase => previousPhases.some(old => old.id === phase.id)) &&
+      phases.some((phase, index) => previousPhases[index].id !== phase.id);
+    const orderSummary = reordered ? [`${p.name}: phase order saved. ${phases.map((phase, index) => `${phase.name}: position ${index + 1} of ${phases.length}`).join('; ')}`] : [];
     const old = before.projects.find(item => item.id === p.id)?.plan?.history ?? [];
     const added = p.plan?.history.filter(t => !old.some(o => o.id === t.id)) ?? [];
-    return added.filter(t => t.to === 'current' || (!t.phaseId && t.to === 'complete')).map(t => {
+    return [...orderSummary, ...added.filter(t => t.to === 'current' || (!t.phaseId && t.to === 'complete')).map(t => {
       const completed = added.slice(0, added.indexOf(t)).reverse().find(item => item.phaseId && item.to === 'complete');
       const prefix = completed ? `${completed.phaseName ?? p.plan!.phases.find(phase => phase.id === completed.phaseId)?.name ?? 'Phase'} complete; ` : '';
       return t.phaseId ? `${p.name}: ${prefix}${p.plan!.phases.find(phase => phase.id === t.phaseId)?.name ?? 'phase'} is now current` : `${prefix}${p.name} is complete`;
-    });
+    })];
   }).join('. ');
 }

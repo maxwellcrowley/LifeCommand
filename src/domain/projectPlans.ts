@@ -1,5 +1,5 @@
 import type { AppData, PlanTransition, Project, ProjectMilestone, ProjectPhase, ProjectPlan } from './models';
-import { currentPhase, finiteTask, milestoneState, phaseReadiness, planToken, projectBlockers } from './planState';
+import { currentPhase, finiteTask, milestoneState, phaseAdditionBlocker, phaseReadiness, planToken, projectBlockers } from './planState';
 import { validatePlanReferences } from './planValidation';
 
 export const newPlanId = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -49,6 +49,10 @@ export type PlanCommand =
 
 export function applyPlanCommand(data: AppData, projectId: string, expected: string, command: PlanCommand, now = new Date()): AppData {
   const project = data.projects.find(p => p.id === projectId);
+  if (project && command.type === 'phase' && !project.plan?.phases.some(p => p.id === command.phase.id)) {
+    const blocker = phaseAdditionBlocker(project);
+    if (blocker) throw Error(blocker);
+  }
   if (!project || planToken(data, project) !== expected) throw Error('This project or its tasks changed. Reload the plan and review the consequences again.');
   if (command.type === 'create') {
     if (project.plan) throw Error('This project already has a plan.');

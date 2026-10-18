@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppData, Project } from '../domain/models';
-import { currentPhase, milestoneState, nextMilestone, phaseReadiness, planNotices, projectBlockers } from '../domain/planState';
+import { currentPhase, milestoneState, nextMilestone, phaseAdditionBlocker, phaseReadiness, planNotices, projectBlockers } from '../domain/planState';
 import { useAppData } from '../data/useAppData';
 import { useDevicePreferences } from '../data/DevicePreferences';
 import { useAppTheme } from '../theme/ThemeProvider';
@@ -39,6 +39,8 @@ export function ProjectPlanView({ project, initialView }: { project: Project; in
   const open = (request: PlanEditorRequest) => setEditor({ request, data, project });
   const pref = (key: string, value: boolean) => void save({ collapsed: { [key]: value } }).catch(e => setError(String(e)));
   const plan = project.plan;
+  const addPhaseBlocker = phaseAdditionBlocker(project);
+  const reopenPhase = plan?.started ? [...plan.phases].reverse().find(p => p.state === 'complete') : undefined;
   const command = (title: string, action: NonNullable<PlanEditorRequest['command']>) => open({ kind: 'command', command: action, title });
   const addTask = (phaseId?: string) => router.push({ pathname: '/(tabs)/capture', params: { project: project.id, phase: phaseId ?? '', section: project.sectionId ?? '', selection: `${project.updatedAt}:${data.tasks.length}` } });
   const changeView = (value: string) => { setView(value); pref(viewKey, value === 'plan'); };
@@ -48,7 +50,8 @@ export function ProjectPlanView({ project, initialView }: { project: Project; in
     {error ? <FormError>{error}</FormError> : null}
     {view === 'tasks' || !plan ? <ProjectTasks project={project} /> : <>
       <Muted>{!plan.started ? 'Draft plan' : currentPhase(project) ? `${currentPhase(project)!.name} · Phase ${plan.phases.findIndex(p => p.state === 'current') + 1} of ${plan.phases.length}` : 'All phases complete'} · {plan.automaticCompletion ? 'Automatic final completion enabled' : 'Final completion by confirmation'}</Muted>
-      <Row><Action label="Add phase" onPress={() => open({ kind: 'phase' })} /><Action label="Edit plan" onPress={() => open({ kind: 'settings' })} /><Action label="Assign or move project tasks" text="Assign tasks" onPress={() => open({ kind: 'assign' })} /></Row>
+      <Row>{!addPhaseBlocker ? <Action label="Add phase" onPress={() => open({ kind: 'phase' })} /> : null}<Action label="Edit plan" onPress={() => open({ kind: 'settings' })} /><Action label="Assign or move project tasks" text="Assign tasks" onPress={() => open({ kind: 'assign' })} /></Row>
+      {addPhaseBlocker ? <View style={{ gap: 6 }}><Muted>{addPhaseBlocker} {reopenPhase ? 'Reopen a completed phase to resume the project; saved work and history are kept.' : 'Set the project to Active in Project details.'}</Muted>{reopenPhase ? <Action label="Reopen project to add phases" text={`Reopen ${reopenPhase.name}`} onPress={() => command('Reopen phase', { type: 'reopen', phaseId: reopenPhase.id })} /> : null}</View> : null}
       {!plan.enabled ? <Muted>Plan disabled. Its structure and history are kept. Enable it in Edit plan to resume gates.</Muted> : !plan.started ? <><Muted>Draft plan · assign tasks and add milestones below, then review and start. Saving a draft does not start or complete the project.</Muted><Action primary label="Review and start plan" onPress={() => command('Start project plan', { type: 'start' })} /></> : null}
       {project.status === 'paused' ? <Muted>Project paused. Resume it in Project details before advancing; task work remains available.</Muted> : null}
       {notices.some(n => n.includes('unfinished requirements')) ? <View style={{ gap: 6 }}>{notices.filter(n => n.includes('unfinished requirements')).map(notice => <Muted key={notice}>{notice}</Muted>)}</View> : null}

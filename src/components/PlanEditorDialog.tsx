@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pressable, Switch, TextInput, View, type View as NativeView } from 'react-native';
 import type { AppData, Project, ProjectMilestone, ProjectPhase } from '../domain/models';
-import { currentPhase, finiteTask, milestoneState, planToken, projectBlockers } from '../domain/planState';
+import { currentPhase, finiteTask, milestoneState, phaseAdditionBlocker, planToken, projectBlockers } from '../domain/planState';
 import { newPhase, newPlanId, previewPlanCommand, transitionSummary, type PlanCommand } from '../domain/projectPlans';
 import { useAppData } from '../data/useAppData';
 import { useAppTheme } from '../theme/ThemeProvider';
@@ -31,6 +31,7 @@ export function PlanEditorDialog({ project, initialData, request, onClose, retur
   const guard = useUnsavedChanges(dirty || saving, true);
   const token = planToken(initialData, project), latest = data?.projects.find(p => p.id === project.id);
   const stale = !latest || !data || token !== planToken(data, latest);
+  const addPhaseBlocker = request.kind === 'phase' && !request.phase && latest ? phaseAdditionBlocker(latest) : undefined;
   const close = () => { if (busy.current) return; if (preview) setPreview(undefined); else if (dirty) setDiscard(true); else onClose(); };
   const change = (operation: () => void) => { setDirty(true); setError(''); operation(); };
   const fieldStyle = { color: colors.text, backgroundColor: colors.background, minHeight: 48, padding: 12, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: colors.border };
@@ -79,7 +80,7 @@ export function PlanEditorDialog({ project, initialData, request, onClose, retur
   const discarding = discard || guard.pending;
   const title = discarding ? 'Discard plan changes?' : preview ? 'Review plan changes' : request.title ?? ({ create: 'Add project plan', settings: 'Edit plan', phase: request.phase ? 'Edit phase' : 'Add phase', milestone: request.milestone ? 'Edit milestone' : 'Add milestone', assign: 'Assign project tasks', 'delete-phase': 'Delete phase', command: 'Review transition' })[request.kind];
   return <SettingsDialog title={title} onShow={() => nameRef.current?.focus()} returnFocusRef={returnFocusRef} onClose={close} footer={<>
-    {stale ? <FormError>The project or a task changed. Close and reopen to review the latest state.</FormError> : null}{error ? <FormError>{error}</FormError> : null}
+    {addPhaseBlocker ? <FormError>{`${addPhaseBlocker} Your phase draft is kept in this editor. Copy any details you need before closing, then use Reopen phase in Plan.`}</FormError> : stale ? <FormError>The project or a task changed. Close and reopen to review the latest state.</FormError> : null}{error ? <FormError>{error}</FormError> : null}
     {discarding ? <Row><Action label="Keep editing plan" disabled={saving} onPress={() => { setDiscard(false); guard.keepEditing(); }} /><Action label="Discard plan changes" danger disabled={saving} onPress={() => { if (guard.pending) guard.discard(); else { guard.allowLeave(); onClose(); } }} /></Row> : <Row><Action label={preview ? 'Back to plan editing' : 'Cancel plan edit'} text={preview ? 'Back' : 'Cancel'} disabled={saving} onPress={close} /><Action primary label={preview ? 'Confirm plan changes' : 'Review plan changes'} text={saving ? 'Saving…' : preview ? 'Confirm changes' : 'Review changes'} disabled={saving || stale} onPress={preview ? () => void save() : review} /></Row>}
   </>}>
     {discarding ? <Muted>Discard the unsaved changes in this editor?</Muted> : preview ? <>

@@ -1,5 +1,39 @@
 # Optional project plans — delivery
 
+## Independent review correction (2026-10-18)
+
+The review of `162df91..9eb549b` found that Add phase remained visible after
+finishing a project, although adding an Upcoming phase to an all-complete started
+plan violates the one-Current-phase invariant. The correction hides Add phase for
+completed projects/all-complete plans and explains that the project must first be
+reopened. A nearby action opens the existing explicit Reopen phase confirmation
+for the last completed phase; individual phase reopen actions remain available.
+The shared availability check also guards commands, including stale submissions.
+No implicit reopening or validation relaxation was introduced.
+
+If accepted cloud data completes the project while Add phase is open, its draft
+stays in the editor with actionable guidance and disabled submission. Closing is
+still subject to the dirty-draft confirmation; the message explains copying any
+needed details before closing. The draft is not persisted across closing/reload.
+
+Fresh correction checks in the clean isolated feature checkout: 398 tests passed
+(29 project-plan tests included), typecheck and lint passed, web export passed,
+and the disposable browser workflow passed. New phone (390x844) and desktop
+(1440x1000) cases start/finish a one-phase plan, verify hidden Add phase, explicitly
+reopen and add a phase, then accept a completed cloud snapshot with an open draft.
+The latter invokes the mounted provider's production acceptCloud path using
+test-only React inspection, without adding an application test hook.
+Screenshots under ignored `.test-build/project-plans-` have suffixes
+`phone-completed-reopen`, `desktop-completed-reopen`, `phone-reopened-add-phase`,
+`desktop-reopened-add-phase`, `phone-add-phase-sync-draft`, and
+`desktop-add-phase-sync-draft`. Completed phone/desktop and phone stale-editor
+captures were visually inspected. The initial sandbox browser attempt timed out
+connecting to DevTools; the approved isolated rerun passed.
+
+Expo patch alignment is a separate follow-up commit. Native/device, assistive
+technology, notification delivery and live two-device acceptance remain pending.
+This correction is prepared for independent re-review, not self-approval.
+
 Latest completion verification and the maintenance/progression correction are in
 [PROJECT_PLANS_COMPLETION.md](PROJECT_PLANS_COMPLETION.md). The October 12 results
 below are retained receipts; the fresh suite has 396 passing tests.

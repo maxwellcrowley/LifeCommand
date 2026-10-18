@@ -4,6 +4,13 @@ export const finiteTask = (task: Task) => !task.recurrenceId;
 export const requiredTask = (task: Task) => finiteTask(task) && task.planRequired !== false;
 export const currentPhase = (project: Project) => project.plan?.enabled && project.plan.started ? project.plan.phases.find(p => p.state === 'current') : undefined;
 
+export function phaseAdditionBlocker(project: Project): string | undefined {
+  const plan = project.plan;
+  if (project.status === 'complete' || (plan?.started && plan.phases.length > 0 && plan.phases.every(p => p.state === 'complete'))) {
+    return 'Reopen the project before adding phases.';
+  }
+}
+
 export function milestoneState(tasks: Task[], milestone: ProjectMilestone) {
   const linked = milestone.taskIds.map(id => tasks.find(t => t.id === id));
   const invalid = milestone.taskIds.filter((_, i) => !linked[i] || linked[i]!.projectId !== milestone.projectId || linked[i]!.phaseId !== milestone.phaseId || !finiteTask(linked[i]!) || linked[i]!.status === 'archived');

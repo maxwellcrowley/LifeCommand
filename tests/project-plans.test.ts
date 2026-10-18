@@ -5,7 +5,7 @@ import { createDefaultAppData } from '../src/domain/defaults';
 import { createProject, changeProject, getProjectNextTask, getProjectProgress } from '../src/domain/projects';
 import { createTask, changeTask, deleteTask } from '../src/domain/tasks';
 import { applyPlanCommand, draftPlan, previewPlanCommand, reconcilePlans, type PlanCommand } from '../src/domain/projectPlans';
-import { assertPlanTokens, nextMilestone, milestoneState, phaseReadiness, planToken, projectBlockers, planNotices } from '../src/domain/planState';
+import { assertPlanTokens, nextMilestone, milestoneState, phaseAdditionBlocker, phaseReadiness, planToken, projectBlockers, planNotices } from '../src/domain/planState';
 import { createExport, validateImport, validateSnapshot } from '../src/domain/transfer';
 import { migrateSnapshot, persistedSnapshot } from '../src/domain/migrations';
 import { createRepository, STORAGE_KEY } from '../src/data/storage';
@@ -37,6 +37,40 @@ const done = (data: AppData, id: string) => reconcilePlans(data, changeTask(data
 const finishPhaseTasks = (data: AppData, index: number) => data.tasks.filter(t => t.phaseId === `phase-${index}` && t.planRequired !== false).reduce((d, t) => done(d, t.id), data);
 const milestone = (patch: Partial<ProjectMilestone> = {}): ProjectMilestone => ({ id: 'gate', projectId: 'planned', phaseId: 'phase-0', title: 'Scope agreed', type: 'tasks', taskIds: ['work-0', 'work-1'], required: true, history: [], ...patch });
 const memory = (data: AppData) => { const values = new Map([[STORAGE_KEY, JSON.stringify(persistedSnapshot(data, 1))]]); return { values, getItem: async (key: string) => values.get(key) ?? null, setItem: async (key: string, value: string) => { values.set(key, value); }, getAllKeys: async () => [...values.keys()], removeItem: async (key: string) => { values.delete(key); } }; };
+
+test('completed project requires explicit phase reopening before adding work, preserving tasks and history', () => {
+  let data = planFixture(); p(data).plan!.phases = [phases()[0]];
+  data.tasks = data.tasks.filter(t => t.phaseId === 'phase-0');
+  data = run(data, { type: 'start' }); data = finishPhaseTasks(data, 0); data = run(data, { type: 'finish' });
+  const before = structuredClone(data);
+  const command: PlanCommand = { type: 'phase', phase: { ...phases()[1], name: 'Follow-up' } };
+  assert.match(phaseAdditionBlocker(p(data))!, /Reopen the project/);
+  assert.throws(() => run(data, command), /Reopen the project before adding phases/);
+  assert.deepEqual(data, before);
+  // All-complete plans still need explicit phase reopening even if status was resumed separately.
+  assert.ok(phaseAdditionBlocker({ ...p(data), status: 'active' }));
+  data = run(data, { type: 'reopen', phaseId: 'phase-0' });
+  assert.equal(phaseAdditionBlocker(p(data)), undefined);
+  data = run(data, command);
+  assert.equal(p(data).status, 'active');
+  assert.deepEqual(p(data).plan!.phases.map(p => p.state), ['current', 'upcoming']);
+  assert.deepEqual(data.tasks, before.tasks);
+  assert.deepEqual(p(data).plan!.history.slice(0, p(before).plan!.history.length), JSON.parse(JSON.stringify(p(before).plan!.history)));
+  assert.doesNotThrow(() => validateSnapshot(data));
+});
+
+test('cloud completion rejects a pending Add phase with actionable guidance and no overwrite', async () => {
+  let data = planFixture(); p(data).plan!.phases = [phases()[0]]; data.tasks = [];
+  data = run(data, { type: 'start' });
+  const repository = createRepository(memory(data)); const local = await repository.loadAppData();
+  const token = planToken(local, p(local));
+  const draft: PlanCommand = { type: 'phase', phase: { ...phases()[1], name: 'Retained phase draft' } };
+  const completed = run(local, { type: 'finish' });
+  const accepted = await repository.applyCloudData(completed, fingerprint(local));
+  await assert.rejects(repository.changeAppData(current => applyPlanCommand(current, 'planned', token, draft)), /Reopen the project before adding phases/);
+  assert.equal(draft.phase.name, 'Retained phase draft');
+  assert.deepEqual(await repository.loadAppData(), accepted);
+});
 
 test('ordinary project lifecycle stays unchanged; draft creation and assignment preserve dates and status', () => {
   const data = planFixture(); delete p(data).plan;

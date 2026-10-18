@@ -6,10 +6,11 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { ThemeProvider } from '@/src/theme/ThemeProvider';
+import { ThemeProvider, useAppTheme } from '@/src/theme/ThemeProvider';
 import { AppDataProvider, useAppData } from '@/src/data/useAppData';
 import { DevicePreferencesProvider } from '@/src/data/DevicePreferences';
 import { NotificationProvider } from '@/src/notifications/NotificationProvider';
@@ -58,8 +59,9 @@ function RootLayoutNav() {
 
 function ApplicationFeedback() {
   const { externalChange, error, retry, feedback, undoLabel } = useAppData();
+  const { colors } = useAppTheme(), insets = useSafeAreaInsets();
   return <>
-    {feedback || undoLabel ? <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 76 }}><View pointerEvents="auto" style={{ alignSelf: 'center', width: '100%', maxWidth: 540 }}><UndoFeedback /></View></View> : null}
+    {feedback || undoLabel ? <View testID="application-feedback" style={{ maxHeight: '30%', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: insets.bottom }}><ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' }}><View style={{ width: '100%', maxWidth: 540 }}><UndoFeedback /></View></ScrollView></View> : null}
     <LocalDataChanged visible={externalChange} error={error} onReload={() => void retry()} />
   </>;
 }

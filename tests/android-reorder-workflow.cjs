@@ -24,6 +24,7 @@ exports.run = async ({ send, evaluate, ready, click, go, snap, shot, pause }) =>
     await until(() => evaluate(`Array.from(document.querySelectorAll('[aria-live="polite"]')).some(e => e.textContent.includes('Build: position 3 of 3'))`), 'AX-ORDER: saved position is not announced');
     await until(() => evaluate(`document.activeElement?.getAttribute('aria-label')?.startsWith('Phase Build, position 3 of 3,')`), 'AX-ORDER: focus did not return to moved phase');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Move phase Build down"]').getAttribute('aria-disabled')`), 'true');
+    assert.equal(await evaluate(`(() => { const message = [...document.querySelectorAll('[aria-live="polite"]')].find(e => e.textContent.includes('Build: position 3 of 3')); const r = message.getBoundingClientRect(); return document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2).some(e => e.closest('[data-testid^="plan-phase-"]')); })()`), false, 'AX-FEEDBACK: feedback overlaps phase content');
     await shot(`acceptance-reorder-${width}`);
     // Return to the original order through the same confirmed action, so each viewport tests a real save.
     await click('Move phase Build up'); await ready('Reorder phase');

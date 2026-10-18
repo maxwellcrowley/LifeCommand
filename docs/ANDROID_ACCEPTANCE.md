@@ -15,8 +15,8 @@ a separate disposable account B. Do not send passwords/tokens to a transcript.
   Existing feature/integration worktrees, reconciliation backup, stash and
   preservation reference are retained. No owner configuration or data was used.
 - Application correction: `45f7419` (phase position feedback/focus). Simulated
-  conflict/recovery regressions: `89f4735`. Later acceptance-document/harness
-  commits do not change application, dependencies or native configuration.
+  conflict/recovery regressions: `89f4735`. A second accessibility correction moves feedback out of the screen overlay
+  (AX-FEEDBACK below). No dependency or native configuration changes.
 - EAS read-only query freshly verified build
   [a6930ff0-ab78-4e32-9887-1c8b29e9165e](https://expo.dev/accounts/crowleymh/projects/LifeCommand/builds/a6930ff0-ab78-4e32-9887-1c8b29e9165e)
   is FINISHED, Android preview, version 1.0.0/build 1, Git commit `8ebca3b`.
@@ -94,19 +94,29 @@ pauses remain input pacing; assertions wait on observable state. Initial failure
 are retained even though later runs pass; screenshot capture happens after
 assertions, so it cannot replace the original assertion failure.
 
+**AX-FEEDBACK:** inspection of the 390px screenshot found the existing floating
+feedback text overlapping phase content. A hit-testing assertion reproduced the
+overlap (`acceptance-overlap-before.log`, true instead of false). Feedback now
+occupies a separate themed area below navigation, bounded to 30% of the window
+with scrolling for longer messages and bottom safe-area padding. It no longer
+covers the task/project screen. The same browser assertion and screenshot pass
+at phone/desktop widths. Largest native font/display settings and TalkBack remain
+blocked. This shared layout change triggered another full suite and all-platform
+export run, plus the existing browser workflows.
+
 ## Fresh automated results
 
 | Case / evidence | Preconditions and action | Expected / observed | Status and scope |
 |---|---|---|---|
 | AX-ORDER, `acceptance-before-unit.log`, `acceptance-before-browser-2.log` | Baseline application, three-phase synthetic plan; confirm Move down | Saved order must produce position feedback; summary/live region absent | Failed before correction; domain/browser |
-| AX-ORDER, `acceptance-reorder-final.log`, `project-plans-acceptance-reorder-390.png`, `…-1280.png` | Corrected final application export; confirm down/up at both widths | Stored order, unchanged history, announced position, header focus and disabled boundary match | Passed browser; TalkBack blocked |
+| AX-ORDER, `acceptance-reorder-layout-final.log`, `project-plans-acceptance-reorder-390.png`, `…-1280.png` | Corrected final application export; confirm down/up at both widths | Stored order, unchanged history, announced position, header focus and disabled boundary match | Passed browser; TalkBack blocked |
 | OFF-CONFLICT × four variants, `acceptance-offline-final.log` | Two distinct persistent stores; same or different tasks edited offline; restart; reconnect A-first/B-first | First accepted snapshot retained; second conflicts with exact local bytes intact; explicit download converges and backup retains losing edit | Passed simulated repository/CAS integration |
 | OFF-RETRY, same log | Complete finite gate; injected connection loss after cloud commit; restart and retry twice | One accepted upload, one transition to next current phase, unchanged history, no pending acknowledgment | Passed simulated integration |
 | REC-FAIL, same log | Restore backup with injected active-key write failure, retry, then newer cloud; invalid/truncated import | Active bytes/backup unchanged on failure; retry restores; newer cloud conflicts; invalid input preserves active bytes | Passed simulated integration |
-| Existing project workflows, `acceptance-project-browser-final.log` | Existing 34-task fixture; gates, assignment, reopen, draft creation, accepted completion before/after review | Saved state protected; mounted drafts retained; invalid creation blocked; normal create/reopen valid | Passed browser, phone/desktop and light/dark; no native claim |
-| Full suite, `acceptance-full-suite.log` | Final application code and seven new regression cases | 407 passed, 0 failed/skipped | Passed unit/domain and mocked/simulated integration |
-| Typecheck/lint, `acceptance-typecheck.log`, `acceptance-lint.log` | Final candidate | Both exit 0 | Passed |
-| Exports, `acceptance-platform-exports.log` | SDK 57 production JS export, no dotenv | Web, Android, iOS export exit 0 | Passed JS bundling; not native compilation |
+| Existing project workflows, `acceptance-project-layout-final.log` | Existing 34-task fixture; gates, assignment, reopen, draft creation, accepted completion before/after review | Saved state protected; mounted drafts retained; invalid creation blocked; normal create/reopen valid | Passed browser, phone/desktop and light/dark; no native claim |
+| Full suite, `acceptance-full-suite-final.log` | Final application code and seven new regression cases | 407 passed, 0 failed/skipped | Passed unit/domain and mocked/simulated integration |
+| Typecheck/lint, `acceptance-typecheck-final.log`, `acceptance-lint-final.log` | Final candidate | Both exit 0 | Passed |
+| Exports, `acceptance-platform-exports-final.log` | SDK 57 production JS export, no dotenv | Web, Android, iOS export exit 0 | Passed JS bundling; not native compilation |
 | Compatibility, `acceptance-compatibility-network.log`; Doctor, `acceptance-doctor.log` | Existing unchanged manifest/lock | Compatibility exit 0; Doctor 21/21 | Passed; first restricted-network compatibility attempt failed EACCES, retained in `acceptance-compatibility.log` |
 | Private config loading | `expo config --json`, no dotenv, output kept private | Exit 0 | Passed config loading; no credential values printed |
 | Decoder, `acceptance-decoder.log` | Independent child process per installed parser, 3-second host timeout | Decoder/fallback timed out and child terminated; Expo helper exit 0 | Diagnostic passed expected assertions; vulnerability/native applicability not resolved |
@@ -304,3 +314,21 @@ entry/background isolation/focus return, reorder position announcement, Dynamic
 Type maximum/accessibility sizes, contrast, keyboard and orientation. Verify
 native signing/entitlements and installed artifact identity separately. Android
 or JavaScript-export results do not establish any iOS acceptance.
+
+
+## Candidate build preparation
+
+Both required EAS preview variables were checked by a fresh **names-only** query:
+`EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are present at
+project scope. No values were queried or printed. Preview remains internal APK,
+with existing application ID/signing and frozen credentials.
+
+The first preview submission, `baf25f55-9c9c-46bd-9743-33b13ce66c7e`, used
+`f4ddb556cbec87d786738d9e9fb3bb3c0a4ecc6b`. Screenshot inspection subsequently found
+AX-FEEDBACK, so that superseded build was canceled (CLI exit 0). Do not install
+it as the final acceptance candidate. The replacement is recorded below.
+
+Owner master remained clean at `223a5124eb9b036f172060c744560eda566d2c1a` on final
+inspection; existing feature HEAD `8ebca3b`, preservation stash/ref
+`4fd148d1e48ca3f32fd3bff2e17bff40d5e495f9` and the external preservation directory
+remain available. No unfinished work was committed and no master push occurred.

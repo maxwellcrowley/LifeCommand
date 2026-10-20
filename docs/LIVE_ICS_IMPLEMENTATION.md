@@ -33,12 +33,18 @@ Executable transport tests use a TLS server bound to test-owned loopback port 44
 | Components / recurrence iterations / published events | 10,000 / 20,000 / 5,000 |
 | Published snapshot | 2 MiB serialized events |
 | Owner connections / outbound attempts | 10 / 10 per minute, database enforced |
-| Owner API requests | 120 per minute, database enforced |
+| Owner API requests | 120 per minute; independent committed admission after verified authentication |
 | Concurrent provider work | 16 database lease slots across instances; 64 HTTP requests per instance |
 | Lease / manual cooldown | 40 seconds / 60 seconds |
 | Failure backoff | exponential 60 seconds to 1 hour |
 
 Limits are named in `transport.mjs`, `parser.mjs`, `ics.ts`, `service.mjs` and the migration. Changing them requires review/tests and coordinated database slot changes; they are deliberately not remotely user-configurable. Reverse proxy limits must be at least as restrictive for ingress. Container memory/pid limits additionally bound parser processes. If a lease expires, a new token can take over; old work cannot publish. Disconnect cascades secrets/cache removal and records a private idempotency tombstone. Failed first connections are not listed; abandoned initial leases are collected on later creation.
+
+Authenticated admission covers recognized `/v1/calendars` list/create/edit/refresh/replace/delete routes, including subsequent malformed-body, validation, stale-write, missing-record and cooldown failures. After the fixed Supabase authority verifies identity, the HTTP boundary calls `service.admit(owner)` exactly once before reading/validating the body. It commits the request counter independently of the business operation. Direct internal service operations do not count a second admission; new authenticated HTTP entry points must use the same boundary. OPTIONS, CORS-rejected/unrecognized paths and failed authentication do not consume this authenticated allowance. Ingress protections are still required for all pre-authentication costs.
+
+Admission uses the existing private budgets table, an owner advisory transaction lock and a conditional atomic update against the PostgreSQL clock. Windows reset after 60 seconds, with no JavaScript clock decision. Exhaustion returns HTTP 429 `rate_limited` and a database-derived `Retry-After`; lock/statement timeouts fail closed with 503 and no business/provider work. Admission lock wait is capped at 1 second, each statement at 2 seconds; the production pool retains its 5-second connection wait, max 20 connections and the server max 64 active requests. Keep replica counts within the database connection budget. Separate fetch accounting remains in the coordination transaction and permits at most 10 provider attempts per owner/minute; failed business validation cannot refund admitted API requests.
+
+No accounting migration or new privileges are required: deploy the corrected server/service together against the existing additive migration. Backend tests run serially across files so their shared disposable DB resets cannot race; tests still exercise independent concurrent service instances inside the admission case.
 
 Refresh captures owner, connection, generation and lease. Publishing checks them in a row-lock transaction and atomically replaces events, validators, secret and success metadata. URL replacement validates before switching, keeps the prior cache/secret on failure, and uses a new generation. Active/cooldown work can require retry before replacement. An older worker cannot overwrite or resurrect anything. ETag/Last-Modified are private; conditional headers are omitted when coverage changes and on redirects. A 304 is useful only with the corresponding cache/coverage; otherwise an unconditional retry must return a valid snapshot. Failure never clears the last good snapshot; a valid empty VCALENDAR may do so.
 

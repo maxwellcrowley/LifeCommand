@@ -16,27 +16,53 @@ function metadata(body) {
 export function createService({ pool, box, transport = fetchFeed, parser = parseFeed }) {
   const transaction = async fn => { const c = await pool.connect(); try { await c.query('begin'); const r = await fn(c); await c.query('commit'); return r; } catch (e) { await c.query('rollback'); throw e; } finally { c.release(); } };
   const row = async (c, owner, id, lock = false) => (await c.query(`select * from public.live_ics_connections where owner_id=$1 and id=$2${lock ? ' for update' : ''}`, [owner,id])).rows[0];
-  const budget = async (c, owner, fetching = false) => {
+  // Called exactly once by the HTTP boundary after verified authentication and
+  // before body/business validation. This commit cannot be refunded by a later
+  // business rollback. The database clock and owner lock coordinate instances.
+  const admit = async owner => {
+    let result;
+    try {
+      result = await transaction(async c => {
+        await c.query("set local lock_timeout='1s'");
+        await c.query("set local statement_timeout='2s'");
+        await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [owner]);
+        await c.query('insert into live_ics_private.budgets(owner_id) values($1) on conflict do nothing', [owner]);
+        const admitted = await c.query(`with clock as materialized (select clock_timestamp() as at)
+          update live_ics_private.budgets b set
+            requests=case when b.window_start<=clock.at-interval '1 minute' then 1 else b.requests+1 end,
+            window_start=case when b.window_start<=clock.at-interval '1 minute' then clock.at else b.window_start end
+          from clock where b.owner_id=$1 and (b.requests<120 or b.window_start<=clock.at-interval '1 minute') returning b.requests`, [owner]);
+        if (admitted.rowCount) return { admitted: true };
+        const retry = await c.query(`select greatest(1,ceil(extract(epoch from(window_start+interval '1 minute'-clock_timestamp()))))::int as seconds
+          from live_ics_private.budgets where owner_id=$1`, [owner]);
+        return { admitted: false, seconds: retry.rows[0].seconds };
+      });
+    } catch (error) {
+      if (['55P03','57014'].includes(error.code)) fail('capacity',503,1);
+      throw error; // Accounting/database failure must never admit business work.
+    }
+    if (!result.admitted) fail('rate_limited',429,result.seconds);
+  };
+  const coordinate = async (c, owner, fetching = false) => {
     // Serialize all user mutations/quota checks, including simultaneous creates.
     await c.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [owner]);
     await c.query('insert into live_ics_private.budgets(owner_id) values($1) on conflict do nothing',[owner]);
-    const result = await c.query(`update live_ics_private.budgets set
-      requests=case when window_start < now()-interval '1 minute' then 1 else requests+1 end,
-      window_start=case when window_start < now()-interval '1 minute' then now() else window_start end,
-      fetches=case when fetch_start < now()-interval '1 minute' then $2 else fetches+$2 end,
-      fetch_start=case when fetch_start < now()-interval '1 minute' then now() else fetch_start end
-      where owner_id=$1 and (requests<120 or window_start<now()-interval '1 minute')
-      and ($2=0 or fetches<10 or fetch_start<now()-interval '1 minute') returning owner_id`, [owner,fetching ? 1 : 0]);
-    if (!result.rowCount) fail('rate_limited',429);
+    if (!fetching) return;
+    const result = await c.query(`with clock as materialized (select clock_timestamp() as at)
+      update live_ics_private.budgets b set
+        fetches=case when b.fetch_start<=clock.at-interval '1 minute' then 1 else b.fetches+1 end,
+        fetch_start=case when b.fetch_start<=clock.at-interval '1 minute' then clock.at else b.fetch_start end
+      from clock where b.owner_id=$1 and (b.fetches<10 or b.fetch_start<=clock.at-interval '1 minute') returning b.owner_id`, [owner]);
+    if (!result.rowCount) fail('rate_limited',429,60);
   };
-  const list = async owner => transaction(async c => { await budget(c,owner); return (await c.query('select * from public.live_ics_connections where owner_id=$1 and ready order by name,id',[owner])).rows.map(safe); });
+  const list = async owner => transaction(async c => (await c.query('select * from public.live_ics_connections where owner_id=$1 and ready order by name,id',[owner])).rows.map(safe));
   const remove = async (owner,id) => transaction(async c => {
-    if (!uuid(id)) fail('not_found',404); await budget(c,owner);
+    if (!uuid(id)) fail('not_found',404); await coordinate(c,owner);
     await c.query('insert into live_ics_private.deleted(owner_id,id) values($1,$2) on conflict do nothing',[owner,id]);
     await c.query('delete from public.live_ics_connections where owner_id=$1 and id=$2',[owner,id]);
   });
   const edit = async (owner,id,body) => transaction(async c => {
-    if (!uuid(id)) fail('not_found',404); const values=metadata(body); await budget(c,owner);
+    if (!uuid(id)) fail('not_found',404); const values=metadata(body); await coordinate(c,owner);
     if (typeof body.visible !== 'boolean') fail('invalid_fields');
     const current=await row(c,owner,id,true); if (!current?.ready) fail('not_found',404);
     if (body.revision !== current.revision) fail('changed',409);
@@ -49,7 +75,7 @@ export function createService({ pool, box, transport = fetchFeed, parser = parse
     const values=creating ? metadata(body) : undefined;
     const submitted=creating || replacing ? feedURL(body.url).href : undefined;
     const job=await transaction(async c => {
-      await budget(c,owner);
+      await coordinate(c,owner);
       let current=await row(c,owner,id,true);
       if (creating && current?.ready) return { done: safe(current) }; // idempotency key
       if (!creating && !current?.ready) fail('not_found',404);
@@ -65,7 +91,7 @@ export function createService({ pool, box, transport = fetchFeed, parser = parse
       if (current.next_attempt > new Date()) fail('cooldown',429);
       if (replacing && body.revision !== current.revision) fail('changed',409);
       if (body.automatic && current.coverage?.timeFormat === 2 && current.last_success && Date.now()-current.last_success.getTime()<15*60000) return { done:safe(current) };
-      await budget(c,owner,true);
+      await coordinate(c,owner,true);
       const lease=randomUUID(), generation=replacing ? randomUUID() : current.generation;
       const slot=await c.query(`update live_ics_private.slots set lease=$1,lease_until=now()+interval '40 seconds'
         where id=(select id from live_ics_private.slots where lease_until is null or lease_until<now() order by id for update skip locked limit 1) returning id`,[lease]);
@@ -110,5 +136,5 @@ export function createService({ pool, box, transport = fetchFeed, parser = parse
       throw error;
     } finally { clearTimeout(deadline); controller.abort(); await pool.query('update live_ics_private.slots set lease=null,lease_until=null where lease=$1',[job.lease]); }
   };
-  return { list, remove, edit, refresh };
+  return { admit, list, remove, edit, refresh };
 }

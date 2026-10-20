@@ -31,6 +31,7 @@ export function createServer({service,identity,origins=[]}) {
       const match=/^\/v1\/calendars(?:\/([\da-f-]{36})(?:\/(refresh|replace))?)?$/.exec(req.url??'');
       if (!match) fail('not_found',404);
       const owner=await identity(req.headers.authorization?.match(/^Bearer (.+)$/)?.[1]);
+      await service.admit(owner);
       let body={};
       if (['POST','PATCH'].includes(req.method)) {
         if (!req.headers['content-type']?.startsWith('application/json')) fail('invalid_fields');
@@ -49,7 +50,10 @@ export function createServer({service,identity,origins=[]}) {
       res.end(JSON.stringify(result));
     } catch(error) {
       // Deliberately no raw error, URL, token, request body or provider payload logs.
-      if (!res.destroyed) {res.writeHead(error instanceof SafeError ? error.status : 503);res.end(JSON.stringify({error:safeCode(error)}));}
+      if (!res.destroyed) {
+        if (error instanceof SafeError && Number.isInteger(error.retryAfter) && error.retryAfter>0) res.setHeader('Retry-After',String(error.retryAfter));
+        res.writeHead(error instanceof SafeError ? error.status : 503);res.end(JSON.stringify({error:safeCode(error)}));
+      }
     } finally {active--;}
   });
   server.requestTimeout=10000;server.headersTimeout=10000;server.maxHeadersCount=30;server.setTimeout(35000,socket=>socket.destroy());

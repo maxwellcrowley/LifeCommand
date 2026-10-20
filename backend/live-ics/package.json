@@ -1,7 +1,7 @@
 {
   "name": "lifecommand-live-ics", "version": "1.0.0", "private": true,
   "type": "module", "engines": {"node": ">=24 <25"},
-  "scripts": {"build": "node scripts/build.mjs", "start": "node src/server.mjs", "test": "npm run build && node --test test/*.test.mjs"},
+  "scripts": {"build": "node scripts/build.mjs", "start": "node src/server.mjs", "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs"},
   "dependencies": {"pg": "8.16.3", "ipaddr.js": "2.2.0", "ical.js": "2.2.1"},
   "devDependencies": {"typescript": "6.0.3", "@types/node": "^24.0.0"}
 }

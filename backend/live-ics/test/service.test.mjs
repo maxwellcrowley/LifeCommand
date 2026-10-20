@@ -111,3 +111,34 @@ test('local PostgreSQL: RLS, owner API, encrypted storage, retries, refresh race
     });
   } finally {await pool.end();await admin.end();}
 });
+
+
+test('floating feeds reject through authenticated HTTP and preserve validated cache, source and validators', {timeout:30000}, async()=>{
+ const admin=new pg.Pool({connectionString}),pool=new pg.Pool({connectionString,options:'-c role=live_ics_backend'});
+ const id=randomUUID(),failed=randomUUID();let server,providerCalls=0,validators;
+ const day=new Date().toISOString().slice(0,10).replaceAll('-','');
+ const timed=(suffix='Z')=>'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:time-check\r\nDTSTART:'+day+'T090000'+suffix+'\r\nDTEND:'+day+'T100000'+suffix+'\r\nEND:VEVENT\r\nEND:VCALENDAR';
+ let text=timed('');const service=createService({pool,box,transport:async(_url,v)=>{providerCalls++;validators=v;return {text,etag:'"time-check"',modified:'Mon, 19 Oct 2026 00:00:00 GMT'};}});
+ try {
+  await admin.query('update live_ics_private.budgets set requests=0,fetches=0');
+  server=createServer({service,identity:async token=>{if(token==='A')return A;throw new SafeError('sign_in',401);}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const endpoint='http://127.0.0.1:'+server.address().port+'/v1/calendars';
+  const post=(path,b)=>fetch(endpoint+path,{method:'POST',headers:{authorization:'Bearer A','content-type':'application/json'},body:JSON.stringify(b)});
+  const initial=await post('',body(failed));assert.equal(initial.status,400);assert.deepEqual(await initial.json(),{error:'unsupported_time'});
+  assert.equal((await admin.query('select * from public.live_ics_connections where owner_id=$1 and id=$2',[A,failed])).rowCount,0);
+  text=timed();const good=await post('',body(id));assert.equal(good.status,200);const first=await good.json();assert.equal(first.timeFormat,2);
+  const saved=async()=>({row:(await admin.query('select events,coverage,last_success from public.live_ics_connections where owner_id=$1 and id=$2',[A,id])).rows[0],secret:(await admin.query('select * from live_ics_private.secrets where owner_id=$1 and id=$2',[A,id])).rows[0]});
+  const before=await saved();text=timed('');
+  for(const [path,b] of [['/refresh',{}],['/replace',{url:'https://calendar.example.com/unsupported-replacement',revision:first.revision}]]) {
+   await admin.query('update public.live_ics_connections set next_attempt=null where owner_id=$1 and id=$2',[A,id]);
+   const r=await post('/'+id+path,b);assert.equal(r.status,400);assert.deepEqual(await r.json(),{error:'unsupported_time'});
+   assert.deepEqual(await saved(),before,'failure cannot change last good events, secret or validators');
+   assert.equal((await service.list(A)).find(r=>r.id===id).error,'unsupported_time');
+  }
+  await admin.query("update public.live_ics_connections set coverage=coverage-'timeFormat',next_attempt=null where owner_id=$1 and id=$2",[A,id]);
+  const quarantined=(await service.list(A)).find(r=>r.id===id);assert.deepEqual(quarantined.events,[]);
+  text=timed();const previous=providerCalls;const checked=await post('/'+id+'/refresh',{automatic:true});assert.equal(checked.status,200);
+  assert.equal(providerCalls,previous+1,'old snapshots must be fetched even when recent');assert.deepEqual(validators,{},'pre-fix validators must not permit 304 reuse');
+  assert.equal((await checked.json()).events.length,1);
+ } finally {if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}await admin.query('delete from public.live_ics_connections where owner_id=$1 and id=any($2::uuid[])',[A,[id,failed]]);await pool.end();await admin.end();}
+});

@@ -80,7 +80,7 @@ test('real TLS transport: pinning, TLS verification, redirect validation, stream
 test('parser subprocess semantics and external watchdog, invalid snapshots cannot become empty', async()=>{
   const sub={id:'test',name:'Synthetic',color:'#557D78'},window={from:'2026-03-01',through:'2026-03-31'};
   const wrap=body=>'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n'+body+'\r\nEND:VCALENDAR';
-  const event='BEGIN:VEVENT\r\nUID:one\r\nDTSTART:20260301T090000\r\nDTEND:20260301T100000\r\nSUMMARY:Folded\\, text\r\n continuation\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20260302T090000\r\nRDATE:20260306T090000\r\nEND:VEVENT';
+  const event='BEGIN:VEVENT\r\nUID:one\r\nDTSTART:20260301T090000Z\r\nDTEND:20260301T100000Z\r\nSUMMARY:Folded\\, text\r\n continuation\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20260302T090000Z\r\nRDATE:20260306T090000Z\r\nEND:VEVENT';
   const parsed=await parseFeed(wrap(event),sub,window);
   assert.equal(parsed.length,3);assert.equal(parsed[0].start,'2026-03-01T09:00:00.000Z');assert.equal(parsed[0].title,'Folded, textcontinuation');
   assert.deepEqual(await parseFeed(wrap(''),sub,window),[]);

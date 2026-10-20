@@ -3,10 +3,12 @@ import { feedURL, fetchFeed } from './transport.mjs';
 import { parseFeed } from './parser.mjs';
 import { fail, safeCode } from './errors.mjs';
 const uuid = value => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value);
-const coverage = () => { const d = new Date(); const day = offset => new Date(d.getTime() + offset * 86400000).toISOString().slice(0,10); return { from: day(-31), through: day(91) }; };
+const coverage = () => { const d = new Date(); const day = offset => new Date(d.getTime() + offset * 86400000).toISOString().slice(0,10); return { from: day(-31), through: day(91), timeFormat: 2 }; };
 const safe = row => ({ id: row.id, name: row.name, color: row.color, visible: row.visible, hostname: row.hostname,
   revision: row.revision, lastAttempt: row.last_attempt?.toISOString(), lastSuccess: row.last_success?.toISOString(),
-  nextAttempt: row.next_attempt?.toISOString(), error: row.error || undefined, coverage: row.coverage, events: row.events ?? [] });
+  nextAttempt: row.next_attempt?.toISOString(), timeFormat: row.coverage?.timeFormat,
+  error: row.error || (row.coverage?.timeFormat === 2 ? undefined : 'time_revalidation'), coverage: row.coverage,
+  events: row.coverage?.timeFormat === 2 ? row.events ?? [] : [] });
 function metadata(body) {
   if (typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 80 || !/^#[\da-f]{6}$/i.test(body.color)) fail('invalid_fields');
   return { name: body.name.trim(), color: body.color };
@@ -62,7 +64,7 @@ export function createService({ pool, box, transport = fetchFeed, parser = parse
       if (current.lease_until > new Date() && !replacing) fail('refreshing',409);
       if (current.next_attempt > new Date()) fail('cooldown',429);
       if (replacing && body.revision !== current.revision) fail('changed',409);
-      if (body.automatic && current.last_success && Date.now()-current.last_success.getTime()<15*60000) return { done:safe(current) };
+      if (body.automatic && current.coverage?.timeFormat === 2 && current.last_success && Date.now()-current.last_success.getTime()<15*60000) return { done:safe(current) };
       await budget(c,owner,true);
       const lease=randomUUID(), generation=replacing ? randomUUID() : current.generation;
       const slot=await c.query(`update live_ics_private.slots set lease=$1,lease_until=now()+interval '40 seconds'

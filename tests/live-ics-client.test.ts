@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createLiveIcsClient, liveIcsEndpoint, parseLiveCalendars, LIVE_ICS_KEY } from '../src/calendar/liveIcsClient';
 import { accountStorage } from '../src/data/accountStorage';
 import { createRepository } from '../src/data/storage';
-const row = { id: 'calendar', name: 'Synthetic', color: '#557D78', hostname: 'calendar.example.com', revision: 1, visible: true,
+const row = { id: 'calendar', name: 'Synthetic', color: '#557D78', hostname: 'calendar.example.com', revision: 1, visible: true, timeFormat: 2,
   lastSuccess: '2026-10-18T12:00:00Z', coverage: { from: '2026-09-17', through: '2027-01-17' }, events: [] };
 test('live ICS cache whitelists metadata; secrets and arbitrary provider errors cannot persist', () => {
   const result = parseLiveCalendars([{ ...row, url: 'sensitive-address', secret: 'sensitive-secret', error: 'sensitive-provider-error', coverage: { ...row.coverage, url: 'sensitive-address' } }]);

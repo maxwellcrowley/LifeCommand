@@ -17,7 +17,7 @@ export function parseSubscriptions(raw: string | null): SubscriptionCache {
       return { ...normalized, id: e.id, source: 'ics', provider: 'ics', sourceColor: subscription.color };
     });
     if (new Set(events.map(e => e.id)).size !== events.length) throw Error();
-    return { version: 1, subscriptions: value.subscriptions.map(s => ({ id: s.id, name: s.name, color: s.color, lastSuccess: s.lastSuccess, ...(s.error ? { error: 'Refresh failed. Cached events are kept. Retry when connected.' } : {}) })), events, hidden: value.hidden };
+    return { version: 1, subscriptions: value.subscriptions.map(s => ({ id: s.id, name: s.name, color: s.color, lastSuccess: s.lastSuccess, ...(s.timeFormat === 2 ? { timeFormat: 2 } : {}), ...(s.error ? { error: 'Refresh failed. Cached events are kept. Retry when connected.' } : {}) })), events, hidden: value.hidden };
   } catch { throw Error('Subscription cache needs recovery. No cached events were overwritten.'); }
 }
 export function createSubscriptionStore(storage: Storage, exclusive: <T>(operation: () => Promise<T>) => Promise<T> = operation => operation()) {

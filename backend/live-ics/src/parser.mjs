@@ -10,7 +10,7 @@ export function parseFeed(text, subscription, window, now = new Date(), { timeou
     const timer = setTimeout(abort, timeout);
     signal?.addEventListener('abort', abort, { once: true });
     child.once('error', abort); child.once('exit', abort);
-    child.once('message', result => finish(result.error ? new SafeError('invalid_feed') : undefined, result.events));
+    child.once('message', result => finish(result.error ? new SafeError(result.error === 'unsupported_time' ? 'unsupported_time' : 'invalid_feed') : undefined, result.events));
     if (signal?.aborted) abort(); else child.send({ text, subscription, window, now: now.toISOString() });
   });
 }

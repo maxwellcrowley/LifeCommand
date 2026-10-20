@@ -1,7 +1,11 @@
 import { addDays, localDateKey } from './dates';
 import { externalOnDate, normalizeGoogleEvent, type SubscriptionEvent, type SyncWindow } from './externalCalendars';
 
-export interface Subscription { id: string; name: string; color: string; lastSuccess?: string; error?: string }
+export interface Subscription { id: string; name: string; color: string; lastSuccess?: string; error?: string; timeFormat?: number }
+export const ICS_TIME_FORMAT = 2;
+export class UnsupportedICSTimeError extends Error {
+  constructor() { super('Timed events must specify UTC (Z) or a supported timezone with an embedded VTIMEZONE definition. Floating event times are not supported.'); }
+}
 export const SUBSCRIPTIONS_KEY = 'lifecommand:subscriptions:v1';
 export interface SubscriptionCache { version: 1; subscriptions: Subscription[]; events: SubscriptionEvent[]; hidden: string[] }
 export const emptySubscriptions = (): SubscriptionCache => ({ version: 1, subscriptions: [], events: [], hidden: [] });
@@ -47,11 +51,21 @@ export async function parseICS(text: string, subscription: Subscription, window:
         || String(part.getFirstPropertyValue('uid') ?? '').length > 1024
         || String(part.getFirstPropertyValue('summary') ?? '').length > 1000) throw Error();
     }
-    for (const part of parts) for (const name of ['dtstart', 'dtend', 'recurrence-id', 'exdate', 'rdate']) {
+    // Inspect typed VEVENT properties before expansion/deduplication, including
+    // cancelled, detached and out-of-window components. VTIMEZONE transition
+    // DTSTART/UNTIL values legitimately use local time and are not event times.
+    for (const part of parts) for (const name of ['dtstart', 'dtend', 'recurrence-id', 'exdate', 'rdate', 'dtstamp', 'created', 'last-modified']) {
       for (const property of part.getAllProperties(name)) {
         const tzid = property.getParameter('tzid');
         if (tzid && tzid !== 'UTC' && !root.getTimeZoneByID(String(tzid))) throw Error();
+        for (const value of property.getValues()) {
+          if (value instanceof ICAL.Time && !value.isDate && value.zone === ICAL.Timezone.localTimezone) throw new UnsupportedICSTimeError();
+        }
       }
+    }
+    for (const part of parts) for (const property of part.getAllProperties('rrule')) {
+      const until = (property.getFirstValue() as InstanceType<typeof ICAL.Recur>).until;
+      if (until && !until.isDate && until.zone === ICAL.Timezone.localTimezone) throw new UnsupportedICSTimeError();
     }
     const latest = new Map<string, InstanceType<typeof ICAL.Component>>();
     for (const part of parts) {
@@ -99,10 +113,16 @@ export async function parseICS(text: string, subscription: Subscription, window:
     if (components.some(part => part.hasProperty('recurrence-id') && !components.some(master => !master.hasProperty('recurrence-id') && master.getFirstPropertyValue('uid') === part.getFirstPropertyValue('uid')))) throw Error();
     if (events.size > 5000) throw Error();
     return [...events.values()];
-  } catch { throw Error('This feed could not be read completely. Check its timezone definitions and recurrence format, or ask the calendar provider for a compatible feed. Cached events were kept.'); }
+  } catch (error) { if (error instanceof UnsupportedICSTimeError) throw error; throw Error('This feed could not be read completely. Check its timezone definitions and recurrence format, or ask the calendar provider for a compatible feed. Cached events were kept.'); }
 }
 export function replaceSubscription(cache: SubscriptionCache, subscription: Subscription, events: SubscriptionEvent[], now = new Date()): SubscriptionCache {
   if (events.some(event => event.accountId !== subscription.id || event.source !== 'ics')) throw Error('Subscription snapshot does not match this connection.');
-  const next = { ...subscription, lastSuccess: now.toISOString(), error: undefined };
+  const next = { ...subscription, timeFormat: ICS_TIME_FORMAT, lastSuccess: now.toISOString(), error: undefined };
   return { ...cache, subscriptions: [...cache.subscriptions.filter(item => item.id !== subscription.id), next], events: [...cache.events.filter(event => event.accountId !== subscription.id), ...events] };
+}
+// Preserve legacy stored bytes but withhold snapshots whose original time kind
+// cannot be established. Never guess whether a stored UTC instant was floating.
+export function validatedSubscriptionEvents(cache: SubscriptionCache): SubscriptionEvent[] {
+  const valid = new Set(cache.subscriptions.filter(s => s.timeFormat === ICS_TIME_FORMAT).map(s => s.id));
+  return cache.events.filter(event => valid.has(event.accountId));
 }

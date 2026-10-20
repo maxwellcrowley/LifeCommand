@@ -4,7 +4,7 @@ import { useAccount } from '../cloud/accountContext';
 import { accountStorage } from '../data/accountStorage';
 import { useAppData } from '../data/useAppData';
 import { subscribeToStorageChanges, withStorageLock } from '../data/coordination';
-import { emptySubscriptions } from '../domain/ics';
+import { emptySubscriptions, validatedSubscriptionEvents } from '../domain/ics';
 import { createSubscriptionStore } from './subscriptionStore';
 import { useLiveIcs } from './useLiveIcs';
 export function useSubscriptions() {
@@ -20,8 +20,9 @@ export function useSubscriptions() {
     return () => { active = false; unsubscribe(); };
   }, [store, resetVersion]);
   const liveEvents = live.calendars.filter(calendar => calendar.visible).flatMap(calendar => calendar.events);
-  return { live, cache: { ...cache, events: [...cache.events, ...live.calendars.flatMap(calendar => calendar.events)] }, error,
-    events: [...cache.events, ...liveEvents].filter(event => !cache.hidden.includes(event.id)),
+  const validatedEvents = validatedSubscriptionEvents(cache);
+  return { live, cache: { ...cache, events: [...validatedEvents, ...live.calendars.flatMap(calendar => calendar.events)] }, error,
+    events: [...validatedEvents, ...liveEvents].filter(event => !cache.hidden.includes(event.id)),
     async hide(id: string, hidden: boolean) { setCache(await store.change(current => ({ ...current, hidden: hidden ? [...new Set([...current.hidden, id])] : current.hidden.filter(value => value !== id) }))); },
     async unhide() { setCache(await store.change(current => ({ ...current, hidden: [] }))); },
     async disconnect(id: string) { setCache(await store.change(current => ({ ...current, subscriptions: current.subscriptions.filter(s => s.id !== id), events: current.events.filter(e => e.accountId !== id) }))); },

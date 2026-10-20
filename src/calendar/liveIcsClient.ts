@@ -7,6 +7,8 @@ const messages: Record<string,string> = {
   sign_in: 'Sign in again to manage connected calendars.', invalid_url: 'Use an HTTPS or webcal subscription URL without a password, fragment, or custom port.',
   invalid_fields: 'Enter a calendar name (up to 80 characters), URL, and color.', blocked_destination: 'This address is not a public calendar provider. Check the subscription URL.',
   invalid_feed: 'The provider did not return a supported calendar. Check timezone definitions and recurrence format. Previous events were kept.',
+  unsupported_time: 'Timed events must specify UTC (Z) or a supported timezone with an embedded VTIMEZONE definition. Floating event times are not supported. Previous valid events were kept.',
+  time_revalidation: 'Refresh this calendar to validate its time format. Older cached events are hidden until validated.',
   parser_limit: 'This calendar exceeds the supported recurrence limits. Ask your provider for a smaller feed.', too_large: 'This feed exceeds the 2 MiB limit. Ask your provider for a smaller feed.',
   timeout: 'The provider took too long. Previous events were kept. Try again shortly.', provider_denied: 'The provider refused access. Replace the URL with a current subscription link.',
   cooldown: 'Please wait before refreshing again. Failed connections use a longer retry interval.', rate_limited: 'Too many calendar requests. Try again in a minute.',
@@ -19,9 +21,9 @@ export function parseLiveCalendars(value: unknown): LiveCalendar[] {
   return value.map(row => {
     if (!row || typeof row.hostname !== 'string' || !/^[a-z\d.:[\]-]+$/i.test(row.hostname) || typeof row.visible !== 'boolean' || !Number.isInteger(row.revision)
       || !/^\d{4}-\d\d-\d\d$/.test(row.coverage?.from) || !/^\d{4}-\d\d-\d\d$/.test(row.coverage?.through)) throw Error('Invalid calendar cache.');
-    const normalized = parseSubscriptions(JSON.stringify({ version: 1, subscriptions: [row], events: row.events, hidden: [] }));
+    const normalized = parseSubscriptions(JSON.stringify({ version: 1, subscriptions: [row], events: row.timeFormat === 2 ? row.events : [], hidden: [] }));
     const date = (input: unknown) => typeof input === 'string' && Number.isFinite(Date.parse(input)) ? input : undefined;
-    const code = row.errorCode ?? row.error;
+    const code = row.errorCode ?? row.error ?? (row.timeFormat === 2 ? undefined : 'time_revalidation');
     const errorCode = code ? Object.hasOwn(messages, code) ? code : 'unavailable' : undefined;
     return { ...normalized.subscriptions[0], error: errorCode ? liveIcsMessage(errorCode) : undefined, errorCode, visible: row.visible, hostname: row.hostname,
       revision: row.revision, lastAttempt: date(row.lastAttempt), nextAttempt: date(row.nextAttempt), coverage: { from: row.coverage.from, through: row.coverage.through }, events: normalized.events };

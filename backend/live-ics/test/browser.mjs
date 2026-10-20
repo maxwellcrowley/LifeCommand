@@ -15,10 +15,11 @@ const app=resolve('../..'),dist=resolve(app,process.env.LIVE_ICS_BROWSER_DIST??'
 const A='aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
 const connectionString='postgres://postgres:disposable-local-ics-only@127.0.0.1:55438/live_ics_test';
 const admin=new pg.Pool({connectionString}),pool=new pg.Pool({connectionString,options:'-c role=live_ics_backend'});
-let failFeed=false,offline=false,providerCalls=0,holdFeed,feedEntered;
+let failFeed=false,floatingFeed=false,offline=false,providerCalls=0,holdFeed,feedEntered;
 const date=new Date().toISOString().slice(0,10).replaceAll('-','');
 const feed=`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:browser-fixture\r\nDTSTART;VALUE=DATE:${date}\r\nSUMMARY:Live fixture event\r\nEND:VEVENT\r\nEND:VCALENDAR`;
-const service=createService({pool,box:secretBox({v1:Buffer.alloc(32,1).toString('base64')},'v1'),transport:async()=>{providerCalls++;if(failFeed)throw new SafeError('provider_denied');if(holdFeed){feedEntered?.();await holdFeed;}return {text:feed};}});
+const floating=`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:unsupported-floating\r\nDTSTART:${date}T090000\r\nDTEND:${date}T100000\r\nSUMMARY:Must never render shifted\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+const service=createService({pool,box:secretBox({v1:Buffer.alloc(32,1).toString('base64')},'v1'),transport:async()=>{providerCalls++;if(failFeed)throw new SafeError('provider_denied');if(holdFeed){feedEntered?.();await holdFeed;}return {text:floatingFeed?floating:feed};}});
 const api=createServer({service,identity:async token=>{if(token===session.access_token)return A;if(token===sessionB.access_token)return B;throw new SafeError('sign_in',401);}});
 const user={id:A,email:'disposable@example.com',aud:'authenticated',role:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()};
 const session={access_token:`${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({sub:A,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated'})).toString('base64url')}.synthetic`,refresh_token:'synthetic',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user};
@@ -64,7 +65,15 @@ async function main(){
   await click('Connect calendar');await fill('Calendar name','Browser calendar');await fill('Private calendar subscription URL','webcal://calendar.example.com/synthetic-fixture');
   failFeed=true;await click('Connect');await ready('The provider refused access.');assert.deepEqual(await service.list(A),[]);
   assert.equal(await evaluate(`document.querySelector('input[aria-label="Calendar name"]').value`),'Browser calendar');
-  await screenshot('failed-draft-desktop');failFeed=false;const beforeConnect=providerCalls;
+  await screenshot('failed-draft-desktop');failFeed=false;floatingFeed=true;
+  for(const timezoneId of ['America/New_York','Asia/Tokyo']) {
+    await send('Emulation.setTimezoneOverride',{timezoneId});const before=providerCalls;await click('Connect');
+    await until(()=>Promise.resolve(providerCalls===before+1),'floating feed fetched');await ready('Timed events must specify UTC');
+    await until(()=>evaluate(`document.querySelector('[aria-label="Connect"]')?.getAttribute('aria-disabled')!=='true'`),'unsupported attempt finished');
+    assert.deepEqual(await service.list(A),[]);assert.equal(await evaluate(`document.querySelector('input[aria-label="Calendar name"]').value`),'Browser calendar');
+    assert.equal(await evaluate(`document.body.innerText.includes('Must never render shifted')`),false);
+  }
+  await screenshot('unsupported-time-draft');await send('Emulation.setTimezoneOverride',{timezoneId:''});floatingFeed=false;const beforeConnect=providerCalls;
   await evaluate(`(()=>{const e=document.querySelector('[aria-label="Connect"]');e.click();e.click();})()`);
   await until(async()=> (await service.list(A)).length===1,'saved initial connection');await ready('1 cached events');assert.equal(providerCalls-beforeConnect,1,'double submission coalesces');
   assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('synthetic-fixture'))`),false,'URL never persisted');
@@ -74,8 +83,21 @@ async function main(){
   await click('Manage calendar Renamed calendar');await click('Show calendar Renamed calendar');await ready('Renamed calendar · Shown');
   await click('Manage calendar Renamed calendar');await click('Replace URL for Renamed calendar');assert.equal(await evaluate(`document.querySelector('input[aria-label="Private calendar subscription URL"]').value`),'');
   await fill('Private calendar subscription URL','https://calendar.example.com/replacement-fixture');
-  await admin.query('update public.live_ics_connections set next_attempt=null');await click('Save calendar');await ready('1 cached events');
+  const beforeReplacement=(await service.list(A))[0];
+  const secretBefore=(await admin.query('select secret,etag,modified from live_ics_private.secrets where owner_id=$1 and id=$2',[A,beforeReplacement.id])).rows[0];
+  floatingFeed=true;await admin.query('update public.live_ics_connections set next_attempt=null');await click('Save calendar');await ready('Timed events must specify UTC');
+  assert.equal(await evaluate(`document.querySelector('input[aria-label="Private calendar subscription URL"]').value`),'https://calendar.example.com/replacement-fixture');
+  assert.deepEqual((await service.list(A))[0].events,beforeReplacement.events);
+  assert.deepEqual((await admin.query('select secret,etag,modified from live_ics_private.secrets where owner_id=$1 and id=$2',[A,beforeReplacement.id])).rows[0],secretBefore);
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});await screenshot('unsupported-replacement-phone');
+  floatingFeed=false;await admin.query('update public.live_ics_connections set next_attempt=null');await click('Save calendar');
+  await until(async()=>{const row=(await service.list(A))[0];return row.revision>beforeReplacement.revision&&!row.error;},'replacement committed');
+  await until(()=>evaluate(`!document.querySelector('input[aria-label="Private calendar subscription URL"]')`),'saved replacement closes draft');
   await go('/calendar');await ready('Live fixture event');await ready('Subscription · Renamed calendar');
+  floatingFeed=true;await admin.query('update public.live_ics_connections set next_attempt=null');await click('Refresh calendar subscriptions');await ready('Timed events must specify UTC');
+  await ready('Live fixture event');assert.equal(await evaluate(`document.body.innerText.includes('Must never render shifted')`),false);
+  floatingFeed=false;await admin.query('update public.live_ics_connections set next_attempt=null');await click('Refresh calendar subscriptions');
+  await until(async()=>!(await service.list(A))[0].error,'valid retry clears saved refresh error');
   offline=true;await go('/calendar');await ready('Live fixture event');await ready('Calendar service unavailable.');
   offline=false;await go('/settings');await ready('Renamed calendar · Shown');
   for(const [width,height,scale] of [[1280,900,1],[390,844,1],[320,568,1.5]]){
@@ -89,8 +111,17 @@ async function main(){
   }
   await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'dark'}]});
   await click('Connect calendar');await screenshot('dialog-dark-large');
+  // RN Web activates its modal/focus trap after mounting content. Visible inputs
+  // alone do not establish that activation has completed. Wait for its active
+  // role and automatic focus entry before exercising keyboard containment.
+  await until(()=>evaluate(`!!document.querySelector('[data-testid="settings-dialog"]')?.closest('[role="dialog"]') && !!document.activeElement.closest('[data-testid="settings-dialog"]')`),'modal active with initial focus');
   await evaluate(`document.querySelector('input[aria-label="Calendar name"]').focus()`);
-  for(let i=0;i<9;i++){await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});assert.equal(await evaluate(`!!document.activeElement.closest('[data-testid="settings-dialog"]')`),true,'Tab stays in dialog');}
+  for(let i=0;i<9;i++){
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    const focused=await evaluate(`({inside:!!document.activeElement.closest('[data-testid="settings-dialog"]'),tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label'),role:document.activeElement.getAttribute('role'),tabIndex:document.activeElement.tabIndex})`);
+    if(!focused.inside)writeFileSync(join(evidence,`focus-failure-${Date.now()}.json`),JSON.stringify({step:i,...focused}));
+    assert.equal(focused.inside,true,'Tab stays in dialog');
+  }
   await click('Cancel calendar editing');await click('Discard calendar draft');
   await until(()=>evaluate(`document.activeElement.tagName!=='BODY'`),'modal focus restored');
   await click('Manage calendar Renamed calendar');await click('Disconnect Renamed calendar');await click('Cancel disconnect');assert.equal((await service.list(A)).length,1);
@@ -112,7 +143,7 @@ async function main(){
   offline=true;await click('Data and recovery');await click('Start Fresh');await click('Delete local data and start fresh');await ready('Start Fresh complete.');
   await until(()=>evaluate(`!document.body.innerText.includes('Reset test calendar · Shown')`),'reset clears mounted cache');
   assert.equal((await service.list(B)).length,1,'Start Fresh is not a remote disconnect');
-  assert.deepEqual(errors,[]);writeFileSync(join(evidence,'result.json'),JSON.stringify({passed:true,providerCalls,tests:['failed draft','connect/double submit','URL redaction','rename/color','hide/show','replace','Calendar display','offline cache','desktop/phone/extra-large/dark','modal keyboard containment/return','cancel/confirm disconnect','account switch during refresh','Start Fresh clears mounted offline cache only'],physicalDevice:false},null,2));
+  assert.deepEqual(errors,[]);writeFileSync(join(evidence,'result.json'),JSON.stringify({passed:true,providerCalls,tests:['failed draft','floating rejection New York/Tokyo','unsupported replacement retains phone draft/source/cache','unsupported refresh retains events','connect/double submit','URL redaction','rename/color','hide/show','replace','Calendar display','offline cache','desktop/phone/extra-large/dark','modal keyboard containment/return','cancel/confirm disconnect','account switch during refresh','Start Fresh clears mounted offline cache only'],physicalDevice:false},null,2));
   console.log('PASS disposable browser workflows, saved PostgreSQL state, offline cache, desktop/phone/large-text bounds');
 }
 const watchdog=setTimeout(()=>{console.error('Browser watchdog expired');chrome?.kill();process.exit(1);},120000);
